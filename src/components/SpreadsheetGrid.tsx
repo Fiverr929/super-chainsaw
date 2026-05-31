@@ -126,7 +126,7 @@ export default function SpreadsheetGrid() {
   const getCellContent = useCallback(
     (cell: Item): GridCell => {
       const [col, row] = cell;
-      const dataRow = data[row];
+      const dataRow = dataRef.current[row];
       const columnId = columns[col].id as keyof typeof dataRow;
 
       if (!dataRow) {
@@ -614,6 +614,7 @@ export default function SpreadsheetGrid() {
           }
           newData[row + r] = dataRow as RowData;
         }
+        dataRef.current = newData;
         return newData;
       });
       return true;
@@ -656,6 +657,7 @@ export default function SpreadsheetGrid() {
           newData[destRowIndex] = destRowData as RowData;
         }
 
+        dataRef.current = newData;
         return newData;
       });
       return event;
@@ -737,6 +739,7 @@ export default function SpreadsheetGrid() {
           }
         }
 
+        dataRef.current = didDelete ? newData : prev;
         return didDelete ? newData : prev;
       });
 
