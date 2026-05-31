@@ -178,14 +178,7 @@ export default function SpreadsheetGrid() {
       }
 
       // Clean visual structure for Video and Digital File columns
-      if (columnId === "video" || columnId === "digital_file") {
-        if (!value) {
-          return {
-            kind: GridCellKind.Bubble,
-            allowOverlay: false,
-            data: [],
-          } as GridCell;
-        }
+      if ((columnId === "video" || columnId === "digital_file") && value) {
         const cacheKey = `tags_${value}`;
         // @ts-expect-error - external type mismatch
         if (!window.__glideTagCache) window.__glideTagCache = {};
