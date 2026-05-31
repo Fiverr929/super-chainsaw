@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     const missingFields = [];
     if (!existingData.title) missingFields.push('"title" (a highly optimized Etsy Title)');
     if (!existingData.description) missingFields.push('"description" (a detailed Etsy Description)');
-    if (!existingData.tags) missingFields.push('"tags" (EXACTLY 13 Etsy Tags as a comma-separated string)');
+    if (!existingData.tags) missingFields.push('"tags" (EXACTLY 13 Etsy Tags as a comma-separated string. CRITICAL: Each individual tag MUST be 20 characters or less.)');
     if (!existingData.alt_text) missingFields.push(`"alt_text" (SEO-optimized Alt Text for exactly ${imageCount} images, separated by |)`);
     if (!existingData.primary_color) missingFields.push('"primary_color"');
     if (!existingData.occasion) missingFields.push('"occasion"');

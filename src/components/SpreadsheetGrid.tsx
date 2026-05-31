@@ -393,9 +393,14 @@ export default function SpreadsheetGrid() {
     // Prepare existing data payload so backend knows what to skip
     const existingDataPayload = { ...dataRef.current[row] };
 
+    // Add a strict timeout so the grid doesn't hang indefinitely if the AI drops the connection
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 seconds
+
     // Trigger AI Pipeline
     fetch('/api/generate', {
       method: 'POST',
+      signal: controller.signal,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         context: promptContext,
@@ -403,7 +408,10 @@ export default function SpreadsheetGrid() {
         existingData: existingDataPayload
       })
     })
-    .then(res => res.json())
+    .then(res => {
+      clearTimeout(timeoutId);
+      return res.json();
+    })
     .then(aiData => {
       const prev2 = dataRef.current;
       const newData = [...prev2];
@@ -427,13 +435,19 @@ export default function SpreadsheetGrid() {
       }
     })
     .catch(err => {
+      clearTimeout(timeoutId);
       console.error("AI Generation failed:", err);
       const prev2 = dataRef.current;
       const newData = [...prev2];
       newData[row] = { ...newData[row], status: "Error" };
       dataRef.current = newData;
       setData(newData);
-      alert("AI Generation request completely failed to send.");
+      
+      if (err.name === 'AbortError') {
+        alert("AI Generation timed out after 45 seconds. The Google Gemini API might be congested. Please try again.");
+      } else {
+        alert("AI Generation request completely failed to send.");
+      }
     });
   }, []);
 
