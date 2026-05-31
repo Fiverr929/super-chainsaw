@@ -373,6 +373,70 @@ export default function SpreadsheetGrid() {
     [getCellContent]
   );
 
+  const triggerAIGeneration = useCallback((row: number) => {
+    // Optimistically set status to 'Generating...' to lock the row
+    const updatedArray = [...dataRef.current];
+    updatedArray[row] = { ...updatedArray[row], status: "Generating..." };
+    dataRef.current = updatedArray;
+    setData(updatedArray);
+
+    // Calculate exact number of images in this row
+    const imagesList = dataRef.current[row].images || "";
+    const exactImageCount = imagesList.split(',').map(s => s.trim()).filter(Boolean).length || 5;
+
+    // Build context from whatever the user has already provided
+    let promptContext = dataRef.current[row].context || "";
+    if (dataRef.current[row].folder) promptContext += `\nFolder/Product Name: ${dataRef.current[row].folder}`;
+    if (dataRef.current[row].title) promptContext += `\nTitle: ${dataRef.current[row].title}`;
+    if (dataRef.current[row].description) promptContext += `\nDescription: ${dataRef.current[row].description}`;
+
+    // Prepare existing data payload so backend knows what to skip
+    const existingDataPayload = { ...dataRef.current[row] };
+
+    // Trigger AI Pipeline
+    fetch('/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        context: promptContext,
+        imageCount: exactImageCount,
+        existingData: existingDataPayload
+      })
+    })
+    .then(res => res.json())
+    .then(aiData => {
+      const prev2 = dataRef.current;
+      const newData = [...prev2];
+      newData[row] = {
+        ...newData[row],
+        title: aiData.title || newData[row].title,
+        description: aiData.description || newData[row].description,
+        tags: aiData.tags || newData[row].tags,
+        alt_text: aiData.alt_text || newData[row].alt_text,
+        primary_color: aiData.primary_color || newData[row].primary_color,
+        occasion: aiData.occasion || newData[row].occasion,
+        celebration: aiData.celebration || newData[row].celebration,
+        subject: aiData.subject || newData[row].subject,
+        status: aiData.error ? "Error" : "Review"
+      };
+      dataRef.current = newData;
+      setData(newData);
+
+      if (aiData.error) {
+        alert(`AI Generation Failed:\n${aiData.error}`);
+      }
+    })
+    .catch(err => {
+      console.error("AI Generation failed:", err);
+      const prev2 = dataRef.current;
+      const newData = [...prev2];
+      newData[row] = { ...newData[row], status: "Error" };
+      dataRef.current = newData;
+      setData(newData);
+      alert("AI Generation request completely failed to send.");
+    });
+  }, []);
+
   const onCellEdited = useCallback(
     (cell: Item, newValue: GridCell) => {
       if (newValue.kind !== GridCellKind.Text && newValue.kind !== GridCellKind.Image && newValue.kind !== GridCellKind.Bubble && newValue.kind !== GridCellKind.Custom) return;
@@ -439,6 +503,9 @@ export default function SpreadsheetGrid() {
                 };
                 dataRef.current = updatedArray;
                 setData(updatedArray);
+                
+                // Chain the AI trigger now that assets are loaded!
+                triggerAIGeneration(row);
              }
           })
           .catch(err => console.error("Asset scan failed:", err));
@@ -460,67 +527,8 @@ export default function SpreadsheetGrid() {
 
       // Automatically trigger the AI if Status was changed to 'Generate AI'
       if (columnId === "status" && newStringValue === "Generate AI") {
-        // Optimistically set status to 'Generating...' to lock the row
-        const updatedArray = [...dataRef.current];
-        updatedArray[row] = { ...updatedArray[row], status: "Generating..." };
-        dataRef.current = updatedArray;
-        setData(updatedArray);
-
-        // Calculate exact number of images in this row
-        const imagesList = dataRef.current[row].images || "";
-        const exactImageCount = imagesList.split(',').map(s => s.trim()).filter(Boolean).length || 5;
-
-        // Build context from whatever the user has already provided
-        let promptContext = dataRef.current[row].context || "";
-        if (dataRef.current[row].title) promptContext += `\nTitle: ${dataRef.current[row].title}`;
-        if (dataRef.current[row].description) promptContext += `\nDescription: ${dataRef.current[row].description}`;
-
-        // Prepare existing data payload so backend knows what to skip
-        const existingDataPayload = { ...dataRef.current[row] };
-
-        // Trigger AI Pipeline
-        fetch('/api/generate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            context: promptContext,
-            imageCount: exactImageCount,
-            existingData: existingDataPayload
-          })
-        })
-            .then(res => res.json())
-            .then(aiData => {
-              const prev2 = dataRef.current;
-              const newData = [...prev2];
-              newData[row] = {
-                ...newData[row],
-                title: aiData.title || newData[row].title,
-                description: aiData.description || newData[row].description,
-                tags: aiData.tags || newData[row].tags,
-                alt_text: aiData.alt_text || newData[row].alt_text,
-                primary_color: aiData.primary_color || newData[row].primary_color,
-                occasion: aiData.occasion || newData[row].occasion,
-                celebration: aiData.celebration || newData[row].celebration,
-                subject: aiData.subject || newData[row].subject,
-                status: aiData.error ? "Error" : "Review"
-              };
-              dataRef.current = newData;
-              setData(newData);
-
-              if (aiData.error) {
-                alert(`AI Generation Failed:\n${aiData.error}`);
-              }
-            })
-            .catch(err => {
-              console.error("AI Generation failed:", err);
-              const prev2 = dataRef.current;
-              const newData = [...prev2];
-              newData[row] = { ...newData[row], status: "Error" };
-              dataRef.current = newData;
-              setData(newData);
-            });
-
-        return; // Don't write 'Generate AI' to the state below
+        triggerAIGeneration(row);
+        return;
       }
 
       // Automatically trigger Push/Update to Etsy

@@ -5,7 +5,7 @@ export async function POST(request: Request) {
     const { context, imageCount = 5, existingData = {} } = await request.json();
 
     if (!context || context.trim() === '') {
-      return NextResponse.json({ error: 'Context is empty' }, { status: 400 });
+      // Proceed even if context is empty
     }
 
     const apiKey = process.env.GOOGLE_API_KEY;
