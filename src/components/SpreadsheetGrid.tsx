@@ -506,9 +506,15 @@ export default function SpreadsheetGrid() {
                 
                 // Chain the AI trigger now that assets are loaded!
                 triggerAIGeneration(row);
+             } else {
+                alert(`Folder Scan Failed: ${assetData.error || "Unknown error"}. Make sure the folder exists and is spelled correctly.`);
+                // Reset status/optimistic loading state if necessary
              }
           })
-          .catch(err => console.error("Asset scan failed:", err));
+          .catch(err => {
+             console.error("Asset scan failed:", err);
+             alert("Network error while trying to scan folder.");
+          });
       }
 
       // Auto-fill hardcoded values when Category is selected
