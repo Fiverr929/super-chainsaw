@@ -229,7 +229,8 @@ export default function SpreadsheetGrid() {
          else if (state === "Generating...") { textColor = "#f59e0b"; }
          else if (state === "Review") { textColor = "#10b981"; }
          else if (state === "Ready to Push") { textColor = "#3b82f6"; }
-         else if (state === "Update Listing") { textColor = "#3b82f6"; }
+         else if (state === "Update Text & SEO") { textColor = "#3b82f6"; }
+         else if (state === "Update Media Assets") { textColor = "#3b82f6"; }
          else if (state === "Pushing...") { textColor = "#f59e0b"; }
          else if (state === "Published") { textColor = "#059669"; }
          else if (state === "Error") { textColor = "#ef4444"; }
@@ -240,7 +241,7 @@ export default function SpreadsheetGrid() {
             copyData: state,
             data: {
                kind: "dropdown-cell",
-               allowedValues: ["Draft", "Generate AI", "Generating...", "Review", "Ready to Push", "Update Listing", "Pushing...", "Published", "Error"],
+               allowedValues: ["Draft", "Generate AI", "Generating...", "Review", "Ready to Push", "Update Text & SEO", "Update Media Assets", "Pushing...", "Published", "Error"],
                value: state
             },
             themeOverride: { 
@@ -557,7 +558,7 @@ export default function SpreadsheetGrid() {
       }
 
       // Automatically trigger Push/Update to Etsy
-      if (columnId === "status" && (newStringValue === "Ready to Push" || newStringValue === "Update Listing")) {
+      if (columnId === "status" && (newStringValue === "Ready to Push" || newStringValue === "Update Text & SEO" || newStringValue === "Update Media Assets")) {
         setData((prev) => {
           const newData = [...prev];
           newData[row] = { ...newData[row], status: "Pushing..." };
@@ -565,7 +566,11 @@ export default function SpreadsheetGrid() {
         });
 
         // Pass the latest data from state, plus any updates
-        const rowDataToPush = { ...dataRef.current[row] };
+        const rowDataToPush = { 
+          ...dataRef.current[row],
+          updateType: newStringValue === "Update Text & SEO" ? "text" :
+                      newStringValue === "Update Media Assets" ? "media" : "all"
+        };
 
         fetch('/api/etsy/push', {
           method: 'POST',
