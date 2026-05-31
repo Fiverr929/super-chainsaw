@@ -151,7 +151,7 @@ export async function POST(req: Request) {
       if (listingId) {
         // If updating, first delete existing images so we can replace them
         try {
-          const existingImagesRes = await axios.get(`https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}/images`, { headers });
+          const existingImagesRes = await axios.get(`https://api.etsy.com/v3/application/listings/${listingId}/images`, { headers });
           const existingImages = existingImagesRes.data;
           for (const img of existingImages.results || []) {
             try {
@@ -201,7 +201,7 @@ export async function POST(req: Request) {
       if (listingId) {
         // If updating, first delete existing files
         try {
-          const existingFilesRes = await axios.get(`https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}/files`, { headers });
+          const existingFilesRes = await axios.get(`https://api.etsy.com/v3/application/listings/${listingId}/files`, { headers });
           const existingFiles = existingFilesRes.data;
           for (const f of existingFiles.results || []) {
             try {
