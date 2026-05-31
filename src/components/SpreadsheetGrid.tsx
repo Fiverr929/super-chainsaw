@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useState, useRef } from "react";
 import Image from "next/image";
 import DataEditor, {
+  DataEditorRef,
   GridCell,
   GridCellKind,
   GridColumn,
@@ -60,6 +61,7 @@ type RowData = {
 const NUM_ROWS = 100;
 
 export default function SpreadsheetGrid() {
+  const gridRef = useRef<DataEditorRef>(null);
   const [columns, setColumns] = useState(COLUMNS);
   const [zoom, setZoom] = useState(1);
   const [gridSelection, setGridSelection] = useState<GridSelection | undefined>(undefined);
@@ -397,7 +399,7 @@ export default function SpreadsheetGrid() {
       } else if (newValue.kind === GridCellKind.Custom) {
         const customColumns = ["status", "category", "section", "primary_color", "occasion", "celebration", "subject"];
         if (customColumns.includes(columnId)) {
-           newStringValue = (newValue.data as string).value;
+           newStringValue = (newValue.data as any).value;
         } else {
            return;
         }
@@ -544,8 +546,6 @@ export default function SpreadsheetGrid() {
             if (pushData.success) {
               newData[row] = { ...newData[row], status: "Published", listing_id: pushData.listing_id.toString() };
             } else {
-              // Next.js dev server intercepts console.error and displays a full screen blocking overlay.
-              // We remove it so the user can see the actual alert() box instead.
               const errMsg = pushData.details?.error || pushData.error || "Unknown Error";
               alert(`Etsy API Error:\n${errMsg}`);
               newData[row] = { ...newData[row], status: "Error" };
@@ -612,7 +612,7 @@ export default function SpreadsheetGrid() {
             // @ts-expect-error - external type mismatch
             dataRow[columnId] = values[r][c];
           }
-          newData[row + r] = dataRow as GridCell;
+          newData[row + r] = dataRow as RowData;
         }
         return newData;
       });
@@ -622,7 +622,7 @@ export default function SpreadsheetGrid() {
   );
 
   const onFillPattern = useCallback(
-    (event: React.KeyboardEvent<HTMLDivElement>) => {
+    (event: any) => {
       const { patternSource, fillDestination } = event;
       if (!patternSource || !fillDestination) return;
 
@@ -653,7 +653,7 @@ export default function SpreadsheetGrid() {
             destRowData[destColumnId] = sourceRowData[sourceColumnId];
           }
 
-          newData[destRowIndex] = destRowData as GridCell;
+          newData[destRowIndex] = destRowData as RowData;
         }
 
         return newData;
@@ -665,11 +665,13 @@ export default function SpreadsheetGrid() {
 
   const onDelete = useCallback(
     (selection: GridSelection) => {
+      let didDelete = false;
+      const cellsToUpdate: { cell: Item }[] = [];
+
       setData((prev) => {
         const newData = [...prev];
-        let didDelete = false;
 
-        // 1. Delete all selected regions (v6 Multi-select Range)
+        // 1. Delete all selected regions
         if (selection.current) {
           const ranges = selection.current.rangeStack && selection.current.rangeStack.length > 0
             ? selection.current.rangeStack
@@ -689,9 +691,10 @@ export default function SpreadsheetGrid() {
                   // @ts-expect-error - external type mismatch
                   rowData[colId] = "";
                   didDelete = true;
+                  cellsToUpdate.push({ cell: [colIdx, rowIdx] });
                 }
               }
-              newData[rowIdx] = rowData as GridCell;
+              newData[rowIdx] = rowData as RowData;
             }
           }
         }
@@ -702,14 +705,16 @@ export default function SpreadsheetGrid() {
           for (const r of selectedRows) {
             if (typeof r !== "number" || r >= NUM_ROWS) continue;
             const rowData = { ...newData[r] };
-            for (const col of columns) {
+            for (let c = 0; c < columns.length; c++) {
+              const col = columns[c];
               if (col.id) {
                 // @ts-expect-error - external type mismatch
                 rowData[col.id] = "";
                 didDelete = true;
+                cellsToUpdate.push({ cell: [c, r] });
               }
             }
-            newData[r] = rowData as GridCell;
+            newData[r] = rowData as RowData;
           }
         }
 
@@ -725,14 +730,19 @@ export default function SpreadsheetGrid() {
                 // @ts-expect-error - external type mismatch
                 rowData[colId] = "";
                 didDelete = true;
+                cellsToUpdate.push({ cell: [c, r] });
               }
             }
-            newData[r] = rowData as GridCell;
+            newData[r] = rowData as RowData;
           }
         }
 
         return didDelete ? newData : prev;
       });
+
+      if (didDelete && gridRef.current) {
+        gridRef.current.updateCells(cellsToUpdate);
+      }
       return true;
     },
     [columns]
@@ -768,6 +778,7 @@ export default function SpreadsheetGrid() {
       <div className="w-full h-full border border-zinc-200 dark:border-zinc-800 rounded-none overflow-hidden relative">
         {fontsLoaded && (
           <DataEditor
+            ref={gridRef}
             gridSelection={gridSelection}
             onGridSelectionChange={setGridSelection}
             theme={{
@@ -788,7 +799,7 @@ export default function SpreadsheetGrid() {
               roundingRadius: 0,
               headerFontStyle: "600 13px Inter, sans-serif",
               baseFontStyle: "13px Inter, sans-serif",
-            } as GridCell}
+            } as any}
             rowMarkers="checkbox"
             getCellContent={getCellContent}
             columns={columns}
