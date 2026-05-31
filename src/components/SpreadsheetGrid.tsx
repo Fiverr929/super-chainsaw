@@ -87,7 +87,7 @@ export default function SpreadsheetGrid() {
       tags: "",
       price: "",
       quantity: "",
-      category: "",
+      category: "Store Graphics",
       section: "",
       primary_color: "",
       occasion: "",
