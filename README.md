@@ -1,34 +1,38 @@
-# 💀 WORKSTATION V2: THE ETSY DESTROYER 💀
+# Workstation V2
 
-Welcome to **Workstation V2**. If you are reading this, you are probably not ready for what this codebase does. 
+A high-performance grid interface designed for aggressive e-commerce asset generation. 
 
-This isn't your grandma's Next.js boilerplate. This is a highly-tuned, fully-automated, unhinged **AI-powered Spreadsheet Grid** that hallucinates Etsy descriptions, tags, and SEO into existence and force-feeds them directly into the Etsy API. 
+It takes minimal input data and forcefully expands it into fully optimized titles, descriptions, and taxonomy parameters using an automated generation pipeline, then pushes the resulting assets directly to the target marketplace.
 
-## 🧠 WHAT DOES THIS THING DO?
-- **AI Brain Injections:** You click a button. Google's Vertex AI (Gemini) wakes up from its digital slumber, looks at a picture of a skull shirt, and instantly generates a highly optimized 140-character Etsy title, 13 perfect tags, and alt text.
-- **The Glide Grid of Doom:** Built on `glide-data-grid`, this UI can handle 100+ rows of raw, pure product data being violently edited in real-time. 
-- **Digital Asset Cannibalism:** It zips files, uploads images, sets taxonomy data, and slams them directly into Etsy shops.
+## Architecture
 
-## ⚠️ WARNINGS & DISCLAIMERS
-1. **DO NOT EXPOSE THE API KEYS.** If you hardcode your Etsy or Google API keys into this repo and push them to GitHub, an angry AI will automatically delete your `master` branch. (Trust us, it happened).
-2. **NO JUNK ALLOWED.** The `scratch/` folder has been vaporized. All `test_*.js` scripts were sacrificed to the Git Gods to keep this repo pure.
+- Automated Generation: Point the vertex integration at a base prompt and watch it hallucinate missing SEO attributes, 140-character titles, and optimized alt text.
+- Spreadsheet Grid: Built on glide-data-grid to handle hundreds of rows of raw product data being edited synchronously.
+- Digital Asset Pipeline: Handles packaging, zipping, and uploading digital artifacts alongside their listing metadata.
 
-## 🚀 START THE ENGINE
-If you have the courage to run this locally:
+## Local Development
 
+If you're bold enough to run this locally, follow these steps. 
+
+1. Install dependencies
 ```bash
-# 1. Pray to the machine spirit
 npm install
+```
 
-# 2. Feed it the secrets (create a .env.local file with your API keys)
-# GOOGLE_API_KEY=...
-# ETSY_API_KEY=...
+2. Configure environment variables in `.env.local`
+```bash
+GOOGLE_API_KEY=your_key_here
+# Add marketplace keys as needed
+```
 
-# 3. Ignite the Turbopack
+3. Spin up the dev server
+```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and watch the grid come alive.
+Navigate to `http://localhost:3000` to interact with the grid.
 
----
-*Built with Next.js, React, Glide Data Grid, and way too much caffeine.*
+## Notes
+
+- Keep the `public/listings` folder out of your git history if you are working with live commercial assets.
+- Do not commit your `.env.local` file. The repository has protections in place, but don't test them.
