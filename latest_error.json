@@ -1,0 +1,43 @@
+{
+  "timestamp": "2026-05-29T19:45:27.534Z",
+  "requestBody": {
+    "status": "Error",
+    "context": "Dex",
+    "images": "/listings/dexter/Dexter Shirt (Black Color).png,/listings/dexter/Dexter T-Shirt.png,/listings/dexter/Dexter The Bay Harbor Butcher Vintage Graphic T-Shirt (Black Color).jpg",
+    "alt_text": [
+      "Front view of a white ceramic mug with 'Dex' printed in a modern, minimalist font, showing the handle clearly.",
+      "Close-up shot of the 'Dex' design on the mug, highlighting the print quality and the ceramic texture.",
+      "Lifestyle shot of the 'Dex' mug on a wooden table with a steaming drink, next to a book or plant, suggesting cozy use."
+    ],
+    "digital_file": "/listings/dexter/digital/DIGITAL.png",
+    "title": "Personalized Dex Mug, Custom Name Coffee Cup, Unique Gift for Him Her, Modern Minimalist Design, Coffee Lover Gift, Birthday Present",
+    "description": "Start your day with a personalized touch! This unique Dex Mug is the perfect way to enjoy your favorite beverage. Featuring a stylish, minimalist design, you can customize it with the name 'Dex' or any other name, making it an ideal gift for friends, family, or yourself. Crafted from durable ceramic, this coffee cup is both microwave and dishwasher safe, ensuring longevity and convenience. Whether it's for a birthday, anniversary, or just because, this custom name mug makes a thoughtful and memorable present for any coffee or tea enthusiast. Its sleek design fits perfectly into any home or office decor. Order yours today and add a personal touch to your daily routine!",
+    "tags": [
+      "Personalized Mug",
+      "Custom Name Mug",
+      "Dex Coffee Cup",
+      "Unique Gift",
+      "Gift For Him",
+      "Gift For Her",
+      "Coffee Lover Gift",
+      "Birthday Gift",
+      "Ceramic Mug",
+      "Minimalist Mug",
+      "Custom Gift",
+      "Drinkware",
+      "Tea Cup"
+    ],
+    "price": "3.99",
+    "quantity": "999",
+    "section": "",
+    "primary_color": "White",
+    "occasion": "Birthday",
+    "celebration": "",
+    "subject": "Typography & symbols",
+    "folder": "dexter",
+    "video": "/listings/dexter/Comfort Color 1717 v2.mp4",
+    "category": "Store Graphics",
+    "listing_id": ""
+  },
+  "error": "data.tags.split is not a function"
+}

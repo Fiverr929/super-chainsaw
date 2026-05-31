@@ -9,9 +9,17 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@glideapps/glide-data-grid": "^6.0.3",
+    "@glideapps/glide-data-grid-cells": "^6.0.3",
+    "axios": "^1.16.1",
+    "dotenv": "^17.4.2",
+    "lodash": "^4.18.1",
+    "lucide-react": "^1.17.0",
+    "marked": "^18.0.4",
     "next": "16.2.6",
     "react": "19.2.4",
-    "react-dom": "19.2.4"
+    "react-dom": "19.2.4",
+    "react-responsive-carousel": "^3.2.23"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
