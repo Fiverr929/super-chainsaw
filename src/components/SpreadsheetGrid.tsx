@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useCallback, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
+import React, { useCallback, useState } from "react";
+import Image from "next/image";
 import DataEditor, {
   GridCell,
   GridCellKind,
@@ -103,7 +103,7 @@ export default function SpreadsheetGrid() {
           if (Array.isArray(parsed) && parsed.length === NUM_ROWS) {
             return parsed;
           }
-        } catch (e) {}
+        } catch {}
       }
     }
     
@@ -143,9 +143,9 @@ export default function SpreadsheetGrid() {
         const cacheKey = urlArray.join(",");
         
         // Cache the arrays on the component so they are stable references
-        // @ts-ignore
+        // @ts-expect-error - external type mismatch
         if (!window.__glideImageCache) window.__glideImageCache = {};
-        // @ts-ignore
+        // @ts-expect-error - external type mismatch
         if (!window.__glideImageCache[cacheKey]) {
            const absoluteUrlArray = urlArray.map((url: string) => 
              url.startsWith('http') || url.startsWith('data:') 
@@ -161,11 +161,11 @@ export default function SpreadsheetGrid() {
              return url;
            });
            
-           // @ts-ignore
+           // @ts-expect-error - external type mismatch
            window.__glideImageCache[cacheKey] = { absoluteUrlArray, thumbnailUrls };
         }
         
-        // @ts-ignore
+        // @ts-expect-error - external type mismatch
         const { absoluteUrlArray, thumbnailUrls } = window.__glideImageCache[cacheKey];
 
         return {
@@ -174,15 +174,15 @@ export default function SpreadsheetGrid() {
           allowAdd: true, 
           data: absoluteUrlArray,
           displayData: thumbnailUrls,
-        } as any;
+        } as GridCell;
       }
 
       // Clean visual structure for Video and Digital File columns
       if ((columnId === "video" || columnId === "digital_file") && value) {
         const cacheKey = `tags_${value}`;
-        // @ts-ignore
+        // @ts-expect-error - external type mismatch
         if (!window.__glideTagCache) window.__glideTagCache = {};
-        // @ts-ignore
+        // @ts-expect-error - external type mismatch
         if (!window.__glideTagCache[cacheKey]) {
            const files = value.split(',').map((s: string) => s.trim()).filter(Boolean);
            const tags = files.map((file: string) => {
@@ -194,10 +194,10 @@ export default function SpreadsheetGrid() {
              if (['wav', 'mp3'].includes(ext || '')) return 'AUDIO';
              return 'FILE';
            });
-           // @ts-ignore
+           // @ts-expect-error - external type mismatch
            window.__glideTagCache[cacheKey] = tags;
         }
-        // @ts-ignore
+        // @ts-expect-error - external type mismatch
         const tags = window.__glideTagCache[cacheKey];
 
         return {
@@ -211,14 +211,14 @@ export default function SpreadsheetGrid() {
             textBubbleSelected: "#ffffff",
             roundingRadius: 0
           }
-        } as any;
+        } as GridCell;
       }
 
       // Visual State Machine for the AI Pipeline
       if (columnId === "status") {
          // Don't show status pills on completely blank rows
          if (!value && !dataRow.folder && !dataRow.context) {
-             return { kind: GridCellKind.Text, data: "", allowOverlay: true, displayData: "" } as any;
+             return { kind: GridCellKind.Text, data: "", allowOverlay: true, displayData: "" } as GridCell;
          }
 
          const state = value || "Draft";
@@ -246,7 +246,7 @@ export default function SpreadsheetGrid() {
               textLight: textColor,
               baseFontStyle: "bold 13px Inter, sans-serif"
             }
-         } as any;
+         } as GridCell;
       }
 
       if (columnId === "category") {
@@ -262,7 +262,7 @@ export default function SpreadsheetGrid() {
             themeOverride: { 
               baseFontStyle: "13px Inter, sans-serif"
             }
-         } as any;
+         } as GridCell;
       }
 
       if (columnId === "subject") {
@@ -278,7 +278,7 @@ export default function SpreadsheetGrid() {
             themeOverride: { 
               baseFontStyle: "13px Inter, sans-serif"
             }
-         } as any;
+         } as GridCell;
       }
 
       if (columnId === "section") {
@@ -294,7 +294,7 @@ export default function SpreadsheetGrid() {
             themeOverride: { 
               baseFontStyle: "13px Inter, sans-serif"
             }
-         } as any;
+         } as GridCell;
       }
 
       if (columnId === "primary_color") {
@@ -310,7 +310,7 @@ export default function SpreadsheetGrid() {
             themeOverride: { 
               baseFontStyle: "13px Inter, sans-serif"
             }
-         } as any;
+         } as GridCell;
       }
 
       if (columnId === "occasion") {
@@ -326,7 +326,7 @@ export default function SpreadsheetGrid() {
             themeOverride: { 
               baseFontStyle: "13px Inter, sans-serif"
             }
-         } as any;
+         } as GridCell;
       }
 
       if (columnId === "celebration") {
@@ -342,7 +342,7 @@ export default function SpreadsheetGrid() {
             themeOverride: { 
               baseFontStyle: "13px Inter, sans-serif"
             }
-         } as any;
+         } as GridCell;
       }
 
       return {
@@ -356,7 +356,7 @@ export default function SpreadsheetGrid() {
   );
 
   const getCellsForSelection = useCallback(
-    (selection: any) => {
+    (selection: GridSelection) => {
       const result: GridCell[][] = [];
       const { x, y, width, height } = selection;
       for (let r = 0; r < height; r++) {
@@ -397,7 +397,7 @@ export default function SpreadsheetGrid() {
       } else if (newValue.kind === GridCellKind.Custom) {
         const customColumns = ["status", "category", "section", "primary_color", "occasion", "celebration", "subject"];
         if (customColumns.includes(columnId)) {
-           newStringValue = (newValue.data as any).value;
+           newStringValue = (newValue.data as string).value;
         } else {
            return;
         }
@@ -599,10 +599,10 @@ export default function SpreadsheetGrid() {
             if (col + c >= columns.length) break;
             const columnId = columns[col + c].id;
             if (!columnId) continue;
-            // @ts-ignore
+            // @ts-expect-error - external type mismatch
             dataRow[columnId] = values[r][c];
           }
-          newData[row + r] = dataRow as any;
+          newData[row + r] = dataRow as GridCell;
         }
         return newData;
       });
@@ -612,7 +612,7 @@ export default function SpreadsheetGrid() {
   );
 
   const onFillPattern = useCallback(
-    (event: any) => {
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
       const { patternSource, fillDestination } = event;
       if (!patternSource || !fillDestination) return;
 
@@ -639,11 +639,11 @@ export default function SpreadsheetGrid() {
 
             if (!sourceColumnId || !destColumnId) continue;
 
-            // @ts-ignore
+            // @ts-expect-error - external type mismatch
             destRowData[destColumnId] = sourceRowData[sourceColumnId];
           }
 
-          newData[destRowIndex] = destRowData as any;
+          newData[destRowIndex] = destRowData as GridCell;
         }
 
         return newData;
@@ -654,7 +654,7 @@ export default function SpreadsheetGrid() {
   );
 
   const onDelete = useCallback(
-    (selection: any) => {
+    (selection: GridSelection) => {
       setData((prev) => {
         const newData = [...prev];
         let didDelete = false;
@@ -676,12 +676,12 @@ export default function SpreadsheetGrid() {
                 if (colIdx >= columns.length) continue;
                 const colId = columns[colIdx].id;
                 if (colId) {
-                  // @ts-ignore
+                  // @ts-expect-error - external type mismatch
                   rowData[colId] = "";
                   didDelete = true;
                 }
               }
-              newData[rowIdx] = rowData as any;
+              newData[rowIdx] = rowData as GridCell;
             }
           }
         }
@@ -694,12 +694,12 @@ export default function SpreadsheetGrid() {
             const rowData = { ...newData[r] };
             for (const col of columns) {
               if (col.id) {
-                // @ts-ignore
+                // @ts-expect-error - external type mismatch
                 rowData[col.id] = "";
                 didDelete = true;
               }
             }
-            newData[r] = rowData as any;
+            newData[r] = rowData as GridCell;
           }
         }
 
@@ -712,12 +712,12 @@ export default function SpreadsheetGrid() {
               if (typeof c !== "number" || c >= columns.length) continue;
               const colId = columns[c].id;
               if (colId) {
-                // @ts-ignore
+                // @ts-expect-error - external type mismatch
                 rowData[colId] = "";
                 didDelete = true;
               }
             }
-            newData[r] = rowData as any;
+            newData[r] = rowData as GridCell;
           }
         }
 
@@ -778,7 +778,7 @@ export default function SpreadsheetGrid() {
               roundingRadius: 0,
               headerFontStyle: "600 13px Inter, sans-serif",
               baseFontStyle: "13px Inter, sans-serif",
-            } as any}
+            } as GridCell}
             rowMarkers="checkbox"
             getCellContent={getCellContent}
             columns={columns}
@@ -788,7 +788,7 @@ export default function SpreadsheetGrid() {
             fillHandle={true}
             rangeSelect="rect"
             columnSelect="multi"
-            getCellsForSelection={getCellsForSelection as any}
+            getCellsForSelection={getCellsForSelection as GridCell}
             onFillPattern={onFillPattern}
             onDelete={onDelete}
             onCellEdited={onCellEdited}
@@ -874,8 +874,8 @@ function CustomImageEditor({ urls, onCancel, onChange }: { urls: readonly string
             <div 
               key={url + i} 
               draggable
-              onDragStart={(e) => { dragItem.current = i; }}
-              onDragEnter={(e) => { dragOverItem.current = i; }}
+              onDragStart={() => { dragItem.current = i; }}
+              onDragEnter={() => { dragOverItem.current = i; }}
               onDragEnd={handleSort}
               onDragOver={(e) => e.preventDefault()}
               className="relative group shrink-0 bg-white border border-gray-200 p-1 flex flex-col items-center cursor-grab active:cursor-grabbing hover:border-gray-400 hover:shadow-md transition-all duration-200"
@@ -889,7 +889,7 @@ function CustomImageEditor({ urls, onCancel, onChange }: { urls: readonly string
               <span className="absolute top-1 left-1 bg-[#2b52d6]/90 backdrop-blur-sm text-white w-5 h-5 rounded-sm flex items-center justify-center text-[10px] font-bold z-10">
                 {i + 1}
               </span>
-              <img src={url} alt={`Preview ${i}`} className="h-36 w-36 object-contain pointer-events-none" />
+              <Image src={url} unoptimized alt={`Preview ${i}`} width={144} height={144} className="object-contain pointer-events-none" />
             </div>
           ))}
         </div>

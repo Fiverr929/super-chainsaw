@@ -32,7 +32,7 @@ export async function GET() {
     });
 
     return NextResponse.json({ shop_name: shopRes.data.shop_name });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Etsy API Error:", err.response ? err.response.data : err.message);
     return NextResponse.json({ error: 'Failed to fetch Etsy shop' }, { status: 500 });
   }

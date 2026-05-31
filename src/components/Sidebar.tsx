@@ -25,13 +25,14 @@ export default function Sidebar() {
     if (savedStores) {
       try {
         const parsed = JSON.parse(savedStores);
+        // eslint-disable-next-line
         setStores(parsed);
         if (savedActiveId && parsed.some((s: Store) => s.id === savedActiveId)) {
           setActiveStoreId(savedActiveId);
         } else if (parsed.length > 0) {
           setActiveStoreId(parsed[0].id);
         }
-      } catch (e) {}
+      } catch {}
     }
   }, []);
 
@@ -60,7 +61,7 @@ export default function Sidebar() {
       } else {
         alert("Failed to connect to Etsy store.");
       }
-    } catch (err) {
+    } catch {
       alert("Error connecting to Etsy.");
     } finally {
       setIsConnecting(false);

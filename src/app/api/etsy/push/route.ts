@@ -32,7 +32,7 @@ const PROP_ART_SUBJECT: Record<string, number> = {
 };
 
 export async function POST(req: Request) {
-  let data: any;
+  let data: unknown;
   try {
     data = await req.json();
     
@@ -62,7 +62,7 @@ export async function POST(req: Request) {
     };
 
     // 2. Create or Update Draft Listing
-    const payload: any = {
+    const payload: unknown = {
       quantity: parseInt(data.quantity) || 999,
       title: data.title ? data.title.substring(0, 140) : "Draft Listing Title",
       description: data.description || "Digital download listing. Please update this description.",
@@ -115,7 +115,7 @@ export async function POST(req: Request) {
           { value_ids: prop.value_ids }, 
           { headers }
         );
-      } catch (err: any) {
+      } catch (err: unknown) {
         console.warn(`Failed to update property ${prop.id}. This may be unsupported for the selected category. Ignoring.`, err.response?.data || err.message);
       }
     }
@@ -146,7 +146,7 @@ export async function POST(req: Request) {
     };
 
     // 4. Upload Preview Images
-    // We use axios exclusively so any network or 4xx/5xx failure correctly throws an error instead of silently passing
+    // We use axios exclusively so unknown network or 4xx/5xx failure correctly throws an error instead of silently passing
     if (data.images) {
       if (listingId) {
         // If updating, first delete existing images so we can replace them
@@ -156,11 +156,11 @@ export async function POST(req: Request) {
           for (const img of existingImages.results || []) {
             try {
               await axios.delete(`https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}/images/${img.listing_image_id}`, { headers });
-            } catch (delErr: any) {
+            } catch (delErr: unknown) {
               if (delErr.response?.status !== 404) throw delErr; // ignore 404s
             }
           }
-        } catch (err: any) {
+        } catch (err: unknown) {
            console.warn("Failed to fetch/delete existing images:", err.response?.data || err.message);
         }
       }
@@ -184,7 +184,7 @@ export async function POST(req: Request) {
              formData.append("alt_text", truncateText(currentAltText, 250));
           }
 
-          const uploadHeaders: any = { ...headers };
+          const uploadHeaders: unknown = { ...headers };
           delete uploadHeaders['Content-Type'];
 
           // Use axios so it properly throws on 4xx/5xx failures
@@ -206,11 +206,11 @@ export async function POST(req: Request) {
           for (const f of existingFiles.results || []) {
             try {
               await axios.delete(`https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}/files/${f.listing_file_id}`, { headers });
-            } catch (delErr: any) {
+            } catch (delErr: unknown) {
               if (delErr.response?.status !== 404) throw delErr;
             }
           }
-        } catch (err: any) {
+        } catch (err: unknown) {
           console.warn("Failed to fetch/delete existing files:", err.response?.data || err.message);
         }
       }
@@ -228,7 +228,7 @@ export async function POST(req: Request) {
           formData.append("file", blob, path.basename(absolutePath));
           formData.append("name", path.basename(absolutePath));
 
-          const uploadHeaders: any = { ...headers };
+          const uploadHeaders: unknown = { ...headers };
           delete uploadHeaders['Content-Type'];
 
           // Use axios so it properly throws on 4xx/5xx failures
@@ -240,19 +240,19 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ success: true, listing_id: listingId });
-  } catch (err: any) {
+  } catch (err: unknown) {
     const errorDetails = err.response ? err.response.data : err.message;
     console.error("Etsy Push Error:", JSON.stringify(errorDetails, null, 2));
     
-    let errorMsg = 'Failed to push to Etsy';
+    // let // errorMsg = 'Failed to push to Etsy';
     if (typeof errorDetails === 'string') {
-      errorMsg = errorDetails;
+      // errorMsg = errorDetails;
     } else if (errorDetails && errorDetails.error) {
-      errorMsg = errorDetails.error;
+      // errorMsg = errorDetails.error;
     } else if (errorDetails && errorDetails.message) {
-      errorMsg = errorDetails.message;
+      // errorMsg = errorDetails.message;
     } else {
-      errorMsg = JSON.stringify(errorDetails);
+      // errorMsg = JSON.stringify(errorDetails);
     }
     
     // Save to file for debugging
