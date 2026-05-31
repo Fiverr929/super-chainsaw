@@ -437,6 +437,45 @@ export default function SpreadsheetGrid() {
     });
   }, []);
 
+  const triggerFolderAutomation = useCallback((row: number, folderName: string) => {
+    if (folderName.trim() === "") return;
+
+    const optimisticArray = [...dataRef.current];
+    optimisticArray[row] = {
+       ...optimisticArray[row],
+       category: optimisticArray[row].category || "Store Graphics",
+       price: optimisticArray[row].price || "3.99",
+       quantity: optimisticArray[row].quantity || "999"
+    };
+    dataRef.current = optimisticArray;
+    setData(optimisticArray);
+
+    fetch(`/api/assets?folder=${encodeURIComponent(folderName.trim())}`)
+      .then(res => res.json())
+      .then(assetData => {
+         if (assetData && !assetData.error) {
+            const updatedArray = [...dataRef.current];
+            updatedArray[row] = {
+               ...updatedArray[row],
+               images: assetData.images || updatedArray[row].images,
+               video: assetData.video || updatedArray[row].video,
+               digital_file: assetData.digital_file || updatedArray[row].digital_file
+            };
+            dataRef.current = updatedArray;
+            setData(updatedArray);
+            
+            // Chain the AI trigger now that assets are loaded!
+            triggerAIGeneration(row);
+         } else {
+            alert(`Folder Scan Failed: ${assetData.error || "Unknown error"}. Make sure the folder exists and is spelled correctly.`);
+         }
+      })
+      .catch(err => {
+         console.error("Asset scan failed:", err);
+         alert("Network error while trying to scan folder.");
+      });
+  }, [triggerAIGeneration]);
+
   const onCellEdited = useCallback(
     (cell: Item, newValue: GridCell) => {
       if (newValue.kind !== GridCellKind.Text && newValue.kind !== GridCellKind.Image && newValue.kind !== GridCellKind.Bubble && newValue.kind !== GridCellKind.Custom) return;
@@ -479,42 +518,8 @@ export default function SpreadsheetGrid() {
       setData(newDataArray);
 
       // Automatically scan the folder if the folder name was just typed!
-      if (columnId === "folder" && newStringValue.trim() !== "") {
-        const optimisticArray = [...dataRef.current];
-        optimisticArray[row] = {
-           ...optimisticArray[row],
-           category: optimisticArray[row].category || "Store Graphics",
-           price: optimisticArray[row].price || "3.99",
-           quantity: optimisticArray[row].quantity || "999"
-        };
-        dataRef.current = optimisticArray;
-        setData(optimisticArray);
-
-        fetch(`/api/assets?folder=${encodeURIComponent(newStringValue.trim())}`)
-          .then(res => res.json())
-          .then(assetData => {
-             if (assetData && !assetData.error) {
-                const updatedArray = [...dataRef.current];
-                updatedArray[row] = {
-                   ...updatedArray[row],
-                   images: assetData.images || updatedArray[row].images,
-                   video: assetData.video || updatedArray[row].video,
-                   digital_file: assetData.digital_file || updatedArray[row].digital_file
-                };
-                dataRef.current = updatedArray;
-                setData(updatedArray);
-                
-                // Chain the AI trigger now that assets are loaded!
-                triggerAIGeneration(row);
-             } else {
-                alert(`Folder Scan Failed: ${assetData.error || "Unknown error"}. Make sure the folder exists and is spelled correctly.`);
-                // Reset status/optimistic loading state if necessary
-             }
-          })
-          .catch(err => {
-             console.error("Asset scan failed:", err);
-             alert("Network error while trying to scan folder.");
-          });
+      if (columnId === "folder") {
+        triggerFolderAutomation(row, newStringValue);
       }
 
       // Auto-fill hardcoded values when Category is selected
@@ -631,9 +636,18 @@ export default function SpreadsheetGrid() {
         dataRef.current = newData;
         return newData;
       });
+
+      // If pasting exactly one folder name, trigger the automation
+      if (values.length === 1 && values[0].length === 1 && columns[col]?.id === "folder") {
+         const pastedValue = values[0][0];
+         if (pastedValue) {
+            triggerFolderAutomation(row, pastedValue);
+         }
+      }
+
       return true;
     },
-    [columns]
+    [columns, triggerFolderAutomation]
   );
 
   const onFillPattern = useCallback(

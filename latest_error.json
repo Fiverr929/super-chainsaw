@@ -1,0 +1,32 @@
+{
+  "timestamp": "2026-05-31T12:43:15.512Z",
+  "requestBody": {
+    "status": "Ready to Push",
+    "context": "",
+    "images": "/listings/dexter/Dexter Shirt (Black Color).png,/listings/dexter/Dexter T-Shirt.png,/listings/dexter/Dexter The Bay Harbor Butcher Vintage Graphic T-Shirt (Black Color).jpg",
+    "alt_text": "Close-up of a Dexter Morgan art print featuring a stylized silhouette of Dexter with a blood splatter motif in the background, set against a dark, moody backdrop.|Lifestyle shot of the Dexter TV show poster framed and displayed on a wall in a modern living room, hinting at a fan's collection of true crime memorabilia.|Detail shot of the \"Dark Passenger\" text on the Dexter fan art, showcasing the texture and vibrant red color of the blood-like design.",
+    "digital_file": "/listings/dexter/digital/DIGITAL.png",
+    "title": "Dexter Morgan Art Print | Dark Passenger TV Show Poster | True Crime Fan Gift | Psychological Thriller Decor | Serial Killer Series",
+    "description": "Embrace your inner Dark Passenger with this striking Dexter Morgan inspired art print. Perfect for fans of the iconic psychological thriller series, this unique piece captures the essence of Dexter's complex world. Whether you're a true crime enthusiast or simply admire the intricate storytelling of the show, this print makes a bold statement.\n\nCrafted with meticulous attention to detail, the design features a stark silhouette of Dexter Morgan against a backdrop of symbolic blood splatters, embodying the show's dark and thrilling aesthetic. It's an ideal addition to your home office, media room, or bedroom decor, adding a touch of dark sophistication. This print is also the ultimate gift for any Dexter fan, celebrating their love for one of television's most compelling anti-heroes.\n\nAvailable in various sizes, this high-quality print is produced on premium matte paper, ensuring vibrant colors and sharp details that will stand the test of time. Bring a piece of Miami's darkest secrets into your space and let the 'Dark Passenger' ride.\n\n**Why you'll love this Dexter print:**\n*   **Unique Design:** Inspired by the beloved TV series, Dexter, featuring iconic motifs.\n*   **High-Quality:** Vibrant colors and sharp details on durable, premium paper.\n*   **Perfect Gift:** Ideal for true crime buffs, Dexter fans, and psychological thriller enthusiasts.\n*   **Versatile Decor:** Great for man caves, offices, living rooms, or bedrooms, adding a unique touch.\n\n**Keywords for SEO:** Dexter Morgan, Dark Passenger, Dexter TV Show, True Crime, Serial Killer Art, Psychological Thriller, TV Series Fan Gift, Anti-Hero Decor, Miami Metro, Blood Splatter Art, Fan Art Print, TV Show Merchandise, Crime Drama.",
+    "tags": "Dexter Morgan,Dark Passenger,Dexter TV Show,True Crime,Serial Killer,Fan Art Print,TV Series Gift,Psychological Thriller,Anti-Hero,Crime Drama,TV Show Merch,Blood Splatter,Miami Metro",
+    "price": "3.99",
+    "quantity": "999",
+    "section": "",
+    "primary_color": "Red",
+    "occasion": "Birthday",
+    "celebration": "",
+    "subject": "TV",
+    "folder": "dexter",
+    "video": "/listings/dexter/Comfort Color 1717 v2.mp4",
+    "category": "Store Graphics",
+    "listing_id": ""
+  },
+  "error": [
+    {
+      "path": "/tags",
+      "type": "too_long",
+      "message": "cannot be more than 20 characters",
+      "transformed": false
+    }
+  ]
+}
