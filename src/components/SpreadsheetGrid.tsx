@@ -178,7 +178,14 @@ export default function SpreadsheetGrid() {
       }
 
       // Clean visual structure for Video and Digital File columns
-      if ((columnId === "video" || columnId === "digital_file") && value) {
+      if (columnId === "video" || columnId === "digital_file") {
+        if (!value) {
+          return {
+            kind: GridCellKind.Bubble,
+            allowOverlay: false,
+            data: [],
+          } as GridCell;
+        }
         const cacheKey = `tags_${value}`;
         // @ts-expect-error - external type mismatch
         if (!window.__glideTagCache) window.__glideTagCache = {};
@@ -414,6 +421,16 @@ export default function SpreadsheetGrid() {
 
       // Automatically scan the folder if the folder name was just typed!
       if (columnId === "folder" && newStringValue.trim() !== "") {
+        const optimisticArray = [...dataRef.current];
+        optimisticArray[row] = {
+           ...optimisticArray[row],
+           category: optimisticArray[row].category || "Store Graphics",
+           price: optimisticArray[row].price || "3.99",
+           quantity: optimisticArray[row].quantity || "999"
+        };
+        dataRef.current = optimisticArray;
+        setData(optimisticArray);
+
         fetch(`/api/assets?folder=${encodeURIComponent(newStringValue.trim())}`)
           .then(res => res.json())
           .then(assetData => {
