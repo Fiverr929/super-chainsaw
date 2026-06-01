@@ -57,7 +57,26 @@ type RowData = {
   alt_text: string;
 };
 
-const NUM_ROWS = 100;
+const emptyRow: RowData = {
+  status: "",
+  listing_id: "",
+  context: "",
+  images: "",
+  video: "",
+  alt_text: "",
+  digital_file: "",
+  title: "",
+  description: "",
+  tags: "",
+  price: "",
+  quantity: "",
+  category: "Store Graphics",
+  section: "",
+  primary_color: "",
+  occasion: "",
+  celebration: "",
+  subject: "",
+};
 
 export default function SpreadsheetGrid() {
   const gridRef = useRef<DataEditorRef>(null);
@@ -73,42 +92,21 @@ export default function SpreadsheetGrid() {
     });
   }, []);
 
-  // Initialize exactly 100 empty rows, or load from local storage
+  // Load from local storage or initialize with empty rows
   const [data, setData] = useState<RowData[]>(() => {
-    const emptyRow: RowData = {
-      status: "",
-      listing_id: "",
-      context: "",
-      images: "",
-      video: "",
-      alt_text: "",
-      digital_file: "",
-      title: "",
-      description: "",
-      tags: "",
-      price: "",
-      quantity: "",
-      category: "Store Graphics",
-      section: "",
-      primary_color: "",
-      occasion: "",
-      celebration: "",
-      subject: "",
-    };
-
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("workstation_v2_grid_data");
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length === NUM_ROWS) {
+          if (Array.isArray(parsed) && parsed.length > 0) {
             return parsed;
           }
         } catch {}
       }
     }
     
-    return Array.from({ length: NUM_ROWS }).map(() => ({ ...emptyRow }));
+    return Array.from({ length: 50 }).map(() => ({ ...emptyRow }));
   });
 
   const dataRef = React.useRef(data);
@@ -543,6 +541,12 @@ export default function SpreadsheetGrid() {
 
       // Mutate the ref immediately for any synchronous callbacks (like the status fetch below)
       const newDataArray = [...dataRef.current];
+      
+      // Expand grid if editing outside current bounds
+      while (row >= newDataArray.length) {
+        newDataArray.push({ ...emptyRow });
+      }
+
       newDataArray[row] = {
         ...newDataArray[row],
         [columnId]: newStringValue,
@@ -580,6 +584,7 @@ export default function SpreadsheetGrid() {
         setData((prev) => {
           const newData = [...prev];
           newData[row] = { ...newData[row], status: "Pushing..." };
+          dataRef.current = newData;
           return newData;
         });
 
@@ -661,7 +666,9 @@ export default function SpreadsheetGrid() {
       setData((prev) => {
         const newData = [...prev];
         for (let r = 0; r < values.length; r++) {
-          if (row + r >= NUM_ROWS) break;
+          while (row + r >= newData.length) {
+            newData.push({ ...emptyRow });
+          }
           const dataRow = { ...newData[row + r] };
           for (let c = 0; c < values[r].length; c++) {
             if (col + c >= columns.length) break;
@@ -701,7 +708,9 @@ export default function SpreadsheetGrid() {
 
         for (let y = 0; y < fillDestination.height; y++) {
           const destRowIndex = fillDestination.y + y;
-          if (destRowIndex >= NUM_ROWS) break;
+          while (destRowIndex >= newData.length) {
+            newData.push({ ...emptyRow });
+          }
 
           const sourceRowIndex = patternSource.y + (y % sourceHeight);
           const sourceRowData = newData[sourceRowIndex];
@@ -750,7 +759,7 @@ export default function SpreadsheetGrid() {
             const { x, y, width, height } = rect;
             for (let r = 0; r < height; r++) {
               const rowIdx = y + r;
-              if (rowIdx >= NUM_ROWS) continue;
+              if (rowIdx >= newData.length) continue;
               const rowData = { ...newData[rowIdx] };
               for (let c = 0; c < width; c++) {
                 const colIdx = x + c;
@@ -772,7 +781,7 @@ export default function SpreadsheetGrid() {
         if (selection.rows) {
           const selectedRows = typeof selection.rows.toArray === "function" ? selection.rows.toArray() : Array.from(selection.rows);
           for (const r of selectedRows) {
-            if (typeof r !== "number" || r >= NUM_ROWS) continue;
+            if (typeof r !== "number" || r >= newData.length) continue;
             const rowData = { ...newData[r] };
             for (let c = 0; c < columns.length; c++) {
               const col = columns[c];
@@ -790,7 +799,7 @@ export default function SpreadsheetGrid() {
         // 3. Delete full columns
         if (selection.columns) {
           const selectedCols = typeof selection.columns.toArray === "function" ? selection.columns.toArray() : Array.from(selection.columns);
-          for (let r = 0; r < NUM_ROWS; r++) {
+          for (let r = 0; r < newData.length; r++) {
             const rowData = { ...newData[r] };
             for (const c of selectedCols) {
               if (typeof c !== "number" || c >= columns.length) continue;
@@ -874,7 +883,7 @@ export default function SpreadsheetGrid() {
             rowMarkers="checkbox"
             getCellContent={getCellContent}
             columns={columns}
-            rows={NUM_ROWS}
+            rows={data.length + 1}
             rowHeight={Math.floor(Math.max(34 * zoom, 20))}
             headerHeight={Math.floor(Math.max(36 * zoom, 24))}
             fillHandle={true}

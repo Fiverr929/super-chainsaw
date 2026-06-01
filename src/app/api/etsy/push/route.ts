@@ -84,7 +84,7 @@ export async function POST(req: Request) {
 
       if (data.tags) {
         payload.tags = data.tags.split(",")
-          .map((s: string) => s.replace(/[^a-zA-Z0-9\s\-]/g, '').trim())
+          .map((s: string) => s.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim().substring(0, 20))
           .filter((s: string) => s.length > 0)
           .slice(0, 13);
       }
@@ -157,7 +157,7 @@ export async function POST(req: Request) {
       // 4. Upload Preview Images
       // We use axios exclusively so unknown network or 4xx/5xx failure correctly throws an error instead of silently passing
       if (data.images) {
-        let existingImages: any[] = [];
+        let existingImages: { listing_image_id: number }[] = [];
         if (listingId) {
           try {
             const existingImagesRes = await axios.get(`https://api.etsy.com/v3/application/listings/${listingId}/images`, { headers });

@@ -25,12 +25,14 @@ export default function Sidebar() {
     if (savedStores) {
       try {
         const parsed = JSON.parse(savedStores);
-        // eslint-disable-next-line
-        setStores(parsed);
-        if (savedActiveId && parsed.some((s: Store) => s.id === savedActiveId)) {
-          setActiveStoreId(savedActiveId);
-        } else if (parsed.length > 0) {
-          setActiveStoreId(parsed[0].id);
+        if (Array.isArray(parsed)) {
+          // eslint-disable-next-line
+          setStores(parsed);
+          if (savedActiveId && parsed.some((s: Store) => s.id === savedActiveId)) {
+            setActiveStoreId(savedActiveId);
+          } else if (parsed.length > 0) {
+            setActiveStoreId(parsed[0].id);
+          }
         }
       } catch {}
     }

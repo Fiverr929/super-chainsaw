@@ -8,8 +8,8 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const folderName = searchParams.get('folder');
 
-  if (!folderName) {
-    return NextResponse.json({ error: 'Folder name is required' }, { status: 400 });
+  if (!folderName || folderName.includes('..')) {
+    return NextResponse.json({ error: 'Invalid folder name' }, { status: 400 });
   }
 
   // We are scoping the scanner strictly to the public/listings directory for security.

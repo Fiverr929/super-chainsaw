@@ -1,33 +1,26 @@
 {
-  "timestamp": "2026-06-01T09:16:09.342Z",
+  "timestamp": "2026-06-01T10:43:51.513Z",
   "requestBody": {
-    "status": "Ready to Push",
+    "status": "Update Images",
     "context": "",
     "images": "/listings/dexter/Dexter T-Shirt.png,/listings/dexter/Dexter Shirt (Black Color).png,/listings/dexter/Dexter The Bay Harbor Butcher Vintage Graphic T-Shirt (Black Color).jpg",
-    "alt_text": "Blonde woman wearing an oversized black Dexter t-shirt with a red graphic of Dexter Morgan's face and 'Bay Harbor Butcher' text, against a Halloween-themed wall. | Plain black vintage style unisex t-shirt back view, soft cotton fabric, perfect for custom designs or layering. | Flat lay of a black Dexter TV show t-shirt featuring a distressed red graphic of Michael C. Hall as Dexter Morgan, 'The Bay Harbor Butcher' text, and vintage wash.",
+    "alt_text": "Woman wearing a black t-shirt with a bold red Dexter TV show graphic, featuring Dexter Morgan's face and 'The Bay Harbor Butcher' text, against a spooky Halloween backdrop. | Back of a plain black t-shirt mockup, ideal for displaying graphic designs on a simple background. | Front view of a black t-shirt mockup featuring a striking Dexter TV series graphic design, with red blood-splatter effects and iconic character imagery.",
     "digital_file": "/listings/dexter/digital/DIGITAL.png",
-    "title": "Dexter T-Shirt | The Bay Harbor Butcher Tee | Vintage TV Show Shirt | Michael C. Hall Fan Gift | Retro Crime Drama Series Merch Oversized",
-    "description": "Embrace your inner dark passenger with our exclusive Dexter T-Shirt, a must-have for any fan of the iconic crime drama series! This vintage-inspired tee features a striking distressed red graphic of Dexter Morgan, complete with the chilling moniker 'The Bay Harbor Butcher' emblazoned above.\n\nCrafted from premium, soft cotton, this unisex t-shirt offers a comfortable, relaxed fit perfect for everyday wear. The washed black fabric gives it a classic, retro feel, making it look like a cherished piece from your favorite era. Whether you're re-watching the series, heading to a fan convention, or just showcasing your love for one of television's most complex characters, this shirt is designed to impress.\n\nIt's an ideal gift for Dexter enthusiasts, a unique addition to your TV show merchandise collection, or a cool statement piece for Halloween. Stand out with this subtly dark and stylish tribute to Dexter Morgan.\n\n**Product Details:**\n*   Material: 100% Soft, breathable cotton\n*   Fit: Unisex, relaxed/oversized fit (size up for a more baggy look)\n*   Color: Washed Black with distressed Red graphic\n*   Design: Dexter Morgan 'Bay Harbor Butcher' graphic print\n*   Care Instructions: Machine wash cold, inside out, with like colors. Tumble dry low or hang dry for best results. Do not iron directly on the design.\n\nShow your allegiance to the code with this unique Dexter tee!",
-    "tags": "Dexter T-Shirt,Bay Harbor Butcher,Dexter Morgan Shirt,TV Show Merch,Crime Drama Fan,Michael C. Hall,Vintage Dexter Tee,Retro TV Shirt,Horror Series Fan,Halloween Shirt,Unisex Graphic Tee,Serial Killer Show,Dark Passenger",
+    "title": "",
+    "description": "",
+    "tags": "",
     "price": "3.99",
     "quantity": "999",
     "section": "",
-    "primary_color": "Black",
+    "primary_color": "Red",
     "occasion": "",
     "celebration": "",
     "subject": "TV",
     "folder": "dexter",
-    "video": "/listings/dexter/Comfort Color 1717 v2.mp4",
     "category": "Store Graphics",
+    "video": "/listings/dexter/Comfort Color 1717 v2.mp4",
     "listing_id": "",
-    "updateType": "all"
+    "updateType": "images"
   },
-  "error": [
-    {
-      "path": "/tags",
-      "type": "invalid_characters",
-      "message": "contains invalid characters",
-      "transformed": false
-    }
-  ]
+  "error": "Cannot update media without a valid listing ID"
 }

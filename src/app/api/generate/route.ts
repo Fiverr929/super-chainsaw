@@ -22,7 +22,13 @@ export async function POST(request: Request) {
         title: `Vintage Grunge ${context.substring(0, 15)} Graphic Tee | Aesthetic 90s Streetwear Shirt | Oversized Edgy Clothing Gift`,
         description: `Step up your streetwear game with this ultra-premium vintage graphic tee.\n\nInspired by classic 90s grunge aesthetics, this shirt is designed to look perfectly worn-in while maintaining an incredibly soft and heavy-weight feel.\n\nContext provided: ${context}\n\nFeatures:\n- 100% Ring-Spun Cotton\n- Relaxed, Oversized Fit\n- Distressed Graphic Print\n- Wash inside out on cold to preserve the vintage fade.\n\nPlease note this is a handmade item and slight variations in the wash may occur.`,
         tags: "grunge shirt, vintage tee, 90s aesthetic, streetwear, oversized shirt, graphic tee, edgy clothing, alternative fashion, skater shirt, unisex tee, gift for him, punk shirt, retro clothing",
-        alt_text: "Front view of vintage grunge graphic tee | Back view showing oversized streetwear fit | Close up of distressed graphic print | Lifestyle shot of skater wearing the aesthetic shirt | Size chart for unisex oversized fit"
+        alt_texts: [
+          "Front view of vintage grunge graphic tee",
+          "Back view showing oversized streetwear fit",
+          "Close up of distressed graphic print",
+          "Lifestyle shot of skater wearing the aesthetic shirt",
+          "Size chart for unisex oversized fit"
+        ]
       });
     }
 
@@ -34,7 +40,7 @@ export async function POST(request: Request) {
       return path.join(process.cwd(), fileUrl);
     };
 
-    const imageParts: any[] = [];
+    const imageParts: { inlineData: { mimeType: string; data: string } }[] = [];
     for (const fileUrl of imagePaths) {
        const absolutePath = resolveFilePath(fileUrl);
        if (absolutePath && fs.existsSync(absolutePath)) {
