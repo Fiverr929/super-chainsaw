@@ -32,7 +32,8 @@ export async function GET() {
     });
 
     return NextResponse.json({ shop_name: shopRes.data.shop_name });
-  } catch (err: unknown) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } catch (err: any) {
     console.error("Etsy API Error:", err.response ? err.response.data : err.message);
     return NextResponse.json({ error: 'Failed to fetch Etsy shop' }, { status: 500 });
   }

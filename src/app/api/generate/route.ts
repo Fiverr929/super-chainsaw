@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
+import fs from 'fs';
+import path from 'path';
+import sharp from 'sharp';
 
 export async function POST(request: Request) {
   try {
-    const { context, imageCount = 5, existingData = {} } = await request.json();
+    const { context, imagePaths = [], existingData = {} } = await request.json();
 
     if (!context || context.trim() === '') {
       // Proceed even if context is empty
@@ -23,11 +26,41 @@ export async function POST(request: Request) {
       });
     }
 
+    // Resolve and read local images
+    const resolveFilePath = (fileUrl: string) => {
+      if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://') || fileUrl.startsWith('data:')) return null;
+      if (fileUrl.match(/^[A-Za-z]:/)) return fileUrl;
+      if (fileUrl.startsWith('/')) return path.join(process.cwd(), 'public', fileUrl);
+      return path.join(process.cwd(), fileUrl);
+    };
+
+    const imageParts: any[] = [];
+    for (const fileUrl of imagePaths) {
+       const absolutePath = resolveFilePath(fileUrl);
+       if (absolutePath && fs.existsSync(absolutePath)) {
+          const fileBuffer = fs.readFileSync(absolutePath);
+          
+          // Compress the image to speed up AI payload
+          const compressedBuffer = await sharp(fileBuffer)
+            .resize(512) // Resize to max width 512px
+            .jpeg({ quality: 80 }) // Force JPEG to save space
+            .toBuffer();
+            
+          const mimeType = 'image/jpeg'; // Since we forced JPEG
+          
+          imageParts.push({
+             inlineData: {
+                mimeType,
+                data: compressedBuffer.toString("base64")
+             }
+          });
+       }
+    }
+
     const missingFields = [];
     if (!existingData.title) missingFields.push('"title" (a highly optimized Etsy Title. CRITICAL: MUST be exactly 140 characters or less including spaces)');
-    if (!existingData.description) missingFields.push('"description" (a detailed Etsy Description)');
-    if (!existingData.tags) missingFields.push('"tags" (EXACTLY 13 Etsy Tags as a comma-separated string. CRITICAL: Each individual tag MUST be 20 characters or less.)');
-    if (!existingData.alt_text) missingFields.push(`"alt_text" (SEO-optimized Alt Text for exactly ${imageCount} images, separated by |)`);
+    if (!existingData.description) missingFields.push('"description" (CRITICAL: Under 100 words total. One short punchy intro sentence, followed entirely by a scannable bullet-point list of the essential features/specs. NO FLUFF. No conclusion paragraphs.)');
+    if (!existingData.tags) missingFields.push('"tags" (EXACTLY 13 Etsy Tags as a comma-separated string. CRITICAL: Each individual tag MUST be 20 characters or less. ONLY use letters, numbers, and spaces. NO special characters.)');
     if (!existingData.primary_color) missingFields.push('"primary_color"');
     if (!existingData.occasion) missingFields.push('"occasion"');
     if (!existingData.celebration) missingFields.push('"celebration"');
@@ -51,6 +84,19 @@ For taxonomy attributes, if none fit perfectly, leave the string empty (""):
 Return ONLY valid JSON with no markdown formatting. The JSON keys MUST exactly match the names of the fields you were asked to generate (e.g., "title", "description", "tags", "primary_color").
 Format example if generating title and primary_color: { "title": "...", "primary_color": "..." }`;
 
+    let finalPrompt = systemPrompt;
+    if (imageParts.length > 0) {
+       missingFields.push(`"alt_texts" (A JSON array of exactly ${imageParts.length} strings, where each string is the SEO-optimized Alt Text for the corresponding image in the exact order they were provided)`);
+       finalPrompt = systemPrompt.replace(
+           "Your job is to generate ONLY the missing fields.", 
+           "You have been provided with images of the actual product. Your job is to examine the images and generate ONLY the missing fields based on what the product actually looks like."
+       );
+       finalPrompt = finalPrompt.replace(
+           "The fields you need to generate are:",
+           `The fields you need to generate are:\n- "alt_texts" (A JSON array of exactly ${imageParts.length} strings, where each string is the SEO-optimized Alt Text for the corresponding image in the exact order they were provided)`
+       );
+    }
+
     const response = await fetch(`https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: {
@@ -60,7 +106,7 @@ Format example if generating title and primary_color: { "title": "...", "primary
         contents: [
           { 
             role: "user",
-            parts: [{ text: `${systemPrompt}\n\nContext: ${context}` }] 
+            parts: [{ text: `${finalPrompt}\n\nContext: ${context}` }, ...imageParts] 
           }
         ],
         generationConfig: {
@@ -84,7 +130,7 @@ Format example if generating title and primary_color: { "title": "...", "primary
       title: content.title,
       description: content.description,
       tags: content.tags,
-      alt_text: content.alt_text,
+      alt_texts: content.alt_texts,
       primary_color: content.primary_color,
       occasion: content.occasion,
       celebration: content.celebration,

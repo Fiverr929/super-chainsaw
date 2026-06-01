@@ -32,7 +32,8 @@ const PROP_ART_SUBJECT: Record<string, number> = {
 };
 
 export async function POST(req: Request) {
-  let data: unknown;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let data: any;
   try {
     data = await req.json();
     
@@ -63,9 +64,9 @@ export async function POST(req: Request) {
 
     let listingId = data.listing_id;
 
-    if (data.updateType !== "media") {
+    if (data.updateType === "all" || data.updateType === "text") {
       // 2. Create or Update Draft Listing
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         quantity: parseInt(data.quantity) || 999,
         title: data.title ? data.title.substring(0, 140) : "Draft Listing Title",
         description: data.description || "Digital download listing. Please update this description.",
@@ -82,7 +83,10 @@ export async function POST(req: Request) {
       }
 
       if (data.tags) {
-        payload.tags = data.tags.split(",").map((s: string) => s.trim()).filter(Boolean).slice(0, 13);
+        payload.tags = data.tags.split(",")
+          .map((s: string) => s.replace(/[^a-zA-Z0-9\s\-]/g, '').trim())
+          .filter((s: string) => s.length > 0)
+          .slice(0, 13);
       }
 
       if (listingId) {
@@ -115,8 +119,9 @@ export async function POST(req: Request) {
             { value_ids: prop.value_ids }, 
             { headers }
           );
-        } catch (err: any) {
-          console.warn(`Failed to update property ${prop.id}. Ignoring.`, err.response?.data || err.message);
+        } catch (err: unknown) {
+          const error = err as { response?: { data?: unknown }, message?: string };
+          console.warn(`Failed to update property ${prop.id}. Ignoring.`, error.response?.data || error.message);
         }
       }
     } else {
@@ -148,24 +153,27 @@ export async function POST(req: Request) {
        return truncated;
     };
 
-    if (data.updateType !== "text") {
+    if (data.updateType === "all" || data.updateType === "images") {
       // 4. Upload Preview Images
       // We use axios exclusively so unknown network or 4xx/5xx failure correctly throws an error instead of silently passing
       if (data.images) {
+        let existingImages: any[] = [];
         if (listingId) {
-          // If updating, first delete existing images so we can replace them
           try {
             const existingImagesRes = await axios.get(`https://api.etsy.com/v3/application/listings/${listingId}/images`, { headers });
-            const existingImages = existingImagesRes.data;
-            for (const img of existingImages.results || []) {
+            existingImages = existingImagesRes.data.results || [];
+            
+            // Delete all EXCEPT the first one (Etsy requires at least 1 image at all times)
+            for (let i = 1; i < existingImages.length; i++) {
               try {
-                await axios.delete(`https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}/images/${img.listing_image_id}`, { headers });
-              } catch (delErr: any) {
-                if (delErr.response?.status !== 404) throw delErr; // ignore 404s
+                await axios.delete(`https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}/images/${existingImages[i].listing_image_id}`, { headers });
+              } catch (delErr: unknown) {
+                if ((delErr as {response?: {status?: number}}).response?.status !== 404) throw delErr;
               }
             }
-          } catch (err: any) {
-             console.warn("Failed to fetch/delete existing images:", err.response?.data || err.message);
+          } catch (err: unknown) {
+             const error = err as { response?: { data?: unknown }, message?: string };
+             console.warn("Failed to fetch/delete existing images:", error.response?.data || error.message);
           }
         }
 
@@ -188,34 +196,48 @@ export async function POST(req: Request) {
                formData.append("alt_text", truncateText(currentAltText, 250));
             }
 
-            const uploadHeaders: any = { ...headers };
+            const uploadHeaders: Record<string, string> = { ...headers };
             delete uploadHeaders['Content-Type'];
 
             // Use axios so it properly throws on 4xx/5xx failures
             await axios.post(`https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}/images`, formData, {
               headers: uploadHeaders
             });
+            
+            // Once the first new image is successfully uploaded, we can safely delete the lingering old image
+            if (rank === 1 && existingImages.length > 0) {
+                try {
+                   await axios.delete(`https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}/images/${existingImages[0].listing_image_id}`, { headers });
+                } catch (delErr: unknown) {
+                   if ((delErr as {response?: {status?: number}}).response?.status !== 404) throw delErr;
+                }
+            }
+            
             rank++;
           }
         }
       }
 
+    }
+
+    if (data.updateType === "all" || data.updateType === "files") {
       // 5. Upload Digital File
       if (data.digital_file) {
         if (listingId) {
           // If updating, first delete existing files
           try {
-            const existingFilesRes = await axios.get(`https://api.etsy.com/v3/application/listings/${listingId}/files`, { headers });
+            const existingFilesRes = await axios.get(`https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}/files`, { headers });
             const existingFiles = existingFilesRes.data;
             for (const f of existingFiles.results || []) {
               try {
                 await axios.delete(`https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}/files/${f.listing_file_id}`, { headers });
-              } catch (delErr: any) {
-                if (delErr.response?.status !== 404) throw delErr;
+              } catch (delErr: unknown) {
+                if ((delErr as {response?: {status?: number}}).response?.status !== 404) throw delErr;
               }
             }
-          } catch (err: any) {
-            console.warn("Failed to fetch/delete existing files:", err.response?.data || err.message);
+          } catch (err: unknown) {
+            const error = err as { response?: { data?: unknown }, message?: string };
+            console.warn("Failed to fetch/delete existing files:", error.response?.data || error.message);
           }
         }
 
@@ -225,14 +247,21 @@ export async function POST(req: Request) {
           if (absolutePath && fs.existsSync(absolutePath)) {
             const fileBuffer = fs.readFileSync(absolutePath);
             const ext = path.extname(absolutePath).toLowerCase();
-            const mimeType = ext === '.zip' ? 'application/zip' : ext === '.pdf' ? 'application/pdf' : 'application/octet-stream';
+            let mimeType = 'application/octet-stream';
+            if (ext === '.zip') mimeType = 'application/zip';
+            else if (ext === '.pdf') mimeType = 'application/pdf';
+            else if (ext === '.png') mimeType = 'image/png';
+            else if (ext === '.jpg' || ext === '.jpeg') mimeType = 'image/jpeg';
+            else if (ext === '.rar') mimeType = 'application/x-rar-compressed';
+            else if (ext === '.svg') mimeType = 'image/svg+xml';
+            
             const blob = new Blob([fileBuffer], { type: mimeType });
             
             const formData = new FormData();
             formData.append("file", blob, path.basename(absolutePath));
             formData.append("name", path.basename(absolutePath));
 
-            const uploadHeaders: any = { ...headers };
+            const uploadHeaders: Record<string, string> = { ...headers };
             delete uploadHeaders['Content-Type'];
 
             // Use axios so it properly throws on 4xx/5xx failures
@@ -245,7 +274,8 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ success: true, listing_id: listingId });
-  } catch (err: unknown) {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  } catch (err: any) {
     const errorDetails = err.response ? err.response.data : err.message;
     console.error("Etsy Push Error:", JSON.stringify(errorDetails, null, 2));
     

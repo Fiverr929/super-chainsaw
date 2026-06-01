@@ -32,7 +32,7 @@ export async function GET(request: Request) {
       // Only serve relative paths so the browser can access them via the public directory
       const relativeUrl = `/listings/${folderName}/${file}`;
 
-      if (['.png', '.jpg', '.jpeg', '.webp'].includes(ext)) {
+      if (['.png', '.jpg', '.jpeg'].includes(ext)) {
         images.push(relativeUrl);
       } else if (['.mp4', '.mov', '.avi'].includes(ext)) {
         video = relativeUrl; // Assuming 1 promo video per folder

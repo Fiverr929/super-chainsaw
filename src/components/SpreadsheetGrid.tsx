@@ -33,7 +33,6 @@ const COLUMNS: GridColumn[] = [
   { title: "Occasion", id: "occasion", width: 120 },
   { title: "Celebration", id: "celebration", width: 120 },
   { title: "Subject", id: "subject", width: 120 },
-  { title: "Alt Text", id: "alt_text", width: 200 },
 ];
 
 type RowData = {
@@ -65,7 +64,7 @@ export default function SpreadsheetGrid() {
   const [columns, setColumns] = useState(COLUMNS);
   const [zoom, setZoom] = useState(1);
   const [gridSelection, setGridSelection] = useState<GridSelection | undefined>(undefined);
-  const [globalImageEditor, setGlobalImageEditor] = useState<{row: number, urls: string[]} | null>(null);
+  const [globalImageEditor, setGlobalImageEditor] = useState<{row: number, urls: string[], altTexts: string[]} | null>(null);
   const [fontsLoaded, setFontsLoaded] = useState(false);
 
   React.useEffect(() => {
@@ -207,7 +206,7 @@ export default function SpreadsheetGrid() {
              if (['mp4', 'mov', 'avi'].includes(ext || '')) return 'VIDEO';
              if (['png', 'jpg', 'jpeg'].includes(ext || '')) return 'IMAGE';
              if (ext === 'pdf') return 'PDF';
-             if (ext === 'zip', ext === 'rar') return 'ZIP';
+             if (['zip', 'rar'].includes(ext || '')) return 'ZIP';
              if (['wav', 'mp3'].includes(ext || '')) return 'AUDIO';
              return 'FILE';
            });
@@ -245,7 +244,7 @@ export default function SpreadsheetGrid() {
          else if (state === "Review") { textColor = "#10b981"; }
          else if (state === "Ready to Push") { textColor = "#3b82f6"; }
          else if (state === "Update Text & SEO") { textColor = "#3b82f6"; }
-         else if (state === "Update Media Assets") { textColor = "#3b82f6"; }
+         else if (state === "Update Images" || state === "Update Digital Files") { textColor = "#3b82f6"; }
          else if (state === "Pushing...") { textColor = "#f59e0b"; }
          else if (state === "Published") { textColor = "#059669"; }
          else if (state === "Error") { textColor = "#ef4444"; }
@@ -256,7 +255,7 @@ export default function SpreadsheetGrid() {
             copyData: state,
             data: {
                kind: "dropdown-cell",
-               allowedValues: ["Draft", "Generate AI", "Generating...", "Review", "Ready to Push", "Update Text & SEO", "Update Media Assets", "Pushing...", "Published", "Error"],
+               allowedValues: ["Draft", "Generate AI", "Generating...", "Review", "Ready to Push", "Update Text & SEO", "Update Images", "Update Digital Files", "Pushing...", "Published", "Error"],
                value: state
             },
             themeOverride: { 
@@ -370,11 +369,12 @@ export default function SpreadsheetGrid() {
         displayData: value,
       } as TextCell;
     },
-    [data, columns]
+    [columns]
   );
 
   const getCellsForSelection = useCallback(
-    (selection: GridSelection) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (selection: any) => {
       const result: GridCell[][] = [];
       const { x, y, width, height } = selection;
       for (let r = 0; r < height; r++) {
@@ -396,13 +396,15 @@ export default function SpreadsheetGrid() {
     dataRef.current = updatedArray;
     setData(updatedArray);
 
-    // Calculate exact number of images in this row
+    // Calculate exact number of images in this row and pass their paths
     const imagesList = dataRef.current[row].images || "";
-    const exactImageCount = imagesList.split(',').map(s => s.trim()).filter(Boolean).length || 5;
+    const imagePaths = imagesList.split(',').map(s => s.trim()).filter(Boolean);
 
     // Build context from whatever the user has already provided
     let promptContext = dataRef.current[row].context || "";
     if (dataRef.current[row].folder) promptContext += `\nFolder/Product Name: ${dataRef.current[row].folder}`;
+    if (dataRef.current[row].category) promptContext += `\nProduct Category: ${dataRef.current[row].category}`;
+    if (dataRef.current[row].digital_file) promptContext += `\nFormat: Digital Download (NOT a physical item)`;
     if (dataRef.current[row].title) promptContext += `\nTitle: ${dataRef.current[row].title}`;
     if (dataRef.current[row].description) promptContext += `\nDescription: ${dataRef.current[row].description}`;
 
@@ -410,8 +412,9 @@ export default function SpreadsheetGrid() {
     const existingDataPayload = { ...dataRef.current[row] };
 
     // Add a strict timeout so the grid doesn't hang indefinitely if the AI drops the connection
+    // Increased to 3 minutes (180000ms) because Vision AI takes longer to process image files
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 45000); // 45 seconds
+    const timeoutId = setTimeout(() => controller.abort(), 180000); 
 
     // Trigger AI Pipeline
     fetch('/api/generate', {
@@ -420,7 +423,7 @@ export default function SpreadsheetGrid() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
         context: promptContext,
-        imageCount: exactImageCount,
+        imagePaths: imagePaths,
         existingData: existingDataPayload
       })
     })
@@ -436,7 +439,7 @@ export default function SpreadsheetGrid() {
         title: aiData.title || newData[row].title,
         description: aiData.description || newData[row].description,
         tags: aiData.tags || newData[row].tags,
-        alt_text: aiData.alt_text || newData[row].alt_text,
+        alt_text: (aiData.alt_texts && Array.isArray(aiData.alt_texts)) ? aiData.alt_texts.join(" | ") : newData[row].alt_text,
         primary_color: aiData.primary_color || newData[row].primary_color,
         occasion: aiData.occasion || newData[row].occasion,
         celebration: aiData.celebration || newData[row].celebration,
@@ -532,7 +535,7 @@ export default function SpreadsheetGrid() {
       } else if (newValue.kind === GridCellKind.Custom) {
         const customColumns = ["status", "category", "section", "primary_color", "occasion", "celebration", "subject"];
         if (customColumns.includes(columnId)) {
-           newStringValue = (newValue.data as any).value;
+           newStringValue = (newValue.data as { value: string }).value;
         } else {
            return;
         }
@@ -573,18 +576,18 @@ export default function SpreadsheetGrid() {
       }
 
       // Automatically trigger Push/Update to Etsy
-      if (columnId === "status" && (newStringValue === "Ready to Push" || newStringValue === "Update Text & SEO" || newStringValue === "Update Media Assets")) {
+      if (columnId === "status" && (newStringValue === "Ready to Push" || newStringValue === "Update Text & SEO" || newStringValue === "Update Images" || newStringValue === "Update Digital Files")) {
         setData((prev) => {
           const newData = [...prev];
           newData[row] = { ...newData[row], status: "Pushing..." };
           return newData;
         });
 
-        // Pass the latest data from state, plus any updates
         const rowDataToPush = { 
           ...dataRef.current[row],
           updateType: newStringValue === "Update Text & SEO" ? "text" :
-                      newStringValue === "Update Media Assets" ? "media" : "all"
+                      newStringValue === "Update Images" ? "images" : 
+                      newStringValue === "Update Digital Files" ? "files" : "all"
         };
 
         fetch('/api/etsy/push', {
@@ -603,6 +606,7 @@ export default function SpreadsheetGrid() {
               alert(`Etsy API Error:\n${errMsg}`);
               newData[row] = { ...newData[row], status: "Error" };
             }
+            dataRef.current = newData;
             return newData;
           });
         })
@@ -611,6 +615,7 @@ export default function SpreadsheetGrid() {
           setData((prev) => {
             const newData = [...prev];
             newData[row] = { ...newData[row], status: "Error" };
+            dataRef.current = newData;
             return newData;
           });
         });
@@ -628,7 +633,7 @@ export default function SpreadsheetGrid() {
 
 
     },
-    [columns]
+    [columns, triggerFolderAutomation, triggerAIGeneration]
   );
 
   const onColumnResize = useCallback((column: GridColumn, newSize: number) => {
@@ -685,7 +690,7 @@ export default function SpreadsheetGrid() {
   );
 
   const onFillPattern = useCallback(
-    (event: any) => {
+    (event: { patternSource: { x: number, y: number, width: number, height: number }, fillDestination: { x: number, y: number, width: number, height: number } }) => {
       const { patternSource, fillDestination } = event;
       if (!patternSource || !fillDestination) return;
 
@@ -864,6 +869,7 @@ export default function SpreadsheetGrid() {
               roundingRadius: 0,
               headerFontStyle: "600 13px Inter, sans-serif",
               baseFontStyle: "13px Inter, sans-serif",
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
             } as any}
             rowMarkers="checkbox"
             getCellContent={getCellContent}
@@ -874,7 +880,8 @@ export default function SpreadsheetGrid() {
             fillHandle={true}
             rangeSelect="rect"
             columnSelect="multi"
-            getCellsForSelection={getCellsForSelection as GridCell}
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            getCellsForSelection={getCellsForSelection as any}
             onFillPattern={onFillPattern}
             onDelete={onDelete}
             onCellEdited={onCellEdited}
@@ -890,7 +897,8 @@ export default function SpreadsheetGrid() {
                setTimeout(() => {
                   if (gridSelection?.current?.cell) {
                      const [, row] = gridSelection.current.cell;
-                     setGlobalImageEditor({ row, urls: p.urls as string[] });
+                     const altTexts = dataRef.current[row].alt_text ? dataRef.current[row].alt_text.split('|').map((s:string) => s.trim()) : [];
+                     setGlobalImageEditor({ row, urls: p.urls as string[], altTexts });
                   }
                   p.onCancel(); 
                }, 0);
@@ -903,15 +911,18 @@ export default function SpreadsheetGrid() {
       {/* Render the independent Custom Image Editor completely outside the grid */}
       {globalImageEditor && (
         <CustomImageEditor 
-          urls={globalImageEditor.urls} 
+          urls={globalImageEditor.urls}
+          altTexts={globalImageEditor.altTexts} 
           onCancel={() => setGlobalImageEditor(null)}
-          onChange={(newUrls) => {
+          onChange={(newUrls, newAlts) => {
             setData((prev) => {
               const newData = [...prev];
               newData[globalImageEditor.row] = {
                  ...newData[globalImageEditor.row],
-                 images: newUrls.map(url => url.startsWith(window.location.origin) ? url.substring(window.location.origin.length) : url).join(",")
+                 images: newUrls.map(url => url.startsWith(window.location.origin) ? url.substring(window.location.origin.length) : url).join(","),
+                 alt_text: newAlts.join(" | ")
               };
+              dataRef.current = newData;
               return newData;
             });
             setGlobalImageEditor(null);
@@ -923,79 +934,91 @@ export default function SpreadsheetGrid() {
 }
 
 // Custom Image Editor Overlay
-function CustomImageEditor({ urls, onCancel, onChange }: { urls: readonly string[], onCancel: () => void, onChange: (urls: readonly string[]) => void }) {
-  const [images, setImages] = useState([...urls]);
+function CustomImageEditor({ urls, altTexts, onCancel, onChange }: { urls: readonly string[], altTexts: readonly string[], onCancel: () => void, onChange: (urls: string[], alts: string[]) => void }) {
+  const [items, setItems] = useState(() => urls.map((url, i) => ({ url, alt: altTexts[i] || "" })));
   const dragItem = React.useRef<number | null>(null);
   const dragOverItem = React.useRef<number | null>(null);
 
   const handleSort = () => {
     if (dragItem.current === null || dragOverItem.current === null) return;
-    const _images = [...images];
-    const draggedContent = _images.splice(dragItem.current, 1)[0];
-    _images.splice(dragOverItem.current, 0, draggedContent);
-    setImages(_images);
+    const _items = [...items];
+    const draggedContent = _items.splice(dragItem.current, 1)[0];
+    _items.splice(dragOverItem.current, 0, draggedContent);
+    setItems(_items);
     dragItem.current = null;
     dragOverItem.current = null;
   };
 
-  const removeImage = (index: number) => {
-    setImages(images.filter((_, i) => i !== index));
+  const removeItem = (index: number) => {
+    setItems(items.filter((_, i) => i !== index));
+  };
+
+  const handleAltChange = (index: number, newAlt: string) => {
+    setItems(prev => {
+      const copy = [...prev];
+      copy[index] = { ...copy[index], alt: newAlt };
+      return copy;
+    });
   };
 
   if (typeof document === 'undefined') return null;
 
   return (
     <div 
-      className="fixed inset-0 z-[99999] flex items-center justify-center bg-transparent" 
+      className="fixed inset-0 z-[99999] flex items-center justify-center bg-black/10 backdrop-blur-[2px]" 
       onPointerDown={e => {
         if (e.target === e.currentTarget) onCancel();
       }}
     >
-      {/* Hyper-premium Excel-style expanded cell: pure white, crisp blue ring, zero rounding, tight padding, purely flat */}
-      <div className="bg-white ring-2 ring-[#2b52d6] p-4 w-[75vw] max-w-3xl min-h-[220px] relative flex flex-col rounded-none animate-in fade-in zoom-in-95 duration-100">
+      <div className="bg-white ring-2 ring-[#2b52d6] p-4 w-[85vw] max-w-5xl min-h-[300px] relative flex flex-col rounded-none shadow-2xl animate-in fade-in zoom-in-95 duration-100">
         
-        {/* Tight, clean track with zero background distraction */}
-        <div className="flex-1 flex items-center gap-4 overflow-x-auto custom-scrollbar pt-2 pb-1 mt-2 px-1">
-          {images.map((url, i) => (
+        <div className="flex-1 flex items-start gap-4 overflow-x-auto custom-scrollbar pt-2 pb-4 mt-2 px-1">
+          {items.map((item, i) => (
             <div 
-              key={url + i} 
+              key={item.url + i} 
               draggable
               onDragStart={() => { dragItem.current = i; }}
               onDragEnter={() => { dragOverItem.current = i; }}
               onDragEnd={handleSort}
               onDragOver={(e) => e.preventDefault()}
-              className="relative group shrink-0 bg-white border border-gray-200 p-1 flex flex-col items-center cursor-grab active:cursor-grabbing hover:border-gray-400 hover:shadow-md transition-all duration-200"
+              className="relative group shrink-0 bg-zinc-50 border border-gray-200 p-2 flex flex-col items-center cursor-grab active:cursor-grabbing hover:border-[#2b52d6] hover:shadow-md transition-all duration-200"
             >
               <button 
-                onClick={() => removeImage(i)} 
-                className="absolute top-1 right-1 bg-white/90 backdrop-blur-sm text-gray-500 hover:text-red-600 hover:bg-white w-6 h-6 rounded-none flex items-center justify-center text-xs font-bold z-10 opacity-0 group-hover:opacity-100 transition-all duration-200"
+                onClick={() => removeItem(i)} 
+                className="absolute top-1 right-1 bg-white/90 backdrop-blur-sm text-gray-500 hover:text-red-600 hover:bg-white w-6 h-6 rounded-none flex items-center justify-center text-xs font-bold z-10 opacity-0 group-hover:opacity-100 transition-all duration-200 shadow-sm"
               >
                 ✕
               </button>
-              <span className="absolute top-1 left-1 bg-[#2b52d6]/90 backdrop-blur-sm text-white w-5 h-5 rounded-sm flex items-center justify-center text-[10px] font-bold z-10">
+              <span className="absolute top-1 left-1 bg-[#2b52d6]/90 backdrop-blur-sm text-white w-5 h-5 rounded-sm flex items-center justify-center text-[10px] font-bold z-10 shadow-sm">
                 {i + 1}
               </span>
-              <Image src={url} unoptimized alt={`Preview ${i}`} width={144} height={144} className="object-contain pointer-events-none" />
+              <Image src={item.url} unoptimized alt={`Preview ${i}`} width={180} height={180} className="object-contain pointer-events-none bg-white border border-gray-100 mb-2" />
+              <input 
+                type="text"
+                placeholder="Alt Text (SEO)..."
+                value={item.alt}
+                onChange={(e) => handleAltChange(i, e.target.value)}
+                onPointerDown={(e) => e.stopPropagation()} 
+                className="w-full text-xs p-1.5 border border-gray-200 rounded-none focus:outline-none focus:border-[#2b52d6] focus:ring-1 focus:ring-[#2b52d6] placeholder-gray-400"
+              />
             </div>
           ))}
         </div>
 
-        {/* Footer actions */}
-        <div className="p-4 border-t border-gray-100 flex justify-end gap-3 shrink-0">
+        <div className="p-4 border-t border-gray-100 flex justify-end gap-3 shrink-0 bg-gray-50/50 mt-2">
           <button 
             onClick={onCancel}
-            className="px-6 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors"
+            className="px-6 py-2 text-sm font-medium text-gray-600 hover:text-gray-900 bg-white border border-gray-200 hover:bg-gray-50 transition-colors rounded-none"
           >
             Cancel
           </button>
           <button 
             onClick={() => {
-              onChange(images);
-              onCancel();
+              onChange(items.map(img => img.url), items.map(img => img.alt));
             }}
-            className="px-8 py-2 text-sm font-medium text-white bg-[#2b52d6] hover:bg-blue-700 active:bg-blue-800 transition-colors shadow-sm"
+            className="px-8 py-2 text-sm font-medium text-white bg-[#2b52d6] hover:bg-blue-700 active:bg-blue-800 transition-colors shadow-sm rounded-none"
           >
-            Apply Order
+            Apply & Save
           </button>
         </div>
 

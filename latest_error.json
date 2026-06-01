@@ -1,28 +1,33 @@
 {
-  "timestamp": "2026-06-01T07:51:32.450Z",
+  "timestamp": "2026-06-01T09:16:09.342Z",
   "requestBody": {
-    "status": "Update Media Assets",
+    "status": "Ready to Push",
     "context": "",
     "images": "/listings/dexter/Dexter T-Shirt.png,/listings/dexter/Dexter Shirt (Black Color).png,/listings/dexter/Dexter The Bay Harbor Butcher Vintage Graphic T-Shirt (Black Color).jpg",
-    "alt_text": "Black Dexter TV show fan t-shirt featuring a subtle blood splatter design and show logo, displayed on a hanger.|Close-up of the graphic design on the Dexter t-shirt, showing intricate blood drop details and text.|Model wearing the black Dexter TV series t-shirt in a casual, urban setting, showcasing the fit.",
+    "alt_text": "Blonde woman wearing an oversized black Dexter t-shirt with a red graphic of Dexter Morgan's face and 'Bay Harbor Butcher' text, against a Halloween-themed wall. | Plain black vintage style unisex t-shirt back view, soft cotton fabric, perfect for custom designs or layering. | Flat lay of a black Dexter TV show t-shirt featuring a distressed red graphic of Michael C. Hall as Dexter Morgan, 'The Bay Harbor Butcher' text, and vintage wash.",
     "digital_file": "/listings/dexter/digital/DIGITAL.png",
-    "title": "Dexter T-Shirt | Michael C. Hall Dark Passenger Tee | Showtime TV Show Fan Gift | Serial Killer Crime Drama Shirt | Horror Series Apparel",
-    "description": "",
-    "tags": "Dexter TV Show,Serial Killer Gift,Michael C Hall Fan,Dark Passenger Tee,Miami Crime Drama,Blood Splatter Art,TV Series Apparel,Unique Fan Gift,Showtime Series,Crime Show Merch,Pop Culture Shirt,Dexter Morgan Art,Dark Humor T-shirt",
+    "title": "Dexter T-Shirt | The Bay Harbor Butcher Tee | Vintage TV Show Shirt | Michael C. Hall Fan Gift | Retro Crime Drama Series Merch Oversized",
+    "description": "Embrace your inner dark passenger with our exclusive Dexter T-Shirt, a must-have for any fan of the iconic crime drama series! This vintage-inspired tee features a striking distressed red graphic of Dexter Morgan, complete with the chilling moniker 'The Bay Harbor Butcher' emblazoned above.\n\nCrafted from premium, soft cotton, this unisex t-shirt offers a comfortable, relaxed fit perfect for everyday wear. The washed black fabric gives it a classic, retro feel, making it look like a cherished piece from your favorite era. Whether you're re-watching the series, heading to a fan convention, or just showcasing your love for one of television's most complex characters, this shirt is designed to impress.\n\nIt's an ideal gift for Dexter enthusiasts, a unique addition to your TV show merchandise collection, or a cool statement piece for Halloween. Stand out with this subtly dark and stylish tribute to Dexter Morgan.\n\n**Product Details:**\n*   Material: 100% Soft, breathable cotton\n*   Fit: Unisex, relaxed/oversized fit (size up for a more baggy look)\n*   Color: Washed Black with distressed Red graphic\n*   Design: Dexter Morgan 'Bay Harbor Butcher' graphic print\n*   Care Instructions: Machine wash cold, inside out, with like colors. Tumble dry low or hang dry for best results. Do not iron directly on the design.\n\nShow your allegiance to the code with this unique Dexter tee!",
+    "tags": "Dexter T-Shirt,Bay Harbor Butcher,Dexter Morgan Shirt,TV Show Merch,Crime Drama Fan,Michael C. Hall,Vintage Dexter Tee,Retro TV Shirt,Horror Series Fan,Halloween Shirt,Unisex Graphic Tee,Serial Killer Show,Dark Passenger",
     "price": "3.99",
     "quantity": "999",
-    "section": "Digital Prints",
+    "section": "",
     "primary_color": "Black",
-    "occasion": "Birthday",
+    "occasion": "",
     "celebration": "",
     "subject": "TV",
     "folder": "dexter",
     "video": "/listings/dexter/Comfort Color 1717 v2.mp4",
     "category": "Store Graphics",
-    "listing_id": "4514470878",
-    "updateType": "media"
+    "listing_id": "",
+    "updateType": "all"
   },
-  "error": {
-    "error": "File 1490879443235 is already attached to this listing."
-  }
+  "error": [
+    {
+      "path": "/tags",
+      "type": "invalid_characters",
+      "message": "contains invalid characters",
+      "transformed": false
+    }
+  ]
 }
