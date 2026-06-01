@@ -13,7 +13,7 @@ export async function GET(request: Request) {
   }
 
   // We are scoping the scanner strictly to the public/listings directory for security.
-  const listingsDir = path.join(process.cwd(), 'public', 'listings', folderName);
+  const listingsDir = path.join(/*turbopackIgnore: true*/ process.cwd(), 'public', 'listings', folderName);
 
   if (!fs.existsSync(listingsDir)) {
     return NextResponse.json({ error: 'Folder not found' }, { status: 404 });

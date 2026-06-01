@@ -36,8 +36,8 @@ export async function POST(request: Request) {
     const resolveFilePath = (fileUrl: string) => {
       if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://') || fileUrl.startsWith('data:')) return null;
       if (fileUrl.match(/^[A-Za-z]:/)) return fileUrl;
-      if (fileUrl.startsWith('/')) return path.join(process.cwd(), 'public', fileUrl);
-      return path.join(process.cwd(), fileUrl);
+      if (fileUrl.startsWith('/')) return path.join(/*turbopackIgnore: true*/ process.cwd(), 'public', fileUrl);
+      return path.join(/*turbopackIgnore: true*/ process.cwd(), fileUrl);
     };
 
     const imageParts: { inlineData: { mimeType: string; data: string } }[] = [];
@@ -130,7 +130,10 @@ Format example if generating title and primary_color: { "title": "...", "primary
 
     const data = await response.json();
     const contentText = data.candidates[0].content.parts[0].text;
-    const content = JSON.parse(contentText);
+    
+    // Robust parsing to strip out markdown formatting if the LLM includes it
+    const cleanedText = contentText.replace(/^```(json)?\s*/i, '').replace(/```\s*$/, '').trim();
+    const content = JSON.parse(cleanedText);
 
     return NextResponse.json({
       title: content.title,

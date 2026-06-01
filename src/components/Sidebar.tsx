@@ -25,13 +25,14 @@ export default function Sidebar() {
     if (savedStores) {
       try {
         const parsed = JSON.parse(savedStores);
-        if (Array.isArray(parsed)) {
-          // eslint-disable-next-line
-          setStores(parsed);
-          if (savedActiveId && parsed.some((s: Store) => s.id === savedActiveId)) {
+        if (Array.isArray(parsed) && parsed.every((s: unknown) => typeof s === 'object' && s !== null && 'id' in s && 'name' in s && typeof (s as Record<string, unknown>).id === 'string' && typeof (s as Record<string, unknown>).name === 'string')) {
+          const validStores = parsed as Store[];
+          // eslint-disable-next-line react-hooks/set-state-in-effect
+          setStores(validStores);
+          if (savedActiveId && validStores.some((s: Store) => s.id === savedActiveId)) {
             setActiveStoreId(savedActiveId);
-          } else if (parsed.length > 0) {
-            setActiveStoreId(parsed[0].id);
+          } else if (validStores.length > 0) {
+            setActiveStoreId(validStores[0].id);
           }
         }
       } catch {}

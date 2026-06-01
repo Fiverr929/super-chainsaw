@@ -32,8 +32,7 @@ const PROP_ART_SUBJECT: Record<string, number> = {
 };
 
 export async function POST(req: Request) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let data: any;
+  let data: Record<string, string> = {};
   try {
     data = await req.json();
     
@@ -66,17 +65,17 @@ export async function POST(req: Request) {
 
     if (data.updateType === "all" || data.updateType === "text") {
       // 2. Create or Update Draft Listing
-      const payload: Record<string, unknown> = {
-        quantity: parseInt(data.quantity) || 999,
-        title: data.title ? data.title.substring(0, 140) : "Draft Listing Title",
-        description: data.description || "Digital download listing. Please update this description.",
-        price: parseFloat(data.price) || 3.99,
-        who_made: "i_did",
-        when_made: "2020_2026",
-        taxonomy_id: TAXONOMY_MAP[data.category as string] || 2078,
-        is_supply: false,
-        type: "download"
-      };
+        const payload: Record<string, unknown> = {
+          quantity: parseInt(data.quantity),
+          title: data.title ? data.title.substring(0, 140) : undefined,
+          description: data.description,
+          price: parseFloat(data.price),
+          who_made: "i_did",
+          when_made: "2020_2026",
+          taxonomy_id: TAXONOMY_MAP[data.category as string] || 2078,
+          is_supply: false,
+          type: "download"
+        };
 
       if (data.section && SECTION_MAP[data.section as string]) {
         payload.shop_section_id = SECTION_MAP[data.section as string];
@@ -138,10 +137,10 @@ export async function POST(req: Request) {
       }
       // If it starts with a slash, it's relative to the public folder
       if (fileUrl.startsWith('/')) {
-         return path.join(process.cwd(), 'public', fileUrl);
+         return path.join(/*turbopackIgnore: true*/ process.cwd(), 'public', fileUrl);
       }
       // Otherwise assume it's relative to project root
-      return path.join(process.cwd(), fileUrl);
+      return path.join(/*turbopackIgnore: true*/ process.cwd(), fileUrl);
     };
 
     // Helper for smart text truncation
@@ -274,21 +273,9 @@ export async function POST(req: Request) {
     }
 
     return NextResponse.json({ success: true, listing_id: listingId });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  } catch (err: any) {
-    const errorDetails = err.response ? err.response.data : err.message;
+  } catch (err: unknown) {
+    const errorDetails = (err as { response?: { data?: unknown } }).response?.data || (err as Error).message;
     console.error("Etsy Push Error:", JSON.stringify(errorDetails, null, 2));
-    
-    // let // errorMsg = 'Failed to push to Etsy';
-    if (typeof errorDetails === 'string') {
-      // errorMsg = errorDetails;
-    } else if (errorDetails && errorDetails.error) {
-      // errorMsg = errorDetails.error;
-    } else if (errorDetails && errorDetails.message) {
-      // errorMsg = errorDetails.message;
-    } else {
-      // errorMsg = JSON.stringify(errorDetails);
-    }
     
     // Save to file for debugging
     try {

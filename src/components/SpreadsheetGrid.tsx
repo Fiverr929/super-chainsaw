@@ -10,9 +10,25 @@ import DataEditor, {
   Item,
   TextCell,
   GridSelection,
+  Theme,
+  Rectangle
 } from "@glideapps/glide-data-grid";
 import { allCells } from "@glideapps/glide-data-grid-cells";
 import "@glideapps/glide-data-grid/dist/index.css";
+import {
+  ETSY_CATEGORIES,
+  ETSY_SUBJECTS,
+  ETSY_SECTIONS,
+  ETSY_COLORS,
+  ETSY_OCCASIONS,
+  ETSY_CELEBRATIONS,
+  ETSY_STATUSES
+} from "@/lib/etsyConstants";
+import { useAIPipeline } from "@/hooks/useAIPipeline";
+import { useEtsyPush } from "@/hooks/useEtsyPush";
+
+const imageCache: Record<string, { absoluteUrlArray: string[], thumbnailUrls: string[] }> = {};
+const tagCache: Record<string, string[]> = {};
 
 const COLUMNS: GridColumn[] = [
   { title: "Folder", id: "folder", width: 120 },
@@ -35,13 +51,13 @@ const COLUMNS: GridColumn[] = [
   { title: "Subject", id: "subject", width: 120 },
 ];
 
-type RowData = {
-  folder?: string;
+export type RowData = {
+  status: string;
   images?: string;
   video?: string;
-  status?: string;
   listing_id?: string;
   context?: string;
+  folder?: string;
   digital_file: string;
   title: string;
   description?: string;
@@ -115,9 +131,15 @@ export default function SpreadsheetGrid() {
     dataRef.current = data;
   }, [data]);
 
-  // Persist to local storage
+  const { triggerAIGeneration, triggerFolderAutomation } = useAIPipeline(dataRef, setData);
+  const { triggerEtsyPush } = useEtsyPush(dataRef, setData);
+
+  // Persist to local storage with a 500ms debounce
   React.useEffect(() => {
-    localStorage.setItem("workstation_v2_grid_data", JSON.stringify(data));
+    const handler = setTimeout(() => {
+      localStorage.setItem("workstation_v2_grid_data", JSON.stringify(data));
+    }, 500);
+    return () => clearTimeout(handler);
   }, [data]);
 
   const getCellContent = useCallback(
@@ -141,11 +163,11 @@ export default function SpreadsheetGrid() {
         const urlArray = value ? value.split(",").map((s: string) => s.trim()).filter(Boolean) : [];
         const cacheKey = urlArray.join(",");
         
-        // Cache the arrays on the component so they are stable references
-        // @ts-expect-error - external type mismatch
-        if (!window.__glideImageCache) window.__glideImageCache = {};
-        // @ts-expect-error - external type mismatch
-        if (!window.__glideImageCache[cacheKey]) {
+        if (!imageCache[cacheKey]) {
+           // LRU-lite limit to prevent memory leak
+           const keys = Object.keys(imageCache);
+           if (keys.length > 200) delete imageCache[keys[0]];
+
            const absoluteUrlArray = urlArray.map((url: string) => 
              url.startsWith('http') || url.startsWith('data:') 
                ? url 
@@ -160,12 +182,10 @@ export default function SpreadsheetGrid() {
              return url;
            });
            
-           // @ts-expect-error - external type mismatch
-           window.__glideImageCache[cacheKey] = { absoluteUrlArray, thumbnailUrls };
+           imageCache[cacheKey] = { absoluteUrlArray, thumbnailUrls };
         }
         
-        // @ts-expect-error - external type mismatch
-        const { absoluteUrlArray, thumbnailUrls } = window.__glideImageCache[cacheKey];
+        const { absoluteUrlArray, thumbnailUrls } = imageCache[cacheKey];
 
         return {
           kind: GridCellKind.Image,
@@ -194,10 +214,10 @@ export default function SpreadsheetGrid() {
         }
 
         const cacheKey = `tags_${value}`;
-        // @ts-expect-error - external type mismatch
-        if (!window.__glideTagCache) window.__glideTagCache = {};
-        // @ts-expect-error - external type mismatch
-        if (!window.__glideTagCache[cacheKey]) {
+        if (!tagCache[cacheKey]) {
+           const keys = Object.keys(tagCache);
+           if (keys.length > 200) delete tagCache[keys[0]];
+
            const files = value.split(',').map((s: string) => s.trim()).filter(Boolean);
            const tags = files.map((file: string) => {
              const ext = file.split('.').pop()?.toLowerCase();
@@ -208,11 +228,9 @@ export default function SpreadsheetGrid() {
              if (['wav', 'mp3'].includes(ext || '')) return 'AUDIO';
              return 'FILE';
            });
-           // @ts-expect-error - external type mismatch
-           window.__glideTagCache[cacheKey] = tags;
+           tagCache[cacheKey] = tags;
         }
-        // @ts-expect-error - external type mismatch
-        const tags = window.__glideTagCache[cacheKey];
+        const tags = tagCache[cacheKey];
 
         return {
           kind: GridCellKind.Bubble,
@@ -253,7 +271,7 @@ export default function SpreadsheetGrid() {
             copyData: state,
             data: {
                kind: "dropdown-cell",
-               allowedValues: ["Draft", "Generate AI", "Generating...", "Review", "Ready to Push", "Update Text & SEO", "Update Images", "Update Digital Files", "Pushing...", "Published", "Error"],
+               allowedValues: ETSY_STATUSES,
                value: state
             },
             themeOverride: { 
@@ -271,7 +289,7 @@ export default function SpreadsheetGrid() {
             copyData: value,
             data: {
                kind: "dropdown-cell",
-               allowedValues: ["", "Store Graphics", "Digital Prints"],
+               allowedValues: ETSY_CATEGORIES,
                value: value || ""
             },
             themeOverride: { 
@@ -287,7 +305,7 @@ export default function SpreadsheetGrid() {
             copyData: value,
             data: {
                kind: "dropdown-cell",
-               allowedValues: ["", "Abstract & geometric", "Animal", "Anime & cartoon", "Architecture & cityscape", "Beach & tropical", "Comics & manga", "Educational", "Fantasy & Sci Fi", "Fashion", "Flowers", "Food & drink", "Horror & gothic", "Humorous saying", "Inspirational saying", "Landscape & scenery", "Love & friendship", "Movie", "Music", "Nautical", "People & portrait", "Pet portrait", "Phrase & saying", "Plants & trees", "Religious", "Science & tech", "Sports & fitness", "Stars & celestial", "Steampunk", "Superhero", "Travel & transportation", "TV", "Typography & symbols", "Video game", "Western & cowboy", "Zodiac"],
+               allowedValues: ETSY_SUBJECTS,
                value: value || ""
             },
             themeOverride: { 
@@ -303,7 +321,7 @@ export default function SpreadsheetGrid() {
             copyData: value,
             data: {
                kind: "dropdown-cell",
-               allowedValues: ["", "Comfort Colors 1717", "Gilden 5000", "Digital Prints"],
+               allowedValues: ETSY_SECTIONS,
                value: value || ""
             },
             themeOverride: { 
@@ -319,7 +337,7 @@ export default function SpreadsheetGrid() {
             copyData: value,
             data: {
                kind: "dropdown-cell",
-               allowedValues: ["", "Beige", "Black", "Blue", "Bronze", "Brown", "Clear", "Copper", "Gold", "Gray", "Green", "Orange", "Pink", "Purple", "Red", "Rose gold", "Silver", "White", "Yellow"],
+               allowedValues: ETSY_COLORS,
                value: value || ""
             },
             themeOverride: { 
@@ -335,7 +353,7 @@ export default function SpreadsheetGrid() {
             copyData: value,
             data: {
                kind: "dropdown-cell",
-               allowedValues: ["", "1st birthday", "Anniversary", "Baby shower", "Bachelor party", "Bachelorette party", "Back to school", "Baptism", "Bar & Bat Mitzvah", "Birthday", "Bridal shower", "Confirmation", "Divorce & breakup", "Engagement", "First Communion", "Graduation", "Grief & mourning", "Housewarming", "LGBTQ pride", "Moving", "Pet loss", "Retirement", "Wedding"],
+               allowedValues: ETSY_OCCASIONS,
                value: value || ""
             },
             themeOverride: { 
@@ -351,7 +369,7 @@ export default function SpreadsheetGrid() {
             copyData: value,
             data: {
                kind: "dropdown-cell",
-               allowedValues: ["", "Christmas", "Cinco de Mayo", "Dia de los Muertos", "Diwali", "Easter", "Eid", "Father's Day", "Halloween", "Hanukkah", "Holi", "Independence Day", "Kwanzaa", "Lunar New Year", "Mardi Gras", "Mother's Day", "New Year's", "Passover", "Ramadan", "St Patrick's Day", "Thanksgiving", "Valentine's Day", "Veterans Day"],
+               allowedValues: ETSY_CELEBRATIONS,
                value: value || ""
             },
             themeOverride: { 
@@ -371,8 +389,7 @@ export default function SpreadsheetGrid() {
   );
 
   const getCellsForSelection = useCallback(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (selection: any) => {
+    (selection: Rectangle) => {
       const result: GridCell[][] = [];
       const { x, y, width, height } = selection;
       for (let r = 0; r < height; r++) {
@@ -382,130 +399,11 @@ export default function SpreadsheetGrid() {
         }
         result.push(row);
       }
-      return () => result;
+      return result;
     },
     [getCellContent]
   );
 
-  const triggerAIGeneration = useCallback((row: number) => {
-    // Optimistically set status to 'Generating...' to lock the row
-    const updatedArray = [...dataRef.current];
-    updatedArray[row] = { ...updatedArray[row], status: "Generating..." };
-    dataRef.current = updatedArray;
-    setData(updatedArray);
-
-    // Calculate exact number of images in this row and pass their paths
-    const imagesList = dataRef.current[row].images || "";
-    const imagePaths = imagesList.split(',').map(s => s.trim()).filter(Boolean);
-
-    // Build context from whatever the user has already provided
-    let promptContext = dataRef.current[row].context || "";
-    if (dataRef.current[row].folder) promptContext += `\nFolder/Product Name: ${dataRef.current[row].folder}`;
-    if (dataRef.current[row].category) promptContext += `\nProduct Category: ${dataRef.current[row].category}`;
-    if (dataRef.current[row].digital_file) promptContext += `\nFormat: Digital Download (NOT a physical item)`;
-    if (dataRef.current[row].title) promptContext += `\nTitle: ${dataRef.current[row].title}`;
-    if (dataRef.current[row].description) promptContext += `\nDescription: ${dataRef.current[row].description}`;
-
-    // Prepare existing data payload so backend knows what to skip
-    const existingDataPayload = { ...dataRef.current[row] };
-
-    // Add a strict timeout so the grid doesn't hang indefinitely if the AI drops the connection
-    // Increased to 3 minutes (180000ms) because Vision AI takes longer to process image files
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 180000); 
-
-    // Trigger AI Pipeline
-    fetch('/api/generate', {
-      method: 'POST',
-      signal: controller.signal,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        context: promptContext,
-        imagePaths: imagePaths,
-        existingData: existingDataPayload
-      })
-    })
-    .then(res => {
-      clearTimeout(timeoutId);
-      return res.json();
-    })
-    .then(aiData => {
-      const prev2 = dataRef.current;
-      const newData = [...prev2];
-      newData[row] = {
-        ...newData[row],
-        title: aiData.title || newData[row].title,
-        description: aiData.description || newData[row].description,
-        tags: aiData.tags || newData[row].tags,
-        alt_text: (aiData.alt_texts && Array.isArray(aiData.alt_texts)) ? aiData.alt_texts.join(" | ") : newData[row].alt_text,
-        primary_color: aiData.primary_color || newData[row].primary_color,
-        occasion: aiData.occasion || newData[row].occasion,
-        celebration: aiData.celebration || newData[row].celebration,
-        subject: aiData.subject || newData[row].subject,
-        status: aiData.error ? "Error" : "Review"
-      };
-      dataRef.current = newData;
-      setData(newData);
-
-      if (aiData.error) {
-        alert(`AI Generation Failed:\n${aiData.error}`);
-      }
-    })
-    .catch(err => {
-      clearTimeout(timeoutId);
-      console.error("AI Generation failed:", err);
-      const prev2 = dataRef.current;
-      const newData = [...prev2];
-      newData[row] = { ...newData[row], status: "Error" };
-      dataRef.current = newData;
-      setData(newData);
-      
-      if (err.name === 'AbortError') {
-        alert("AI Generation timed out after 45 seconds. The Google Gemini API might be congested. Please try again.");
-      } else {
-        alert("AI Generation request completely failed to send.");
-      }
-    });
-  }, []);
-
-  const triggerFolderAutomation = useCallback((row: number, folderName: string) => {
-    if (folderName.trim() === "") return;
-
-    const optimisticArray = [...dataRef.current];
-    optimisticArray[row] = {
-       ...optimisticArray[row],
-       category: optimisticArray[row].category || "Store Graphics",
-       price: optimisticArray[row].price || "3.99",
-       quantity: optimisticArray[row].quantity || "999"
-    };
-    dataRef.current = optimisticArray;
-    setData(optimisticArray);
-
-    fetch(`/api/assets?folder=${encodeURIComponent(folderName.trim())}`)
-      .then(res => res.json())
-      .then(assetData => {
-         if (assetData && !assetData.error) {
-            const updatedArray = [...dataRef.current];
-            updatedArray[row] = {
-               ...updatedArray[row],
-               images: assetData.images || updatedArray[row].images,
-               video: assetData.video || updatedArray[row].video,
-               digital_file: assetData.digital_file || updatedArray[row].digital_file
-            };
-            dataRef.current = updatedArray;
-            setData(updatedArray);
-            
-            // Chain the AI trigger now that assets are loaded!
-            triggerAIGeneration(row);
-         } else {
-            alert(`Folder Scan Failed: ${assetData.error || "Unknown error"}. Make sure the folder exists and is spelled correctly.`);
-         }
-      })
-      .catch(err => {
-         console.error("Asset scan failed:", err);
-         alert("Network error while trying to scan folder.");
-      });
-  }, [triggerAIGeneration]);
 
   const onCellEdited = useCallback(
     (cell: Item, newValue: GridCell) => {
@@ -581,49 +479,7 @@ export default function SpreadsheetGrid() {
 
       // Automatically trigger Push/Update to Etsy
       if (columnId === "status" && (newStringValue === "Ready to Push" || newStringValue === "Update Text & SEO" || newStringValue === "Update Images" || newStringValue === "Update Digital Files")) {
-        setData((prev) => {
-          const newData = [...prev];
-          newData[row] = { ...newData[row], status: "Pushing..." };
-          dataRef.current = newData;
-          return newData;
-        });
-
-        const rowDataToPush = { 
-          ...dataRef.current[row],
-          updateType: newStringValue === "Update Text & SEO" ? "text" :
-                      newStringValue === "Update Images" ? "images" : 
-                      newStringValue === "Update Digital Files" ? "files" : "all"
-        };
-
-        fetch('/api/etsy/push', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(rowDataToPush)
-        })
-        .then(res => res.json())
-        .then(pushData => {
-          setData((prev) => {
-            const newData = [...prev];
-            if (pushData.success) {
-              newData[row] = { ...newData[row], status: "Published", listing_id: pushData.listing_id.toString() };
-            } else {
-              const errMsg = pushData.details?.error || pushData.error || "Unknown Error";
-              alert(`Etsy API Error:\n${errMsg}`);
-              newData[row] = { ...newData[row], status: "Error" };
-            }
-            dataRef.current = newData;
-            return newData;
-          });
-        })
-        .catch(err => {
-          console.error("Push failed:", err);
-          setData((prev) => {
-            const newData = [...prev];
-            newData[row] = { ...newData[row], status: "Error" };
-            dataRef.current = newData;
-            return newData;
-          });
-        });
+        triggerEtsyPush(row, newStringValue);
         return; // Don't write 'Ready to Push' to state below
       }
 
@@ -638,7 +494,7 @@ export default function SpreadsheetGrid() {
 
 
     },
-    [columns, triggerFolderAutomation, triggerAIGeneration]
+    [columns, triggerFolderAutomation, triggerAIGeneration, triggerEtsyPush]
   );
 
   const onColumnResize = useCallback((column: GridColumn, newSize: number) => {
@@ -878,8 +734,7 @@ export default function SpreadsheetGrid() {
               roundingRadius: 0,
               headerFontStyle: "600 13px Inter, sans-serif",
               baseFontStyle: "13px Inter, sans-serif",
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            } as any}
+            } as Partial<Theme>}
             rowMarkers="checkbox"
             getCellContent={getCellContent}
             columns={columns}
@@ -889,8 +744,7 @@ export default function SpreadsheetGrid() {
             fillHandle={true}
             rangeSelect="rect"
             columnSelect="multi"
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            getCellsForSelection={getCellsForSelection as any}
+            getCellsForSelection={getCellsForSelection}
             onFillPattern={onFillPattern}
             onDelete={onDelete}
             onCellEdited={onCellEdited}
