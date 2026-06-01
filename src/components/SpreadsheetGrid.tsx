@@ -180,7 +180,22 @@ export default function SpreadsheetGrid() {
       }
 
       // Clean visual structure for Video and Digital File columns
-      if ((columnId === "video" || columnId === "digital_file") && value) {
+      if (columnId === "video" || columnId === "digital_file") {
+        if (!value) {
+           return {
+             kind: GridCellKind.Bubble,
+             allowOverlay: false,
+             data: [],
+             themeOverride: {
+               bgBubble: "#2b52d6",
+               textBubble: "#ffffff",
+               bgBubbleSelected: "#2b52d6",
+               textBubbleSelected: "#ffffff",
+               roundingRadius: 0
+             }
+           } as GridCell;
+        }
+
         const cacheKey = `tags_${value}`;
         // @ts-expect-error - external type mismatch
         if (!window.__glideTagCache) window.__glideTagCache = {};
@@ -192,7 +207,7 @@ export default function SpreadsheetGrid() {
              if (['mp4', 'mov', 'avi'].includes(ext || '')) return 'VIDEO';
              if (['png', 'jpg', 'jpeg'].includes(ext || '')) return 'IMAGE';
              if (ext === 'pdf') return 'PDF';
-             if (ext === 'zip' || ext === 'rar') return 'ZIP';
+             if (ext === 'zip', ext === 'rar') return 'ZIP';
              if (['wav', 'mp3'].includes(ext || '')) return 'AUDIO';
              return 'FILE';
            });
