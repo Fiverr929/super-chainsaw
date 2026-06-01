@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { ChevronLeft, ChevronRight, ShoppingBag, Plus, Check, Loader2, ChevronDown, Trash2 } from "lucide-react";
+import toast from "react-hot-toast";
 
 type Store = {
   id: string;
@@ -62,10 +63,10 @@ export default function Sidebar() {
         saveStores(newStores, newStore.id);
         setShowDialog(false);
       } else {
-        alert("Failed to connect to Etsy store.");
+        toast.error("Failed to connect to Etsy store");
       }
     } catch {
-      alert("Error connecting to Etsy.");
+      toast.error("Error connecting to Etsy");
     } finally {
       setIsConnecting(false);
     }

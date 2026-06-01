@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import type { RowData } from '@/components/SpreadsheetGrid';
+import toast from 'react-hot-toast';
 
 export function useEtsyPush(
   dataRef: React.MutableRefObject<RowData[]>,
@@ -31,9 +32,10 @@ export function useEtsyPush(
         const newData = [...prev];
         if (pushData.success) {
           newData[row] = { ...newData[row], status: "Published", listing_id: pushData.listing_id?.toString() || "" };
+          toast.success("Successfully pushed to Etsy!");
         } else {
           const errMsg = pushData.details?.error || pushData.error || "Unknown Error";
-          alert(`Etsy API Error:\n${errMsg}`);
+          toast.error(`Etsy API Error:\n${errMsg}`);
           newData[row] = { ...newData[row], status: "Error" };
         }
         dataRef.current = newData;
@@ -42,6 +44,7 @@ export function useEtsyPush(
     })
     .catch(err => {
       console.error("Push failed:", err);
+      toast.error("Network error while pushing to Etsy.");
       setData((prev) => {
         const newData = [...prev];
         newData[row] = { ...newData[row], status: "Error" };

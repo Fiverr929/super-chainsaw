@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import type { RowData } from '@/components/SpreadsheetGrid';
+import toast from 'react-hot-toast';
 
 export function useAIPipeline(
   dataRef: React.MutableRefObject<RowData[]>,
@@ -63,7 +64,9 @@ export function useAIPipeline(
       setData(newData);
 
       if (aiData.error) {
-        alert(`AI Generation Failed:\n${aiData.error}`);
+        toast.error(`AI Generation Failed:\n${aiData.error}`);
+      } else {
+        toast.success("AI Generation Complete");
       }
     })
     .catch(err => {
@@ -76,9 +79,9 @@ export function useAIPipeline(
       setData(newData);
       
       if (err.name === 'AbortError') {
-        alert("AI Generation timed out after 3 minutes. The Google Gemini API might be congested. Please try again.");
+        toast.error("AI Generation timed out after 3 minutes. The Google Gemini API might be congested. Please try again.");
       } else {
-        alert("AI Generation request completely failed to send.");
+        toast.error("AI Generation request completely failed to send.");
       }
     });
   }, [dataRef, setData]);
@@ -113,12 +116,12 @@ export function useAIPipeline(
             // Chain the AI trigger now that assets are loaded!
             triggerAIGeneration(row);
          } else {
-            alert(`Folder Scan Failed: ${assetData.error || "Unknown error"}. Make sure the folder exists and is spelled correctly.`);
+            toast.error(`Folder Scan Failed: ${assetData.error || "Unknown error"}. Make sure the folder exists and is spelled correctly.`);
          }
       })
       .catch(err => {
          console.error("Asset scan failed:", err);
-         alert("Network error while trying to scan folder.");
+         toast.error("Network error while trying to scan folder.");
       });
   }, [dataRef, setData, triggerAIGeneration]);
 
