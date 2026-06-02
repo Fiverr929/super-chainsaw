@@ -84,7 +84,7 @@ export async function POST(req: Request) {
           description: data.description,
           price: parseFloat(data.price) || 0.0,
           who_made: data.who_made || "i_did",
-          when_made: data.when_made || "2020_2024",
+          when_made: data.when_made || "2020_2026",
           taxonomy_id: TAXONOMY_MAP[data.category as string] || 2078,
           is_supply: data.is_supply === "true",
           type: "download"
