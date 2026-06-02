@@ -3,45 +3,14 @@ import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 import sharp from 'sharp';
+import { ETSY_TAXONOMY_MAP } from '@/lib/etsyConstants';
 
 // --- PROPERTY MAPS ---
-const TAXONOMY_MAP: Record<string, number> = {
-  "Store Graphics": 769,
-  "Digital Prints": 2078,
-  "Digital Planners": 354,
-  "Templates": 1874,
-  "Clip Art": 7663,
-  "Wall Art": 2078,
-  "Digital Patterns": 7192,
-  "Fonts": 10620,
-  "Logos & Branding": 1877,
-  "Social Media Templates": 12486,
-  "Website Templates": 2818,
-  "Digital Paper": 1251,
-  "SVG Files": 7663,
-  "Lightroom Presets": 12107
-};
 
 const SECTION_MAP: Record<string, number> = {
   "Comfort Colors 1717": 58682515,
   "Gilden 5000": 58682519,
   "Digital Prints": 58753559
-};
-
-const PROP_PRIMARY_COLOR: Record<string, number> = {
-  "Beige": 1213, "Black": 1, "Blue": 2, "Bronze": 1216, "Brown": 3, "Clear": 1219, "Copper": 1218, "Gold": 1214, "Gray": 5, "Green": 4, "Orange": 6, "Pink": 7, "Purple": 8, "Rainbow": 1220, "Red": 9, "Rose gold": 1217, "Silver": 1215, "White": 10, "Yellow": 11,
-};
-
-const PROP_OCCASION: Record<string, number> = {
-  "1st birthday": 2773, "Anniversary": 12, "Baby shower": 13, "Bachelor party": 14, "Bachelorette party": 15, "Back to school": 16, "Baptism": 17, "Bar & Bat Mitzvah": 18, "Birthday": 19, "Bridal shower": 20, "Confirmation": 21, "Divorce & breakup": 26, "Engagement": 22, "First Communion": 23, "Graduation": 24, "Grief & mourning": 25, "House warming": 27, "LGBTQ pride": 2774, "Moving": 50, "Pet loss": 28, "Retirement": 31, "Wedding": 32,
-};
-
-const PROP_HOLIDAY: Record<string, number> = {
-  "Christmas": 35, "Cinco de Mayo": 36, "Dia de los Muertos": 5126, "Easter": 37, "Eid": 4564, "Father's Day": 38, "Halloween": 39, "Hanukkah": 40, "Holi": 4563, "Independence Day": 41, "Kwanzaa": 42, "Lunar New Year": 34, "Mardi Gras": 5118, "Mother's Day": 43, "New Year's": 44, "Passover": 47, "Ramadan": 5128, "St Patrick's Day": 45, "Thanksgiving": 46, "Valentine's Day": 48, "Veterans Day": 49,
-};
-
-const PROP_ART_SUBJECT: Record<string, number> = {
-  "Abstract & geometric": 2817, "Animal": 2558, "Anime & cartoon": 2559, "Architecture & cityscape": 3641, "Beach & tropical": 406, "Bollywood": 4566, "Comics & manga": 2562, "Educational": 5182, "Fantasy & Sci Fi": 421, "Fashion": 3691, "Flowers": 2952, "Food & drink": 425, "Geography & locale": 2957, "Horror & gothic": 2953, "Humorous saying": 2954, "Inspirational saying": 2955, "Landscape & scenery": 3644, "LGBTQ pride": 2774, "Love & friendship": 439, "Military": 2549, "Movie": 3692, "Music": 442, "Nautical": 443, "Nudes": 3695, "Patriotic & flags": 447, "People & portrait": 3694, "Pet portrait": 2340, "Phrase & saying": 2962, "Plants & trees": 2530, "Religious": 456, "Science & tech": 458, "Sports & fitness": 461, "Stars & celestial": 2532, "Steampunk": 2533, "Superhero": 2571, "Travel & transportation": 470, "TV": 3693, "Typography & symbols": 5181, "Video game": 2575, "Western & cowboy": 474, "Zodiac": 2534,
 };
 
 export async function POST(req: Request) {
@@ -85,7 +54,7 @@ export async function POST(req: Request) {
           price: parseFloat(data.price) || 0.0,
           who_made: data.who_made || "i_did",
           when_made: data.when_made || "2020_2024",
-          taxonomy_id: TAXONOMY_MAP[data.category as string] || 2078,
+          taxonomy_id: ETSY_TAXONOMY_MAP[data.category as string] || 2078,
           is_supply: data.is_supply === "true",
           type: "download"
         };
@@ -112,17 +81,31 @@ export async function POST(req: Request) {
 
       // 3. Update Properties
       const propertyUpdates = [];
-      if (data.primary_color && PROP_PRIMARY_COLOR[data.primary_color as string]) {
-        propertyUpdates.push({ id: 200, value_ids: [PROP_PRIMARY_COLOR[data.primary_color as string]], values: [data.primary_color as string] });
-      }
-      if (data.occasion && PROP_OCCASION[data.occasion as string]) {
-        propertyUpdates.push({ id: 46803063641, value_ids: [PROP_OCCASION[data.occasion as string]], values: [data.occasion as string] });
-      }
-      if (data.celebration && PROP_HOLIDAY[data.celebration as string]) {
-        propertyUpdates.push({ id: 46803063659, value_ids: [PROP_HOLIDAY[data.celebration as string]], values: [data.celebration as string] });
-      }
-      if (data.subject && PROP_ART_SUBJECT[data.subject as string]) {
-        propertyUpdates.push({ id: 400394338806, value_ids: [PROP_ART_SUBJECT[data.subject as string]], values: [data.subject as string] });
+      const taxonomyId = ETSY_TAXONOMY_MAP[data.category as string] || 2078;
+      
+      // We must fetch the taxonomy properties from Etsy to resolve the value strings to value IDs
+      const taxonomyRes = await axios.get(`https://api.etsy.com/v3/application/seller-taxonomy/nodes/${taxonomyId}/properties`, {
+        headers: {
+          'x-api-key': `${apiKey}:${sharedSecret}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      const taxonomyProps = taxonomyRes.data.results || [];
+
+      // Find dynamic properties in the payload
+      for (const key of Object.keys(data)) {
+        if (key.startsWith("prop_") && data[key]) {
+          const propId = parseInt(key.replace("prop_", ""), 10);
+          const valString = data[key] as string;
+          
+          const propDef = taxonomyProps.find((p: any) => p.property_id === propId);
+          if (propDef && propDef.possible_values) {
+            const valDef = propDef.possible_values.find((v: any) => v.name === valString);
+            if (valDef) {
+              propertyUpdates.push({ id: propId, value_ids: [valDef.value_id], values: [valString] });
+            }
+          }
+        }
       }
 
       for (const prop of propertyUpdates) {
