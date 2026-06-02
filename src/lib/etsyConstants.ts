@@ -1,21 +1,4 @@
-export const ETSY_TAXONOMY_MAP: Record<string, number> = {
-  "Store Graphics": 769,
-  "Digital Prints": 2078,
-  "Digital Planners": 354,
-  "Templates": 1874,
-  "Clip Art": 7663,
-  "Wall Art": 2078,
-  "Digital Patterns": 7192,
-  "Fonts": 10620,
-  "Logos & Branding": 1877,
-  "Social Media Templates": 12486,
-  "Website Templates": 2818,
-  "Digital Paper": 1251,
-  "SVG Files": 7663,
-  "Lightroom Presets": 12107
-};
-
-export const ETSY_CATEGORIES = Object.keys(ETSY_TAXONOMY_MAP);
+export const ETSY_CATEGORIES = ["", "Store Graphics", "Digital Prints", "Digital Planners", "Templates", "Clip Art", "Wall Art", "Digital Patterns", "Fonts", "Logos & Branding", "Social Media Templates", "Website Templates", "Digital Paper", "SVG Files", "Lightroom Presets"];
 
 export const ETSY_WHEN_MADE = ["made_to_order", "2020_2026", "2010_2019", "2007_2009", "before_2007", "2000_2006", "1990s", "1980s", "1970s", "1960s", "1950s", "1940s", "1930s", "1920s", "1910s", "1900_1909", "1800s", "1700s", "before_1700"];
 

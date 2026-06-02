@@ -17,11 +17,16 @@ import { allCells } from "@glideapps/glide-data-grid-cells";
 import "@glideapps/glide-data-grid/dist/index.css";
 import {
   ETSY_CATEGORIES,
+  ETSY_SUBJECTS,
   ETSY_SECTIONS,
+  ETSY_COLORS,
+  ETSY_OCCASIONS,
+  ETSY_CELEBRATIONS,
   ETSY_STATUSES,
-  ETSY_TAXONOMY_MAP
+  categorySupportsOccasion,
+  categorySupportsCelebration,
+  categorySupportsSubject
 } from "@/lib/etsyConstants";
-import { useEtsyTaxonomy, taxonomyCache, EtsyProperty } from "@/hooks/useEtsyTaxonomy";
 import { useAIPipeline } from "@/hooks/useAIPipeline";
 import { useEtsyPush } from "@/hooks/useEtsyPush";
 import FolderImporterModal from "./FolderImporterModal";
@@ -31,7 +36,7 @@ import { FolderPlus, Layers, ChevronDown, Trash2 } from "lucide-react";
 const imageCache: Record<string, { absoluteUrlArray: string[], thumbnailUrls: string[] }> = {};
 const tagCache: Record<string, string[]> = {};
 
-const BASE_COLUMNS: GridColumn[] = [
+const COLUMNS: GridColumn[] = [
   { title: "Folder", id: "folder", width: 120 },
   { title: "Images", id: "images", width: 150 },
   { title: "Category", id: "category", width: 150 },
@@ -46,6 +51,10 @@ const BASE_COLUMNS: GridColumn[] = [
   { title: "Price", id: "price", width: 80 },
   { title: "Quantity", id: "quantity", width: 80 },
   { title: "Section", id: "section", width: 120 },
+  { title: "Primary Color", id: "primary_color", width: 120 },
+  { title: "Occasion", id: "occasion", width: 120 },
+  { title: "Celebration", id: "celebration", width: 120 },
+  { title: "Subject", id: "subject", width: 120 },
 ];
 
 export type RowData = {
@@ -63,6 +72,10 @@ export type RowData = {
   quantity: string;
   category: string;
   section: string;
+  primary_color: string;
+  occasion: string;
+  celebration: string;
+  subject: string;
   alt_text: string;
   who_made?: string;
   when_made?: string;
@@ -71,7 +84,6 @@ export type RowData = {
   ai_title_rules?: string;
   ai_desc_rules?: string;
   ai_tag_rules?: string;
-  [key: string]: any;
 };
 
 const emptyRow: RowData = {
@@ -89,6 +101,10 @@ const emptyRow: RowData = {
   quantity: "",
   category: "Store Graphics",
   section: "",
+  primary_color: "",
+  occasion: "",
+  celebration: "",
+  subject: "",
   who_made: "",
   when_made: "",
   is_supply: "",
@@ -100,18 +116,7 @@ const emptyRow: RowData = {
 
 export default function SpreadsheetGrid() {
   const gridRef = useRef<DataEditorRef>(null);
-  const { fetchPropertiesForTaxonomy } = useEtsyTaxonomy();
-  const [dynamicProps, setDynamicProps] = useState<EtsyProperty[]>([]);
-
-  const columns = React.useMemo(() => {
-     const dynamicGridColumns = dynamicProps.map(p => ({
-        title: p.display_name,
-        id: `prop_${p.property_id}`,
-        width: 140
-     }));
-     return [...BASE_COLUMNS, ...dynamicGridColumns];
-  }, [dynamicProps]);
-
+  const [columns, setColumns] = useState(COLUMNS);
   const [zoom, setZoom] = useState(1);
   const [gridSelection, setGridSelection] = useState<GridSelection | undefined>(undefined);
   const [globalImageEditor, setGlobalImageEditor] = useState<{row: number, urls: string[], altTexts: string[]} | null>(null);
@@ -154,41 +159,6 @@ export default function SpreadsheetGrid() {
     setIsDataLoaded(true);
   }, []);
 
-  // Fetch dynamic properties for active categories
-  React.useEffect(() => {
-    if (!isDataLoaded) return;
-    
-    const activeCategories = new Set<string>();
-    data.forEach(row => {
-       if (row.title || row.folder || row.context) {
-           if (row.category) activeCategories.add(row.category);
-       }
-    });
-    if (activeCategories.size === 0) {
-      setDynamicProps([]);
-      return;
-    }
-
-    let isMounted = true;
-    const fetchAll = async () => {
-       const allPropsMap = new Map<number, EtsyProperty>();
-       for (const cat of activeCategories) {
-          const taxId = ETSY_TAXONOMY_MAP[cat];
-          if (taxId) {
-             const props = await fetchPropertiesForTaxonomy(taxId);
-             props.forEach(p => {
-                allPropsMap.set(p.property_id, p);
-             });
-          }
-       }
-       if (isMounted) {
-          setDynamicProps(Array.from(allPropsMap.values()));
-       }
-    };
-    fetchAll();
-    return () => { isMounted = false; };
-  }, [data, isDataLoaded, fetchPropertiesForTaxonomy]);
-
   const dataRef = React.useRef(data);
   // Keep the ref strictly synchronized with the state
   React.useEffect(() => {
@@ -230,7 +200,7 @@ export default function SpreadsheetGrid() {
         } else if (currentTask.action === "generate_tags") {
           await triggerAIGeneration(currentTask.row, ["tags"]);
         } else if (currentTask.action === "generate_all") {
-          await triggerAIGeneration(currentTask.row, ["title", "description", "tags", "attributes"]);
+          await triggerAIGeneration(currentTask.row, ["title", "description", "tags", "primary_color", "occasion", "celebration", "subject"]);
         } else if (currentTask.action === "publish") {
           await triggerEtsyPush(currentTask.row, "all");
         } else if (currentTask.action === "update_text") {
@@ -419,6 +389,24 @@ export default function SpreadsheetGrid() {
          } as GridCell;
       }
 
+      if (columnId === "subject") {
+         const supported = !isActiveRow || categorySupportsSubject(dataRow.category || "");
+         if (!supported) return { kind: GridCellKind.Text, allowOverlay: false, readonly: true, data: "", displayData: "", themeOverride: { bgCell: "#fafafa" } } as TextCell;
+         return {
+            kind: GridCellKind.Custom,
+            allowOverlay: true,
+            copyData: value,
+            data: {
+               kind: "dropdown-cell",
+               allowedValues: ETSY_SUBJECTS,
+               value: value || ""
+            },
+            themeOverride: { 
+              baseFontStyle: "13px Inter, sans-serif"
+            }
+         } as GridCell;
+      }
+
       if (columnId === "section") {
          return {
             kind: GridCellKind.Custom,
@@ -435,27 +423,50 @@ export default function SpreadsheetGrid() {
          } as GridCell;
       }
 
-      const columnIdStr = String(columnId);
-      if (columnIdStr.startsWith("prop_")) {
-         const propId = parseInt(columnIdStr.replace("prop_", ""), 10);
-         const propConfig = dynamicProps.find(p => p.property_id === propId);
-         const taxId = ETSY_TAXONOMY_MAP[dataRow.category || ""];
-         
-         // Check if this specific row's category supports this property
-         const supportedProps = taxId ? taxonomyCache[taxId] || [] : [];
-         const isSupported = supportedProps.some(p => p.property_id === propId);
-
-         if (!isSupported || !propConfig) {
-             return { kind: GridCellKind.Text, allowOverlay: false, readonly: true, data: "", displayData: "", themeOverride: { bgCell: "#fafafa" } } as TextCell;
-         }
-
+      if (columnId === "primary_color") {
          return {
             kind: GridCellKind.Custom,
             allowOverlay: true,
             copyData: value,
             data: {
                kind: "dropdown-cell",
-               allowedValues: ["", ...propConfig.possible_values.map(v => v.name)],
+               allowedValues: ETSY_COLORS,
+               value: value || ""
+            },
+            themeOverride: { 
+              baseFontStyle: "13px Inter, sans-serif"
+            }
+         } as GridCell;
+      }
+
+      if (columnId === "occasion") {
+         const supported = !isActiveRow || categorySupportsOccasion(dataRow.category || "");
+         if (!supported) return { kind: GridCellKind.Text, allowOverlay: false, readonly: true, data: "", displayData: "", themeOverride: { bgCell: "#fafafa" } } as TextCell;
+         return {
+            kind: GridCellKind.Custom,
+            allowOverlay: true,
+            copyData: value,
+            data: {
+               kind: "dropdown-cell",
+               allowedValues: ETSY_OCCASIONS,
+               value: value || ""
+            },
+            themeOverride: { 
+              baseFontStyle: "13px Inter, sans-serif"
+            }
+         } as GridCell;
+      }
+
+      if (columnId === "celebration") {
+         const supported = !isActiveRow || categorySupportsCelebration(dataRow.category || "");
+         if (!supported) return { kind: GridCellKind.Text, allowOverlay: false, readonly: true, data: "", displayData: "", themeOverride: { bgCell: "#fafafa" } } as TextCell;
+         return {
+            kind: GridCellKind.Custom,
+            allowOverlay: true,
+            copyData: value,
+            data: {
+               kind: "dropdown-cell",
+               allowedValues: ETSY_CELEBRATIONS,
                value: value || ""
             },
             themeOverride: { 

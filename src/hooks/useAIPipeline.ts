@@ -1,8 +1,6 @@
 import { useCallback } from 'react';
 import type { RowData } from '@/components/SpreadsheetGrid';
 import toast from 'react-hot-toast';
-import { ETSY_TAXONOMY_MAP } from "@/lib/etsyConstants";
-import { taxonomyCache } from "@/hooks/useEtsyTaxonomy";
 
 export function useAIPipeline(
   dataRef: React.MutableRefObject<RowData[]>,
@@ -16,44 +14,26 @@ export function useAIPipeline(
     dataRef.current = updatedArray;
     setData(updatedArray);
 
-    const rowData = dataRef.current[row];
-    const imagePaths = (rowData.images || "").split(',').map(s => s.trim()).filter(Boolean);
+    // Calculate exact number of images in this row and pass their paths
+    const imagesList = dataRef.current[row].images || "";
+    const imagePaths = imagesList.split(',').map(s => s.trim()).filter(Boolean);
 
-    const toGen = Array.isArray(forceRegenerate) && forceRegenerate.length > 0 
-      ? forceRegenerate 
-      : ["title", "description", "tags", "attributes"];
+    // Build context from whatever the user has already provided
+    let promptContext = dataRef.current[row].context || "";
+    if (dataRef.current[row].folder) promptContext += `\nFolder/Product Name: ${dataRef.current[row].folder}`;
+    if (dataRef.current[row].category) promptContext += `\nProduct Category: ${dataRef.current[row].category}`;
+    if (dataRef.current[row].digital_file) promptContext += `\nFormat: Digital Download (NOT a physical item)`;
+    if (dataRef.current[row].title) promptContext += `\nTitle: ${dataRef.current[row].title}`;
+    if (dataRef.current[row].description) promptContext += `\nDescription: ${dataRef.current[row].description}`;
 
-    // Prepare prompt
-    let prompt = `You are an expert Etsy SEO copywriter. Generate the requested fields for a new listing.
-Context/Product Description: ${rowData.context || "A digital product."}
-Category: ${rowData.category || "Store Graphics"}\n`;
+    // Prepare existing data payload so backend knows what to skip
+    const existingDataPayload = { ...dataRef.current[row] };
 
-    if (rowData.ai_title_rules) prompt += `Title Rules: ${rowData.ai_title_rules}\n`;
-    if (rowData.ai_desc_rules) prompt += `Description Rules: ${rowData.ai_desc_rules}\n`;
-    if (rowData.ai_tag_rules) prompt += `Tag Rules: ${rowData.ai_tag_rules}\n`;
-
-    prompt += `\nYou must respond ONLY with a raw, valid JSON object containing exactly the fields requested. Do NOT wrap the JSON in markdown code blocks. Do NOT include any explanations.\n\n`;
-
-    const jsonFormat: any = {};
-    if (toGen.includes("title")) jsonFormat.title = "Optimized listing title";
-    if (toGen.includes("description")) jsonFormat.description = "Optimized listing description (Use basic HTML like <ul>, <li>, <strong>, <br/> if formatting is needed)";
-    if (toGen.includes("tags")) jsonFormat.tags = "comma-separated tags";
-
-    // Dynamically inject properties for AI selection
-    const taxId = ETSY_TAXONOMY_MAP[rowData.category || ""];
-    if (taxId && (toGen.includes("attributes") || toGen.includes("all"))) {
-      const props = taxonomyCache[taxId] || [];
-      if (props.length > 0) {
-        prompt += `\nYou MUST select the most appropriate value for each of the following attributes. If none match perfectly, choose the closest or leave it empty.\n`;
-        props.forEach(p => {
-            const opts = p.possible_values.map(v => v.name).join('", "');
-            prompt += `- ${p.display_name} (JSON key: prop_${p.property_id}): Options: ["", "${opts}"]\n`;
-            jsonFormat[`prop_${p.property_id}`] = `string (one of the options above, or empty)`;
-        });
-      }
-    }
-
-    prompt += `\nReturn a JSON object in exactly this format:\n${JSON.stringify(jsonFormat, null, 2)}`;
+    const aiRules = {
+      title: dataRef.current[row].ai_title_rules || "",
+      description: dataRef.current[row].ai_desc_rules || "",
+      tags: dataRef.current[row].ai_tag_rules || "",
+    };
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 180000); 
@@ -63,9 +43,10 @@ Category: ${rowData.category || "Store Graphics"}\n`;
       signal: controller.signal,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
-        prompt: prompt,
+        context: promptContext,
         imagePaths: imagePaths,
-        existingData: { ...rowData },
+        existingData: existingDataPayload,
+        aiRules: aiRules,
         forceRegenerate: forceRegenerate
       })
     })
@@ -78,7 +59,14 @@ Category: ${rowData.category || "Store Graphics"}\n`;
       const newData = [...prev2];
       newData[row] = {
         ...newData[row],
-        ...aiData,
+        title: aiData.title || newData[row].title,
+        description: aiData.description || newData[row].description,
+        tags: aiData.tags || newData[row].tags,
+        alt_text: (aiData.alt_texts && Array.isArray(aiData.alt_texts)) ? aiData.alt_texts.join(" | ") : newData[row].alt_text,
+        primary_color: aiData.primary_color !== undefined ? aiData.primary_color : newData[row].primary_color,
+        occasion: aiData.occasion !== undefined ? aiData.occasion : newData[row].occasion,
+        celebration: aiData.celebration !== undefined ? aiData.celebration : newData[row].celebration,
+        subject: aiData.subject !== undefined ? aiData.subject : newData[row].subject,
         status: aiData.error ? "Error" : "Review"
       };
       dataRef.current = newData;

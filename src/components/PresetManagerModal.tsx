@@ -3,8 +3,7 @@
 import React, { useState } from "react";
 import { X, Plus, Trash2, Save } from "lucide-react";
 import toast from "react-hot-toast";
-import { ETSY_CATEGORIES, ETSY_SECTIONS, ETSY_WHEN_MADE, ETSY_TAXONOMY_MAP } from "@/lib/etsyConstants";
-import { useEtsyTaxonomy, EtsyProperty } from "@/hooks/useEtsyTaxonomy";
+import { ETSY_CATEGORIES, ETSY_SECTIONS, ETSY_WHEN_MADE, ETSY_SUBJECTS, ETSY_OCCASIONS, ETSY_CELEBRATIONS, categorySupportsOccasion, categorySupportsCelebration, categorySupportsSubject } from "@/lib/etsyConstants";
 
 export type Preset = {
   id: string;
@@ -18,10 +17,12 @@ export type Preset = {
   when_made: string;
   is_supply: string;
   renewal_options: string;
+  subject: string;
+  occasion: string;
+  celebration: string;
   ai_title_rules: string;
   ai_desc_rules: string;
   ai_tag_rules: string;
-  [key: string]: any;
 };
 
 const DEFAULT_PRESET: Preset = {
@@ -36,6 +37,9 @@ const DEFAULT_PRESET: Preset = {
   when_made: "2020_2026",
   is_supply: "false",
   renewal_options: "manual",
+  subject: "",
+  occasion: "",
+  celebration: "",
   ai_title_rules: "MUST be exactly 140 characters or less including spaces",
   ai_desc_rules: "Under 100 words total. One short punchy intro sentence, followed entirely by a scannable bullet-point list of the essential features/specs. NO FLUFF. No conclusion paragraphs.",
   ai_tag_rules: "EXACTLY 13 Etsy Tags as a comma-separated string. Each individual tag MUST be 20 characters or less.",
@@ -62,21 +66,6 @@ export default function PresetManagerModal({ onClose }: PresetManagerModalProps)
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Preset | null>(null);
   const [isCreatingNew, setIsCreatingNew] = useState(false);
-  const { fetchPropertiesForTaxonomy } = useEtsyTaxonomy();
-  const [dynamicProps, setDynamicProps] = useState<EtsyProperty[]>([]);
-
-  React.useEffect(() => {
-    if (!editForm?.category) {
-      setDynamicProps([]);
-      return;
-    }
-    const taxId = ETSY_TAXONOMY_MAP[editForm.category];
-    if (taxId) {
-      fetchPropertiesForTaxonomy(taxId).then(setDynamicProps);
-    } else {
-      setDynamicProps([]);
-    }
-  }, [editForm?.category, fetchPropertiesForTaxonomy]);
 
   const savePresets = (newPresets: Preset[]) => {
     setPresets(newPresets);
@@ -96,6 +85,9 @@ export default function PresetManagerModal({ onClose }: PresetManagerModalProps)
       when_made: "2020_2026",
       is_supply: "false",
       renewal_options: "manual",
+      subject: "",
+      occasion: "",
+      celebration: "",
       ai_title_rules: "MUST be exactly 140 characters or less including spaces",
       ai_desc_rules: "Under 100 words total. One short punchy intro sentence, followed entirely by a scannable bullet-point list of the essential features/specs. NO FLUFF. No conclusion paragraphs.",
       ai_tag_rules: "EXACTLY 13 Etsy Tags as a comma-separated string. Each individual tag MUST be 20 characters or less.",
@@ -124,6 +116,9 @@ export default function PresetManagerModal({ onClose }: PresetManagerModalProps)
     }
 
     const finalForm = { ...editForm };
+    if (!categorySupportsOccasion(finalForm.category)) finalForm.occasion = "";
+    if (!categorySupportsCelebration(finalForm.category)) finalForm.celebration = "";
+    if (!categorySupportsSubject(finalForm.category)) finalForm.subject = "";
 
     const existingIndex = presets.findIndex(p => p.id === finalForm.id);
     const newPresets = [...presets];
@@ -382,22 +377,54 @@ export default function PresetManagerModal({ onClose }: PresetManagerModalProps)
 
 
                 <div className="grid grid-cols-2 gap-4">
-                  {dynamicProps.map(prop => (
-                    <div key={prop.property_id}>
-                      <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">{prop.display_name}</label>
+                  {categorySupportsOccasion(editForm.category) && (
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">Occasion</label>
                       <select
-                        value={editForm[`prop_${prop.property_id}`] || ""}
-                        onChange={e => setEditForm({ ...editForm, [`prop_${prop.property_id}`]: e.target.value })}
+                        value={editForm.occasion}
+                        onChange={e => setEditForm({ ...editForm, occasion: e.target.value })}
                         className="w-full px-3 py-2 text-sm rounded-none border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                       >
                         <option value="">None</option>
-                        {prop.possible_values.map(v => (
-                          <option key={v.name} value={v.name}>{v.name}</option>
+                        {ETSY_OCCASIONS.filter(Boolean).map(occ => (
+                          <option key={occ} value={occ}>{occ}</option>
                         ))}
                       </select>
                     </div>
-                  ))}
+                  )}
+                  
+                  {categorySupportsCelebration(editForm.category) && (
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">Celebration / Holiday</label>
+                      <select
+                        value={editForm.celebration}
+                        onChange={e => setEditForm({ ...editForm, celebration: e.target.value })}
+                        className="w-full px-3 py-2 text-sm rounded-none border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                      >
+                        <option value="">None</option>
+                        {ETSY_CELEBRATIONS.filter(Boolean).map(cel => (
+                          <option key={cel} value={cel}>{cel}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
                 </div>
+
+                {categorySupportsSubject(editForm.category) && (
+                  <div>
+                    <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">Subject (Art Only)</label>
+                    <select
+                      value={editForm.subject}
+                      onChange={e => setEditForm({ ...editForm, subject: e.target.value })}
+                      className="w-full px-3 py-2 text-sm rounded-none border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                    >
+                      <option value="">None</option>
+                      {ETSY_SUBJECTS.filter(Boolean).map(sub => (
+                        <option key={sub} value={sub}>{sub}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">AI Prompt Context (Rules)</label>
