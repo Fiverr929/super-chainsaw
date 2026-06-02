@@ -5,7 +5,7 @@ import sharp from 'sharp';
 
 export async function POST(request: Request) {
   try {
-    const { context, imagePaths = [], existingData = {} } = await request.json();
+    const { context, imagePaths = [], existingData = {}, aiRules = {} } = await request.json();
 
     if (!context || context.trim() === '') {
       // Proceed even if context is empty
@@ -64,9 +64,14 @@ export async function POST(request: Request) {
     }
 
     const missingFields = [];
-    if (!existingData.title) missingFields.push('"title" (a highly optimized Etsy Title. CRITICAL: MUST be exactly 140 characters or less including spaces)');
-    if (!existingData.description) missingFields.push('"description" (CRITICAL: Under 100 words total. One short punchy intro sentence, followed entirely by a scannable bullet-point list of the essential features/specs. NO FLUFF. No conclusion paragraphs.)');
-    if (!existingData.tags) missingFields.push('"tags" (EXACTLY 13 Etsy Tags as a comma-separated string. CRITICAL: Each individual tag MUST be 20 characters or less. ONLY use letters, numbers, and spaces. NO special characters.)');
+    
+    const defaultTitleRule = "a highly optimized Etsy Title. CRITICAL: MUST be exactly 140 characters or less including spaces";
+    const defaultDescRule = "CRITICAL: Under 100 words total. One short punchy intro sentence, followed entirely by a scannable bullet-point list of the essential features/specs. NO FLUFF. No conclusion paragraphs.";
+    const defaultTagRule = "EXACTLY 13 Etsy Tags as a comma-separated string. CRITICAL: Each individual tag MUST be 20 characters or less. ONLY use letters, numbers, and spaces. NO special characters.";
+
+    if (!existingData.title) missingFields.push(`"title" (${aiRules.title || defaultTitleRule})`);
+    if (!existingData.description) missingFields.push(`"description" (${aiRules.description || defaultDescRule})`);
+    if (!existingData.tags) missingFields.push(`"tags" (${aiRules.tags || defaultTagRule})`);
     if (!existingData.primary_color) missingFields.push('"primary_color"');
     if (!existingData.occasion) missingFields.push('"occasion"');
     if (!existingData.celebration) missingFields.push('"celebration"');

@@ -28,6 +28,12 @@ export function useAIPipeline(
     // Prepare existing data payload so backend knows what to skip
     const existingDataPayload = { ...dataRef.current[row] };
 
+    const aiRules = {
+      title: dataRef.current[row].ai_title_rules || "",
+      description: dataRef.current[row].ai_desc_rules || "",
+      tags: dataRef.current[row].ai_tag_rules || "",
+    };
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 180000); 
 
@@ -38,7 +44,8 @@ export function useAIPipeline(
       body: JSON.stringify({ 
         context: promptContext,
         imagePaths: imagePaths,
-        existingData: existingDataPayload
+        existingData: existingDataPayload,
+        aiRules: aiRules
       })
     })
     .then(res => {

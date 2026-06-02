@@ -20,6 +20,9 @@ export type Preset = {
   subject: string;
   occasion: string;
   celebration: string;
+  ai_title_rules: string;
+  ai_desc_rules: string;
+  ai_tag_rules: string;
 };
 
 const categorySupportsOccasion = (cat: string) => {
@@ -52,6 +55,9 @@ const DEFAULT_PRESET: Preset = {
   subject: "",
   occasion: "",
   celebration: "",
+  ai_title_rules: "MUST be exactly 140 characters or less including spaces",
+  ai_desc_rules: "Under 100 words total. One short punchy intro sentence, followed entirely by a scannable bullet-point list of the essential features/specs. NO FLUFF. No conclusion paragraphs.",
+  ai_tag_rules: "EXACTLY 13 Etsy Tags as a comma-separated string. Each individual tag MUST be 20 characters or less.",
 };
 
 interface PresetManagerModalProps {
@@ -97,8 +103,9 @@ export default function PresetManagerModal({ onClose }: PresetManagerModalProps)
       subject: "",
       occasion: "",
       celebration: "",
-      price: "",
-      quantity: "",
+      ai_title_rules: "MUST be exactly 140 characters or less including spaces",
+      ai_desc_rules: "Under 100 words total. One short punchy intro sentence, followed entirely by a scannable bullet-point list of the essential features/specs. NO FLUFF. No conclusion paragraphs.",
+      ai_tag_rules: "EXACTLY 13 Etsy Tags as a comma-separated string. Each individual tag MUST be 20 characters or less.",
     };
     
     // Immediately add the pill to the sidebar (top of the list)
@@ -446,6 +453,39 @@ export default function PresetManagerModal({ onClose }: PresetManagerModalProps)
                     This text is injected into the Context column for any listing using this preset.
                   </p>
                 </div>
+
+                <details className="group border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900">
+                  <summary className="cursor-pointer px-4 py-3 text-sm font-medium text-zinc-700 dark:text-zinc-300 select-none hover:bg-zinc-50 dark:hover:bg-zinc-800 list-none flex justify-between items-center">
+                    Advanced AI Rules
+                    <span className="text-zinc-400 group-open:rotate-180 transition-transform">▼</span>
+                  </summary>
+                  <div className="p-4 border-t border-zinc-200 dark:border-zinc-700 space-y-4 bg-zinc-50 dark:bg-zinc-900/50">
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">Title Rule</label>
+                      <textarea 
+                        value={editForm.ai_title_rules || DEFAULT_PRESET.ai_title_rules}
+                        onChange={e => setEditForm({ ...editForm, ai_title_rules: e.target.value })}
+                        className="w-full px-3 py-2 text-xs border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 min-h-[60px] resize-y"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">Description Rule</label>
+                      <textarea 
+                        value={editForm.ai_desc_rules || DEFAULT_PRESET.ai_desc_rules}
+                        onChange={e => setEditForm({ ...editForm, ai_desc_rules: e.target.value })}
+                        className="w-full px-3 py-2 text-xs border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 min-h-[80px] resize-y"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">Tag Rule</label>
+                      <textarea 
+                        value={editForm.ai_tag_rules || DEFAULT_PRESET.ai_tag_rules}
+                        onChange={e => setEditForm({ ...editForm, ai_tag_rules: e.target.value })}
+                        className="w-full px-3 py-2 text-xs border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 min-h-[60px] resize-y"
+                      />
+                    </div>
+                  </div>
+                </details>
               </div>
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-zinc-400 dark:text-zinc-600">

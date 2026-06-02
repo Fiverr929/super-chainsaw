@@ -78,6 +78,9 @@ export type RowData = {
   when_made?: string;
   is_supply?: string;
   renewal_options?: string;
+  ai_title_rules?: string;
+  ai_desc_rules?: string;
+  ai_tag_rules?: string;
 };
 
 const emptyRow: RowData = {
@@ -99,6 +102,13 @@ const emptyRow: RowData = {
   occasion: "",
   celebration: "",
   subject: "",
+  who_made: "",
+  when_made: "",
+  is_supply: "",
+  renewal_options: "",
+  ai_title_rules: "",
+  ai_desc_rules: "",
+  ai_tag_rules: "",
 };
 
 export default function SpreadsheetGrid() {
@@ -110,6 +120,7 @@ export default function SpreadsheetGrid() {
   const [fontsLoaded, setFontsLoaded] = useState(false);
   const [isImporterOpen, setIsImporterOpen] = useState(false);
   const [showPresets, setShowPresets] = useState(false);
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
 
   React.useEffect(() => {
     document.fonts.ready.then(() => {
@@ -117,22 +128,26 @@ export default function SpreadsheetGrid() {
     });
   }, []);
 
-  // Load from local storage or initialize with empty rows
+  // Initialize with empty rows (avoids Next.js hydration mismatch)
   const [data, setData] = useState<RowData[]>(() => {
-    if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("workstation_v2_grid_data");
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            return parsed;
-          }
-        } catch {}
-      }
-    }
-    
     return Array.from({ length: 50 }).map(() => ({ ...emptyRow }));
   });
+
+  // Load from local storage AFTER initial render
+  React.useEffect(() => {
+    const saved = localStorage.getItem("workstation_v2_grid_data");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          setData(parsed);
+        }
+      } catch (e) {
+        console.error("Failed to parse local storage grid data", e);
+      }
+    }
+    setIsDataLoaded(true);
+  }, []);
 
   const dataRef = React.useRef(data);
   // Keep the ref strictly synchronized with the state
@@ -143,13 +158,15 @@ export default function SpreadsheetGrid() {
   const { triggerAIGeneration, triggerFolderAutomation } = useAIPipeline(dataRef, setData);
   const { triggerEtsyPush } = useEtsyPush(dataRef, setData);
 
-  // Persist to local storage with a 500ms debounce
+  // Persist to local storage with a 500ms debounce (ONLY after initial load)
   React.useEffect(() => {
+    if (!isDataLoaded) return;
+    
     const handler = setTimeout(() => {
       localStorage.setItem("workstation_v2_grid_data", JSON.stringify(data));
     }, 500);
     return () => clearTimeout(handler);
-  }, [data]);
+  }, [data, isDataLoaded]);
 
   const getCellContent = useCallback(
     (cell: Item): GridCell => {
@@ -816,6 +833,9 @@ export default function SpreadsheetGrid() {
                 row.when_made = preset.when_made || "2020_2024";
                 row.is_supply = preset.is_supply || "false";
                 row.renewal_options = preset.renewal_options || "automatic";
+                row.ai_title_rules = preset.ai_title_rules || "";
+                row.ai_desc_rules = preset.ai_desc_rules || "";
+                row.ai_tag_rules = preset.ai_tag_rules || "";
               }
               return row;
             });
