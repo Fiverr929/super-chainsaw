@@ -6,7 +6,19 @@ import path from 'path';
 // --- PROPERTY MAPS ---
 const TAXONOMY_MAP: Record<string, number> = {
   "Store Graphics": 769,
-  "Digital Prints": 2078
+  "Digital Prints": 2078,
+  "Digital Planners": 354,
+  "Templates": 1874,
+  "Clip Art": 7663,
+  "Wall Art": 2078,
+  "Digital Patterns": 7192,
+  "Fonts": 10620,
+  "Logos & Branding": 1877,
+  "Social Media Templates": 12486,
+  "Website Templates": 2818,
+  "Digital Paper": 1251,
+  "SVG Files": 7663,
+  "Lightroom Presets": 12107
 };
 
 const SECTION_MAP: Record<string, number> = {

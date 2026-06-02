@@ -90,12 +90,7 @@ export function useAIPipeline(
     if (folderName.trim() === "") return;
 
     const optimisticArray = [...dataRef.current];
-    optimisticArray[row] = {
-       ...optimisticArray[row],
-       category: optimisticArray[row].category || "Store Graphics",
-       price: optimisticArray[row].price || "3.99",
-       quantity: optimisticArray[row].quantity || "999"
-    };
+    // No longer aggressively overriding user data with hardcoded Store Graphics values!
     dataRef.current = optimisticArray;
     setData(optimisticArray);
 

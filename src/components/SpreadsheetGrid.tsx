@@ -26,6 +26,9 @@ import {
 } from "@/lib/etsyConstants";
 import { useAIPipeline } from "@/hooks/useAIPipeline";
 import { useEtsyPush } from "@/hooks/useEtsyPush";
+import FolderImporterModal from "./FolderImporterModal";
+import PresetManagerModal, { Preset } from "./PresetManagerModal";
+import { FolderPlus, Layers } from "lucide-react";
 
 const imageCache: Record<string, { absoluteUrlArray: string[], thumbnailUrls: string[] }> = {};
 const tagCache: Record<string, string[]> = {};
@@ -71,6 +74,10 @@ export type RowData = {
   celebration: string;
   subject: string;
   alt_text: string;
+  who_made?: string;
+  when_made?: string;
+  is_supply?: string;
+  renewal_options?: string;
 };
 
 const emptyRow: RowData = {
@@ -101,6 +108,8 @@ export default function SpreadsheetGrid() {
   const [gridSelection, setGridSelection] = useState<GridSelection | undefined>(undefined);
   const [globalImageEditor, setGlobalImageEditor] = useState<{row: number, urls: string[], altTexts: string[]} | null>(null);
   const [fontsLoaded, setFontsLoaded] = useState(false);
+  const [isImporterOpen, setIsImporterOpen] = useState(false);
+  const [showPresets, setShowPresets] = useState(false);
 
   React.useEffect(() => {
     document.fonts.ready.then(() => {
@@ -200,17 +209,12 @@ export default function SpreadsheetGrid() {
       if (columnId === "video" || columnId === "digital_file") {
         if (!value) {
            return {
-             kind: GridCellKind.Bubble,
+             kind: GridCellKind.Text,
              allowOverlay: false,
-             data: [],
-             themeOverride: {
-               bgBubble: "#2b52d6",
-               textBubble: "#ffffff",
-               bgBubbleSelected: "#2b52d6",
-               textBubbleSelected: "#ffffff",
-               roundingRadius: 0
-             }
-           } as GridCell;
+             readonly: true,
+             data: "",
+             displayData: ""
+           } as TextCell;
         }
 
         const cacheKey = `tags_${value}`;
@@ -451,25 +455,6 @@ export default function SpreadsheetGrid() {
       };
       dataRef.current = newDataArray;
       setData(newDataArray);
-
-      // Automatically scan the folder if the folder name was just typed!
-      if (columnId === "folder") {
-        triggerFolderAutomation(row, newStringValue);
-      }
-
-      // Auto-fill hardcoded values when Category is selected
-      if (columnId === "category" && newStringValue === "Store Graphics") {
-        const updatedArray = [...dataRef.current];
-        updatedArray[row] = {
-          ...updatedArray[row],
-          category: "Store Graphics",
-          price: "3.99",
-          quantity: "999"
-        };
-        dataRef.current = updatedArray;
-        setData(updatedArray);
-        return; // Early return since we handled the state update
-      }
 
       // Automatically trigger the AI if Status was changed to 'Generate AI'
       if (columnId === "status" && newStringValue === "Generate AI") {
@@ -792,6 +777,87 @@ export default function SpreadsheetGrid() {
           }}
         />
       )}
+
+      {/* Floating Action Buttons */}
+      <div className="fixed bottom-6 right-6 flex flex-col gap-3 z-40">
+        <button 
+          onClick={() => setShowPresets(true)}
+          className="w-14 h-14 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded-none shadow-xl flex items-center justify-center transition-transform hover:scale-105 active:scale-95"
+          title="Listing Presets"
+        >
+          <Layers size={24} />
+        </button>
+        <button 
+          onClick={() => setIsImporterOpen(true)}
+          className="w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-none shadow-xl flex items-center justify-center transition-transform hover:scale-105 active:scale-95 border border-blue-700"
+          title="Bulk Import Folders"
+        >
+          <FolderPlus size={24} />
+        </button>
+      </div>
+
+      {/* Folder Importer Modal */}
+      {isImporterOpen && (
+        <FolderImporterModal 
+          onClose={() => setIsImporterOpen(false)}
+          onImport={(selectedFolders, preset) => {
+            const newRows = selectedFolders.map(folderName => {
+              const row: RowData = { ...emptyRow, folder: folderName };
+              if (preset) {
+                row.category = preset.category || "Store Graphics";
+                row.section = preset.section || "";
+                row.price = preset.price || "";
+                row.quantity = preset.quantity || "";
+                row.context = preset.context || "";
+                row.occasion = preset.occasion || "";
+                row.celebration = preset.celebration || "";
+                row.subject = preset.subject || "";
+                row.who_made = preset.who_made || "i_did";
+                row.when_made = preset.when_made || "2020_2024";
+                row.is_supply = preset.is_supply || "false";
+                row.renewal_options = preset.renewal_options || "automatic";
+              }
+              return row;
+            });
+
+            const rowsToAutomate: { rowIndex: number, folderName: string }[] = [];
+
+            setData(prev => {
+              const newData = [...prev];
+              let insertedCount = 0;
+              
+              for (let i = 0; i < newData.length && insertedCount < newRows.length; i++) {
+                const row = newData[i];
+                if (!row.folder && !row.title && !row.status) {
+                  newData[i] = newRows[insertedCount];
+                  rowsToAutomate.push({ rowIndex: i, folderName: newRows[insertedCount].folder || "" });
+                  insertedCount++;
+                }
+              }
+              
+              while (insertedCount < newRows.length) {
+                const rowIndex = newData.length;
+                newData.push(newRows[insertedCount]);
+                rowsToAutomate.push({ rowIndex, folderName: newRows[insertedCount].folder || "" });
+                insertedCount++;
+              }
+              
+              dataRef.current = newData;
+              return newData;
+            });
+            setIsImporterOpen(false);
+
+            setTimeout(() => {
+              rowsToAutomate.forEach(({ rowIndex, folderName }) => {
+                triggerFolderAutomation(rowIndex, folderName);
+              });
+            }, 0);
+          }}
+        />
+      )}
+
+      {/* Preset Manager Modal */}
+      {showPresets && <PresetManagerModal onClose={() => setShowPresets(false)} />}
     </div>
   );
 }

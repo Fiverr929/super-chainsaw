@@ -1,4 +1,6 @@
-export const ETSY_CATEGORIES = ["", "Store Graphics", "Digital Prints"];
+export const ETSY_CATEGORIES = ["", "Store Graphics", "Digital Prints", "Digital Planners", "Templates", "Clip Art", "Wall Art", "Digital Patterns", "Fonts", "Logos & Branding", "Social Media Templates", "Website Templates", "Digital Paper", "SVG Files", "Lightroom Presets"];
+
+export const ETSY_WHEN_MADE = ["made_to_order", "2020_2026", "2010_2019", "2007_2009", "before_2007", "2000_2006", "1990s", "1980s", "1970s", "1960s", "1950s", "1940s", "1930s", "1920s", "1910s", "1900_1909", "1800s", "1700s", "before_1700"];
 
 export const ETSY_SUBJECTS = ["", "Abstract & geometric", "Animal", "Anime & cartoon", "Architecture & cityscape", "Beach & tropical", "Comics & manga", "Educational", "Fantasy & Sci Fi", "Fashion", "Flowers", "Food & drink", "Horror & gothic", "Humorous saying", "Inspirational saying", "Landscape & scenery", "Love & friendship", "Movie", "Music", "Nautical", "People & portrait", "Pet portrait", "Phrase & saying", "Plants & trees", "Religious", "Science & tech", "Sports & fitness", "Stars & celestial", "Steampunk", "Superhero", "Travel & transportation", "TV", "Typography & symbols", "Video game", "Western & cowboy", "Zodiac"];
 
