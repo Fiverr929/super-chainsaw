@@ -37,7 +37,7 @@ const PROP_OCCASION: Record<string, number> = {
 };
 
 const PROP_HOLIDAY: Record<string, number> = {
-  "Christmas": 35, "Cinco de Mayo": 36, "Dia de los Muertos": 5126, "Easter": 37, "Eid": 4564, "Father's Day": 38, "Halloween": 39, "Hanukkah": 40, "Holi": 4563, "Independence Day": 41, "Kwanzaa": 42, "Lunar New Year": 34, "Mardi Gras": 5118, "Mother's Day": 43, "New Year's": 44, "Passover": 47, "Ramadan": 5128, "St Patrick's Day": 45, "Thanksgiving": 46, "Valentine's Day": 48, "Veterans Day": 49,
+  "Christmas": 35, "Cinco de Mayo": 36, "Dia de los Muertos": 5126, "Diwali": 4562, "Easter": 37, "Eid": 4564, "Father's Day": 38, "Halloween": 39, "Hanukkah": 40, "Holi": 4563, "Independence Day": 41, "Kwanzaa": 42, "Lunar New Year": 34, "Mardi Gras": 5118, "Mother's Day": 43, "New Year's": 44, "Passover": 47, "Ramadan": 5128, "St Patrick's Day": 45, "Thanksgiving": 46, "Valentine's Day": 48, "Veterans Day": 49,
 };
 
 const PROP_ART_SUBJECT: Record<string, number> = {
