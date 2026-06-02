@@ -2,10 +2,11 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import sharp from 'sharp';
+import { categorySupportsOccasion, categorySupportsCelebration, categorySupportsSubject } from '@/lib/etsyConstants';
 
 export async function POST(request: Request) {
   try {
-    const { context, imagePaths = [], existingData = {}, aiRules = {} } = await request.json();
+    const { context, imagePaths = [], existingData = {}, aiRules = {}, forceRegenerate = [] } = await request.json();
 
     if (!context || context.trim() === '') {
       // Proceed even if context is empty
@@ -63,22 +64,24 @@ export async function POST(request: Request) {
        }
     }
 
-    const missingFields = [];
-    
     const defaultTitleRule = "a highly optimized Etsy Title. CRITICAL: MUST be exactly 140 characters or less including spaces";
     const defaultDescRule = "CRITICAL: Under 100 words total. One short punchy intro sentence, followed entirely by a scannable bullet-point list of the essential features/specs. NO FLUFF. No conclusion paragraphs.";
     const defaultTagRule = "EXACTLY 13 Etsy Tags as a comma-separated string. CRITICAL: Each individual tag MUST be 20 characters or less. ONLY use letters, numbers, and spaces. NO special characters.";
 
-    if (!existingData.title) missingFields.push(`"title" (${aiRules.title || defaultTitleRule})`);
-    if (!existingData.description) missingFields.push(`"description" (${aiRules.description || defaultDescRule})`);
-    if (!existingData.tags) missingFields.push(`"tags" (${aiRules.tags || defaultTagRule})`);
-    if (!existingData.primary_color) missingFields.push('"primary_color"');
-    if (!existingData.occasion) missingFields.push('"occasion"');
-    if (!existingData.celebration) missingFields.push('"celebration"');
-    if (!existingData.subject) missingFields.push('"subject"');
+    const missingFields: string[] = [];
+    if (!existingData.title || forceRegenerate.includes('title')) missingFields.push(`"title" (${aiRules.title || defaultTitleRule})`);
+    if (!existingData.description || forceRegenerate.includes('description')) missingFields.push(`"description" (${aiRules.description || defaultDescRule})`);
+    if (!existingData.tags || forceRegenerate.includes('tags')) missingFields.push(`"tags" (${aiRules.tags || defaultTagRule})`);
+    if (!existingData.primary_color || forceRegenerate.includes('primary_color')) missingFields.push('"primary_color"');
+    
+    if ((!existingData.occasion || forceRegenerate.includes('occasion')) && categorySupportsOccasion(existingData.category)) missingFields.push('"occasion"');
+    if ((!existingData.celebration || forceRegenerate.includes('celebration')) && categorySupportsCelebration(existingData.category)) missingFields.push('"celebration"');
+    if ((!existingData.subject || forceRegenerate.includes('subject')) && categorySupportsSubject(existingData.category)) missingFields.push('"subject"');
 
     const systemPrompt = `You are a professional Etsy copywriter and SEO expert. 
 You will receive a context or prompt about a product.
+
+CRITICAL ETSY COMPLIANCE RULE: Etsy prohibits more than 3 acronyms or fully capitalized words in a title. You MUST limit fully capitalized acronyms (like SVG, PNG, DTG, TV, Y2K) to a maximum of 2 per title. Any additional acronyms must use Title Case (e.g., Svg, Png, Tv).
 
 Your job is to generate ONLY the missing fields. Do not generate fields that already exist or were not requested.
 The fields you need to generate are:
@@ -88,12 +91,12 @@ If the list of fields to generate is "None", you should return an empty JSON obj
 
 For taxonomy attributes, if none fit perfectly, leave the string empty (""):
 - primary_color: Choose exactly one from: "Beige", "Black", "Blue", "Bronze", "Brown", "Clear", "Copper", "Gold", "Grey", "Green", "Orange", "Pink", "Purple", "Rainbow", "Red", "Rose gold", "Silver", "White", "Yellow".
-- occasion: Choose exactly one from: "1st birthday", "Anniversary", "Baby shower", "Bachelor party", "Bachelorette party", "Back to school", "Baptism", "Bar & Bat Mitzvah", "Birthday", "Bridal shower", "Confirmation", "Divorce & breakup", "Engagement", "First Communion", "Graduation", "Grief & mourning", "Housewarming", "LGBTQ pride", "Moving", "Pet loss", "Retirement", "Wedding".
-- celebration: Choose exactly one from: "Christmas", "Cinco de Mayo", "Dia de los Muertos", "Diwali", "Easter", "Eid", "Father's Day", "Halloween", "Hanukkah", "Holi", "Independence Day", "Kwanzaa", "Lunar New Year", "Mardi Gras", "Mother's Day", "New Year's", "Passover", "Ramadan", "St Patrick's Day", "Thanksgiving", "Valentine's Day", "Veterans Day".
+- occasion: Choose exactly one from: "1st birthday", "Anniversary", "Baby shower", "Back to school", "Baptism", "Bar & Bat Mitzvah", "Birthday", "Bridal shower", "Confirmation", "Divorce & breakup", "Engagement", "First Communion", "Graduation", "Grief & mourning", "House warming", "LGBTQ pride", "Moving", "Pet loss", "Retirement", "Wedding".
+- celebration: Choose exactly one from: "Christmas", "Cinco de Mayo", "Diwali", "Easter", "Eid", "Father's Day", "Halloween", "Hanukkah", "Holi", "Independence Day", "Kwanzaa", "Lunar New Year", "Mother's Day", "New Year's", "Passover", "Ramadan", "St Patrick's Day", "Thanksgiving", "Valentine's Day", "Veterans Day".
 - subject: Choose exactly one from: "Abstract & geometric", "Animal", "Anime & cartoon", "Architecture & cityscape", "Beach & tropical", "Comics & manga", "Educational", "Fantasy & Sci Fi", "Fashion", "Flowers", "Food & drink", "Horror & gothic", "Humorous saying", "Inspirational saying", "Landscape & scenery", "Love & friendship", "Movie", "Music", "Nautical", "People & portrait", "Pet portrait", "Phrase & saying", "Plants & trees", "Religious", "Science & tech", "Sports & fitness", "Stars & celestial", "Steampunk", "Superhero", "Travel & transportation", "TV", "Typography & symbols", "Video game", "Western & cowboy", "Zodiac".
 
-Return ONLY valid JSON with no markdown formatting. The JSON keys MUST exactly match the names of the fields you were asked to generate (e.g., "title", "description", "tags", "primary_color").
-Format example if generating title and primary_color: { "title": "...", "primary_color": "..." }`;
+Return ONLY valid JSON with no markdown formatting. The JSON MUST contain ALL of the exact keys listed in "The fields you need to generate are:", even if the value is an empty string. Do not omit any requested keys.
+Format example: { "title": "...", "primary_color": "...", "occasion": "", "celebration": "", "subject": "" }`;
 
     let finalPrompt = systemPrompt;
     if (imageParts.length > 0) {
@@ -138,7 +141,37 @@ Format example if generating title and primary_color: { "title": "...", "primary
     
     // Robust parsing to strip out markdown formatting if the LLM includes it
     const cleanedText = contentText.replace(/^```(json)?\s*/i, '').replace(/```\s*$/, '').trim();
-    const content = JSON.parse(cleanedText);
+    
+    let content;
+    try {
+      content = JSON.parse(cleanedText);
+    } catch (parseError) {
+      console.error("Failed to parse Gemini JSON:", cleanedText, parseError);
+      return NextResponse.json({ error: "AI returned malformed JSON data. Please try again." }, { status: 500 });
+    }
+
+    // Backend Failsafe: Etsy rejects titles with >3 acronyms/ALL CAPS words.
+    if (content.title && typeof content.title === 'string') {
+      const acronymRegex = /\b[A-Z]{2,}\b/g;
+      const matches = [...content.title.matchAll(acronymRegex)];
+      if (matches.length > 3) {
+        let newTitle = "";
+        let lastIndex = 0;
+        // Keep the first 2 fully capitalized, convert the rest to Title Case
+        for (let i = 0; i < matches.length; i++) {
+            const match = matches[i];
+            newTitle += content.title.substring(lastIndex, match.index);
+            if (i < 2) {
+                newTitle += match[0];
+            } else {
+                newTitle += match[0].charAt(0) + match[0].slice(1).toLowerCase();
+            }
+            lastIndex = (match.index as number) + match[0].length;
+        }
+        newTitle += content.title.substring(lastIndex);
+        content.title = newTitle;
+      }
+    }
 
     return NextResponse.json({
       title: content.title,

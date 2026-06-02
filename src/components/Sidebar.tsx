@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { ChevronLeft, ChevronRight, ShoppingBag, Plus, Check, Loader2, ChevronDown, Trash2, Layers } from "lucide-react";
+import { ChevronLeft, ChevronRight, ShoppingBag, Plus, Check, Loader2, ChevronDown, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 
 type Store = {
@@ -10,7 +10,7 @@ type Store = {
 };
 
 export default function Sidebar() {
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(false);
   const [stores, setStores] = useState<Store[]>([]);
   const [activeStoreId, setActiveStoreId] = useState<string | null>(null);
   
@@ -197,7 +197,7 @@ export default function Sidebar() {
 
       {/* Connection Dialog */}
       {showDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/20 backdrop-blur-sm" onClick={() => setShowDialog(false)}>
+        <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/20 backdrop-blur-sm" onClick={() => setShowDialog(false)}>
           <div className="bg-white dark:bg-zinc-900 p-6 rounded-none  max-w-sm w-full mx-4 border border-zinc-200 dark:border-zinc-800" onClick={e => e.stopPropagation()}>
             <div className="flex justify-center mb-4">
               <div className="w-12 h-12 rounded-none bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">

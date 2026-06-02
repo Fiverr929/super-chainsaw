@@ -16,25 +16,6 @@ export default function FolderImporterModal({ onClose, onImport }: FolderImporte
   const [selectedPresetId, setSelectedPresetId] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    // Load presets
-    const saved = localStorage.getItem("workstation_v2_presets");
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        setPresets(parsed);
-        if (parsed.length > 0) {
-          setSelectedPresetId(parsed[0].id);
-        }
-      } catch (e) {
-        console.error("Failed to parse presets", e);
-      }
-    }
-    
-    // Scan folders immediately on open
-    scanFolders();
-  }, []);
-
   const scanFolders = async () => {
     setIsLoading(true);
     try {
@@ -51,6 +32,26 @@ export default function FolderImporterModal({ onClose, onImport }: FolderImporte
       setIsLoading(false);
     }
   };
+
+  useEffect(() => {
+    // Load presets
+    const saved = localStorage.getItem("workstation_v2_presets");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        setPresets(parsed);
+        if (parsed.length > 0) {
+          setSelectedPresetId(parsed[0].id);
+        }
+      } catch (e) {
+        console.error("Failed to parse presets", e);
+      }
+    }
+    
+    // Scan folders immediately on open
+    scanFolders();
+  }, []);
 
   const toggleFolder = (folder: string) => {
     const newSelected = new Set(selected);
@@ -77,7 +78,7 @@ export default function FolderImporterModal({ onClose, onImport }: FolderImporte
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/50 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-zinc-900/50 p-4" onClick={onClose}>
       <div className="bg-white dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 w-full max-w-2xl flex flex-col max-h-[85vh] overflow-hidden" onClick={e => e.stopPropagation()}>
         
         {/* Header */}

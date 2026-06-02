@@ -6,8 +6,9 @@ export function useAIPipeline(
   dataRef: React.MutableRefObject<RowData[]>,
   setData: React.Dispatch<React.SetStateAction<RowData[]>>
 ) {
-  const triggerAIGeneration = useCallback((row: number) => {
-    // Optimistically set status to 'Generating...' to lock the row
+  const triggerAIGeneration = useCallback((row: number, forceRegenerate: string[] = []): Promise<void> => {
+    return new Promise((resolve) => {
+      // Optimistically set status to 'Generating...' to lock the row
     const updatedArray = [...dataRef.current];
     updatedArray[row] = { ...updatedArray[row], status: "Generating..." };
     dataRef.current = updatedArray;
@@ -45,7 +46,8 @@ export function useAIPipeline(
         context: promptContext,
         imagePaths: imagePaths,
         existingData: existingDataPayload,
-        aiRules: aiRules
+        aiRules: aiRules,
+        forceRegenerate: forceRegenerate
       })
     })
     .then(res => {
@@ -61,10 +63,10 @@ export function useAIPipeline(
         description: aiData.description || newData[row].description,
         tags: aiData.tags || newData[row].tags,
         alt_text: (aiData.alt_texts && Array.isArray(aiData.alt_texts)) ? aiData.alt_texts.join(" | ") : newData[row].alt_text,
-        primary_color: aiData.primary_color || newData[row].primary_color,
-        occasion: aiData.occasion || newData[row].occasion,
-        celebration: aiData.celebration || newData[row].celebration,
-        subject: aiData.subject || newData[row].subject,
+        primary_color: aiData.primary_color !== undefined ? aiData.primary_color : newData[row].primary_color,
+        occasion: aiData.occasion !== undefined ? aiData.occasion : newData[row].occasion,
+        celebration: aiData.celebration !== undefined ? aiData.celebration : newData[row].celebration,
+        subject: aiData.subject !== undefined ? aiData.subject : newData[row].subject,
         status: aiData.error ? "Error" : "Review"
       };
       dataRef.current = newData;
@@ -72,8 +74,10 @@ export function useAIPipeline(
 
       if (aiData.error) {
         toast.error(`AI Generation Failed:\n${aiData.error}`);
+        resolve(); // Resolve anyway so queue continues
       } else {
         toast.success("AI Generation Complete");
+        resolve();
       }
     })
     .catch(err => {
@@ -88,8 +92,10 @@ export function useAIPipeline(
       if (err.name === 'AbortError') {
         toast.error("AI Generation timed out after 3 minutes. The Google Gemini API might be congested. Please try again.");
       } else {
-        toast.error("AI Generation request completely failed to send.");
+        toast.error("Failed to parse AI response or network error.");
       }
+      resolve(); // Resolve to prevent queue from blocking indefinitely
+    });
     });
   }, [dataRef, setData]);
 
@@ -108,9 +114,9 @@ export function useAIPipeline(
             const updatedArray = [...dataRef.current];
             updatedArray[row] = {
                ...updatedArray[row],
-               images: assetData.images || updatedArray[row].images,
-               video: assetData.video || updatedArray[row].video,
-               digital_file: assetData.digital_file || updatedArray[row].digital_file
+               images: assetData.images,
+               video: assetData.video,
+               digital_file: assetData.digital_file
             };
             dataRef.current = updatedArray;
             setData(updatedArray);

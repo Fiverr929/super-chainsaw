@@ -1,26 +1,35 @@
 {
-  "timestamp": "2026-06-01T10:43:51.513Z",
+  "timestamp": "2026-06-02T12:43:05.593Z",
   "requestBody": {
-    "status": "Update Images",
-    "context": "",
-    "images": "/listings/dexter/Dexter T-Shirt.png,/listings/dexter/Dexter Shirt (Black Color).png,/listings/dexter/Dexter The Bay Harbor Butcher Vintage Graphic T-Shirt (Black Color).jpg",
-    "alt_text": "Woman wearing a black t-shirt with a bold red Dexter TV show graphic, featuring Dexter Morgan's face and 'The Bay Harbor Butcher' text, against a spooky Halloween backdrop. | Back of a plain black t-shirt mockup, ideal for displaying graphic designs on a simple background. | Front view of a black t-shirt mockup featuring a striking Dexter TV series graphic design, with red blood-splatter effects and iconic character imagery.",
-    "digital_file": "/listings/dexter/digital/DIGITAL.png",
-    "title": "",
+    "status": "Pushing...",
+    "listing_id": "4515123780",
+    "context": "This is a digital product.",
+    "images": "/listings/Dexter/Dexter T-Shirt.png,/listings/Dexter/Dexter Shirt (Black Color).png,/listings/Dexter/Dexter The Bay Harbor Butcher Vintage Graphic T-Shirt (Black Color).jpg",
+    "video": "/listings/Dexter/Comfort Color 1717 v2.mp4",
+    "alt_text": "Digital design featuring a red graphic of Dexter Morgan's face with 'DEXTER' text, mock-up on a black t-shirt worn by a person, illustrating potential use. | Blank black t-shirt mockup, showcasing the potential base for the Dexter Morgan digital design, ready for customization. | Front view of a black t-shirt mockup displaying the detailed red Dexter Morgan graphic design with 'The Bay Harbor Butcher' text.",
+    "digital_file": "/listings/Dexter/digital/DIGITAL.png",
+    "title": "Dexter Morgan SVG PNG Dxf | Tv Show Graphic Design | Bay Harbor Butcher Digital Download | Dark Defender Fan Art T-Shirt Apparel",
     "description": "",
-    "tags": "",
+    "tags": "Dexter Morgan Svg, Dexter Png, Dark Defender, Dexter Tv Show, Fan Art, Digital Download, Shirt Design, Apparel Print, Poster File, Cricut File, Silhouette Design, Crime Show Art, Instant Download",
     "price": "3.99",
     "quantity": "999",
-    "section": "",
-    "primary_color": "Red",
+    "category": "Store Graphics",
+    "section": "Digital Prints",
+    "primary_color": "Black",
     "occasion": "",
     "celebration": "",
-    "subject": "TV",
-    "folder": "dexter",
-    "category": "Store Graphics",
-    "video": "/listings/dexter/Comfort Color 1717 v2.mp4",
-    "listing_id": "",
-    "updateType": "images"
+    "subject": "",
+    "who_made": "i_did",
+    "when_made": "2020_2026",
+    "is_supply": "false",
+    "renewal_options": "manual",
+    "ai_title_rules": "",
+    "ai_desc_rules": "",
+    "ai_tag_rules": "",
+    "folder": "Dexter",
+    "updateType": "all"
   },
-  "error": "Cannot update media without a valid listing ID"
+  "error": {
+    "error": "'title' and 'description' are both required to update 'tags'"
+  }
 }

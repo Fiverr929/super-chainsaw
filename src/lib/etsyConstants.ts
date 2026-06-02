@@ -8,8 +8,23 @@ export const ETSY_SECTIONS = ["", "Comfort Colors 1717", "Gilden 5000", "Digital
 
 export const ETSY_COLORS = ["", "Beige", "Black", "Blue", "Bronze", "Brown", "Clear", "Copper", "Gold", "Gray", "Green", "Orange", "Pink", "Purple", "Red", "Rose gold", "Silver", "White", "Yellow"];
 
-export const ETSY_OCCASIONS = ["", "1st birthday", "Anniversary", "Baby shower", "Bachelor party", "Bachelorette party", "Back to school", "Baptism", "Bar & Bat Mitzvah", "Birthday", "Bridal shower", "Confirmation", "Divorce & breakup", "Engagement", "First Communion", "Graduation", "Grief & mourning", "Housewarming", "LGBTQ pride", "Moving", "Pet loss", "Retirement", "Wedding"];
+export const ETSY_OCCASIONS = ["", "1st birthday", "Anniversary", "Baby shower", "Back to school", "Baptism", "Bar & Bat Mitzvah", "Birthday", "Bridal shower", "Confirmation", "Divorce & breakup", "Engagement", "First Communion", "Graduation", "Grief & mourning", "House warming", "LGBTQ pride", "Moving", "Pet loss", "Retirement", "Wedding"];
 
-export const ETSY_CELEBRATIONS = ["", "Christmas", "Cinco de Mayo", "Dia de los Muertos", "Diwali", "Easter", "Eid", "Father's Day", "Halloween", "Hanukkah", "Holi", "Independence Day", "Kwanzaa", "Lunar New Year", "Mardi Gras", "Mother's Day", "New Year's", "Passover", "Ramadan", "St Patrick's Day", "Thanksgiving", "Valentine's Day", "Veterans Day"];
+export const ETSY_CELEBRATIONS = ["", "Christmas", "Cinco de Mayo", "Easter", "Eid", "Father's Day", "Halloween", "Hanukkah", "Holi", "Independence Day", "Kwanzaa", "Lunar New Year", "Mother's Day", "New Year's", "Passover", "Ramadan", "St Patrick's Day", "Thanksgiving", "Valentine's Day", "Veterans Day"];
 
 export const ETSY_STATUSES = ["Draft", "Generate AI", "Generating...", "Review", "Ready to Push", "Update Text & SEO", "Update Images", "Update Digital Files", "Pushing...", "Published", "Error"];
+
+export const categorySupportsOccasion = (cat: string) => {
+  if (!cat) return true;
+  return !["Clip Art", "Digital Patterns", "Fonts", "Digital Paper", "SVG Files", "Lightroom Presets"].includes(cat);
+};
+
+export const categorySupportsCelebration = (cat: string) => {
+  if (!cat) return true;
+  if (cat === "Digital Planners") return false;
+  return categorySupportsOccasion(cat);
+};
+
+export const categorySupportsSubject = (cat: string) => {
+  return ["Digital Prints", "Wall Art"].includes(cat);
+};

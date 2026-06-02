@@ -22,13 +22,16 @@ import {
   ETSY_COLORS,
   ETSY_OCCASIONS,
   ETSY_CELEBRATIONS,
-  ETSY_STATUSES
+  ETSY_STATUSES,
+  categorySupportsOccasion,
+  categorySupportsCelebration,
+  categorySupportsSubject
 } from "@/lib/etsyConstants";
 import { useAIPipeline } from "@/hooks/useAIPipeline";
 import { useEtsyPush } from "@/hooks/useEtsyPush";
 import FolderImporterModal from "./FolderImporterModal";
-import PresetManagerModal, { Preset } from "./PresetManagerModal";
-import { FolderPlus, Layers } from "lucide-react";
+import PresetManagerModal from "./PresetManagerModal";
+import { FolderPlus, Layers, ChevronDown, Trash2 } from "lucide-react";
 
 const imageCache: Record<string, { absoluteUrlArray: string[], thumbnailUrls: string[] }> = {};
 const tagCache: Record<string, string[]> = {};
@@ -121,7 +124,13 @@ export default function SpreadsheetGrid() {
   const [isImporterOpen, setIsImporterOpen] = useState(false);
   const [showPresets, setShowPresets] = useState(false);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
-
+  
+  // Task Queue State
+  type QueueTask = { id: string; action: string; row: number };
+  const [taskQueue, setTaskQueue] = useState<QueueTask[]>([]);
+  const isProcessingQueue = React.useRef(false);
+  const [showUpdateMenu, setShowUpdateMenu] = useState(false);
+  const [showGenerateMenu, setShowGenerateMenu] = useState(false);
   React.useEffect(() => {
     document.fonts.ready.then(() => {
       setFontsLoaded(true);
@@ -140,6 +149,7 @@ export default function SpreadsheetGrid() {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
+          // eslint-disable-next-line react-hooks/set-state-in-effect
           setData(parsed);
         }
       } catch (e) {
@@ -157,6 +167,64 @@ export default function SpreadsheetGrid() {
 
   const { triggerAIGeneration, triggerFolderAutomation } = useAIPipeline(dataRef, setData);
   const { triggerEtsyPush } = useEtsyPush(dataRef, setData);
+
+  const processBulkQueue = (action: string, rows: number[]) => {
+    if (rows.length === 0) return;
+    setShowUpdateMenu(false);
+    setShowGenerateMenu(false);
+
+    const newTasks = rows.map(row => ({
+       id: Math.random().toString(36).substring(7),
+       action,
+       row
+    }));
+    
+    setTaskQueue(prev => [...prev, ...newTasks]);
+  };
+
+  React.useEffect(() => {
+    if (taskQueue.length === 0) return;
+    if (isProcessingQueue.current) return;
+
+    const processNext = async () => {
+      isProcessingQueue.current = true;
+      const currentTask = taskQueue[0];
+      
+      try {
+        if (currentTask.action === "generate") {
+          await triggerAIGeneration(currentTask.row, []);
+        } else if (currentTask.action === "generate_title") {
+          await triggerAIGeneration(currentTask.row, ["title"]);
+        } else if (currentTask.action === "generate_description") {
+          await triggerAIGeneration(currentTask.row, ["description"]);
+        } else if (currentTask.action === "generate_tags") {
+          await triggerAIGeneration(currentTask.row, ["tags"]);
+        } else if (currentTask.action === "generate_all") {
+          await triggerAIGeneration(currentTask.row, ["title", "description", "tags", "primary_color", "occasion", "celebration", "subject"]);
+        } else if (currentTask.action === "publish") {
+          await triggerEtsyPush(currentTask.row, "all");
+        } else if (currentTask.action === "update_text") {
+          await triggerEtsyPush(currentTask.row, "Update Text & SEO");
+        } else if (currentTask.action === "update_images") {
+          await triggerEtsyPush(currentTask.row, "Update Images");
+        } else if (currentTask.action === "update_files") {
+          await triggerEtsyPush(currentTask.row, "Update Digital Files");
+        }
+      } catch (err) {
+         console.error("Queue task failed:", err);
+      } finally {
+        setTaskQueue(prev => prev.slice(1));
+        isProcessingQueue.current = false;
+        
+        // Delay to avoid hitting API rate limits if there are more tasks
+        if (taskQueue.length > 1) {
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+      }
+    };
+
+    processNext();
+  }, [taskQueue, triggerAIGeneration, triggerEtsyPush]);
 
   // Persist to local storage with a 500ms debounce (ONLY after initial load)
   React.useEffect(() => {
@@ -182,6 +250,8 @@ export default function SpreadsheetGrid() {
               data: "",
           } as TextCell;
       }
+
+      const isActiveRow = !!dataRow.status || !!dataRow.folder || !!dataRow.title;
 
       const value = dataRow[columnId] || "";
 
@@ -320,6 +390,8 @@ export default function SpreadsheetGrid() {
       }
 
       if (columnId === "subject") {
+         const supported = !isActiveRow || categorySupportsSubject(dataRow.category || "");
+         if (!supported) return { kind: GridCellKind.Text, allowOverlay: false, readonly: true, data: "", displayData: "", themeOverride: { bgCell: "#fafafa" } } as TextCell;
          return {
             kind: GridCellKind.Custom,
             allowOverlay: true,
@@ -368,6 +440,8 @@ export default function SpreadsheetGrid() {
       }
 
       if (columnId === "occasion") {
+         const supported = !isActiveRow || categorySupportsOccasion(dataRow.category || "");
+         if (!supported) return { kind: GridCellKind.Text, allowOverlay: false, readonly: true, data: "", displayData: "", themeOverride: { bgCell: "#fafafa" } } as TextCell;
          return {
             kind: GridCellKind.Custom,
             allowOverlay: true,
@@ -384,6 +458,8 @@ export default function SpreadsheetGrid() {
       }
 
       if (columnId === "celebration") {
+         const supported = !isActiveRow || categorySupportsCelebration(dataRow.category || "");
+         if (!supported) return { kind: GridCellKind.Text, allowOverlay: false, readonly: true, data: "", displayData: "", themeOverride: { bgCell: "#fafafa" } } as TextCell;
          return {
             kind: GridCellKind.Custom,
             allowOverlay: true,
@@ -475,28 +551,20 @@ export default function SpreadsheetGrid() {
 
       // Automatically trigger the AI if Status was changed to 'Generate AI'
       if (columnId === "status" && newStringValue === "Generate AI") {
+        if (dataRef.current[row].status === "Generating..." || dataRef.current[row].status === "Pushing...") return;
         triggerAIGeneration(row);
         return;
       }
 
       // Automatically trigger Push/Update to Etsy
       if (columnId === "status" && (newStringValue === "Ready to Push" || newStringValue === "Update Text & SEO" || newStringValue === "Update Images" || newStringValue === "Update Digital Files")) {
+        if (dataRef.current[row].status === "Generating..." || dataRef.current[row].status === "Pushing...") return;
         triggerEtsyPush(row, newStringValue);
         return; // Don't write 'Ready to Push' to state below
       }
 
-      setData((prev) => {
-        const newData = [...prev];
-        newData[row] = {
-          ...newData[row],
-          [columnId]: newStringValue,
-        };
-        return newData;
-      });
-
-
     },
-    [columns, triggerFolderAutomation, triggerAIGeneration, triggerEtsyPush]
+    [columns, triggerAIGeneration, triggerEtsyPush]
   );
 
   const onColumnResize = useCallback((column: GridColumn, newSize: number) => {
@@ -551,6 +619,7 @@ export default function SpreadsheetGrid() {
 
       return true;
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [columns, triggerFolderAutomation]
   );
 
@@ -635,22 +704,17 @@ export default function SpreadsheetGrid() {
           }
         }
 
-        // 2. Delete full rows
+        // 2. Delete full rows (splice them out entirely)
         if (selection.rows) {
           const selectedRows = typeof selection.rows.toArray === "function" ? selection.rows.toArray() : Array.from(selection.rows);
-          for (const r of selectedRows) {
+          
+          // Sort indices descending so we can splice safely from bottom up without shifting indices
+          const sortedRows = [...selectedRows].sort((a, b) => b - a);
+          
+          for (const r of sortedRows) {
             if (typeof r !== "number" || r >= newData.length) continue;
-            const rowData = { ...newData[r] };
-            for (let c = 0; c < columns.length; c++) {
-              const col = columns[c];
-              if (col.id) {
-                // @ts-expect-error - external type mismatch
-                rowData[col.id] = "";
-                didDelete = true;
-                cellsToUpdate.push({ cell: [c, r] });
-              }
-            }
-            newData[r] = rowData as RowData;
+            newData.splice(r, 1);
+            didDelete = true;
           }
         }
 
@@ -710,9 +774,35 @@ export default function SpreadsheetGrid() {
     return () => document.removeEventListener("wheel", handleNativeWheel);
   }, []);
 
+  const selectedRowsList = React.useMemo(() => {
+    if (!gridSelection || !gridSelection.rows) return [];
+    return typeof gridSelection.rows.toArray === "function" 
+      ? gridSelection.rows.toArray() 
+      : Array.from(gridSelection.rows);
+  }, [gridSelection]);
+
   return (
-    <div className="w-full h-full p-4 bg-white dark:bg-zinc-950" onWheel={onWheel}>
-      <div className="w-full h-full border border-zinc-200 dark:border-zinc-800 rounded-none overflow-hidden relative">
+    <div className="w-full h-full p-4 bg-white dark:bg-zinc-950 flex flex-col" onWheel={onWheel}>
+      <div className="flex-none mb-4 flex items-center justify-between border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-2 px-4 rounded-none">
+        <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 uppercase tracking-wider">Spreadsheet Database</h2>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={() => setShowPresets(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-zinc-700 transition-colors rounded-none"
+          >
+            <Layers size={14} />
+            Presets
+          </button>
+          <button 
+            onClick={() => setIsImporterOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors rounded-none"
+          >
+            <FolderPlus size={14} />
+            Import
+          </button>
+        </div>
+      </div>
+      <div className="flex-1 w-full border border-zinc-200 dark:border-zinc-800 rounded-none overflow-hidden relative">
         {fontsLoaded && (
           <DataEditor
             ref={gridRef}
@@ -737,7 +827,7 @@ export default function SpreadsheetGrid() {
               headerFontStyle: "600 13px Inter, sans-serif",
               baseFontStyle: "13px Inter, sans-serif",
             } as Partial<Theme>}
-            rowMarkers="checkbox"
+            rowMarkers="both"
             getCellContent={getCellContent}
             columns={columns}
             rows={data.length + 1}
@@ -795,23 +885,7 @@ export default function SpreadsheetGrid() {
         />
       )}
 
-      {/* Floating Action Buttons */}
-      <div className="fixed bottom-6 right-6 flex flex-col gap-3 z-40">
-        <button 
-          onClick={() => setShowPresets(true)}
-          className="w-14 h-14 bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-600 dark:text-zinc-400 rounded-none shadow-xl flex items-center justify-center transition-transform hover:scale-105 active:scale-95"
-          title="Listing Presets"
-        >
-          <Layers size={24} />
-        </button>
-        <button 
-          onClick={() => setIsImporterOpen(true)}
-          className="w-14 h-14 bg-blue-600 hover:bg-blue-700 text-white rounded-none shadow-xl flex items-center justify-center transition-transform hover:scale-105 active:scale-95 border border-blue-700"
-          title="Bulk Import Folders"
-        >
-          <FolderPlus size={24} />
-        </button>
-      </div>
+
 
       {/* Folder Importer Modal */}
       {isImporterOpen && (
@@ -874,6 +948,103 @@ export default function SpreadsheetGrid() {
             }, 0);
           }}
         />
+      )}
+
+      {/* Bulk Action Toolbar */}
+      {(showGenerateMenu || showUpdateMenu) && (
+        <div className="fixed inset-0 z-[998]" onClick={() => { setShowGenerateMenu(false); setShowUpdateMenu(false); }} />
+      )}
+      {selectedRowsList.length > 0 && (
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-[#2b52d6] text-white shadow-2xl flex items-center p-1.5 px-3 z-[999] animate-in slide-in-from-bottom-10 fade-in duration-300 gap-1.5">
+          <span className="text-sm font-medium px-3 border-r border-blue-500 mr-1">
+            {selectedRowsList.length} Selected
+          </span>
+          <div className="relative flex items-center">
+            <button onClick={() => { setShowGenerateMenu(!showGenerateMenu); setShowUpdateMenu(false); }} className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium hover:bg-blue-700 transition-colors">
+              {selectedRowsList.length > 1 ? "Bulk Generate" : "Generate"} 
+              <ChevronDown size={14} className={`transition-transform ${showGenerateMenu ? 'rotate-180' : ''}`} />
+            </button>
+            {showGenerateMenu && (
+              <div className="absolute bottom-full left-0 mb-3 bg-[#2b52d6] border border-blue-500 shadow-xl flex flex-col p-1 min-w-[200px] animate-in slide-in-from-bottom-2 fade-in duration-200">
+                <span className="text-xs font-bold text-blue-200 px-3 py-1.5 uppercase tracking-wider">Generate Options</span>
+                <button onClick={() => processBulkQueue('generate', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700 transition-colors">Fill Missing Fields</button>
+                <div className="h-px bg-blue-500 my-1 mx-2"></div>
+                <button onClick={() => processBulkQueue('generate_title', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700 transition-colors">Regenerate Title</button>
+                <button onClick={() => processBulkQueue('generate_description', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700 transition-colors">Regenerate Description</button>
+                <button onClick={() => processBulkQueue('generate_tags', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700 transition-colors">Regenerate Tags</button>
+                <div className="h-px bg-blue-500 my-1 mx-2"></div>
+                <button onClick={() => processBulkQueue('generate_all', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700 transition-colors font-semibold">Regenerate All Fields</button>
+              </div>
+            )}
+          </div>
+          
+          {selectedRowsList.every(r => data[r]?.listing_id) ? (
+            <div className="relative flex items-center">
+              <button onClick={() => { setShowUpdateMenu(!showUpdateMenu); setShowGenerateMenu(false); }} className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium hover:bg-blue-700 transition-colors">
+                {selectedRowsList.length > 1 ? "Bulk Update" : "Update"}
+                <ChevronDown size={14} className={`transition-transform ${showUpdateMenu ? 'rotate-180' : ''}`} />
+              </button>
+              {showUpdateMenu && (
+                <div className="absolute bottom-full left-0 mb-3 bg-[#2b52d6] border border-blue-500 shadow-xl flex flex-col p-1 min-w-[200px] animate-in slide-in-from-bottom-2 fade-in duration-200">
+                  <span className="text-xs font-bold text-blue-200 px-3 py-1.5 uppercase tracking-wider">Update Options</span>
+                  <button onClick={() => processBulkQueue('update_text', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700 transition-colors">Text & SEO</button>
+                  <button onClick={() => processBulkQueue('update_images', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700 transition-colors">Images</button>
+                  <button onClick={() => processBulkQueue('update_files', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700 transition-colors">Digital Files</button>
+                  <div className="h-px bg-blue-500 my-1 mx-2"></div>
+                  <button onClick={() => processBulkQueue('publish', selectedRowsList)} className="text-left px-3 py-2 text-sm text-white hover:bg-red-600 transition-colors font-semibold">Force Full Overwrite</button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <button onClick={() => processBulkQueue('publish', selectedRowsList)} className="flex items-center gap-1.5 px-4 py-1.5 text-sm font-medium bg-blue-600 text-white hover:bg-blue-500 transition-colors shadow-sm">
+              {selectedRowsList.length > 1 ? "Bulk Publish" : "Publish"}
+            </button>
+          )}
+
+          <div className="w-px h-5 bg-blue-500 mx-1"></div>
+          
+          <button onClick={() => {
+             const fakeSelection = { rows: { toArray: () => selectedRowsList } };
+             // @ts-expect-error - bypassing generic type
+             onDelete(fakeSelection);
+             setGridSelection(undefined);
+          }} className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium hover:bg-red-600 transition-colors" title="Delete Selected Rows">
+            Delete <Trash2 size={14} />
+          </button>
+          <button onClick={() => setGridSelection(undefined)} className="flex items-center justify-center w-8 h-8 hover:bg-blue-700 transition-colors ml-1">
+            ✕
+          </button>
+        </div>
+      )}
+
+      {/* Task Queue Status */}
+      {taskQueue.length > 0 && (
+        <div className="fixed bottom-6 right-6 bg-[#2b52d6] border border-blue-500 text-white shadow-2xl flex items-center p-3 px-5 z-[999] animate-in slide-in-from-bottom-10 fade-in duration-300 gap-4 min-w-[300px]">
+          <div className="flex-1 flex flex-col gap-1.5">
+            <div className="flex justify-between items-center text-xs font-bold text-blue-200 uppercase tracking-wider">
+              <span>
+                {taskQueue[0].action.includes('generate') ? 'Generating AI...' : 
+                 taskQueue[0].action.includes('publish') ? 'Publishing to Etsy...' : 'Updating Listings...'}
+              </span>
+              <div className="flex items-center gap-3">
+                <span className="text-white font-medium">{taskQueue.length} remaining</span>
+                <button 
+                  onClick={() => setTaskQueue([])}
+                  className="text-blue-300 hover:text-red-400 transition-colors"
+                  title="Cancel remaining tasks"
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+            <div className="w-full bg-blue-900 h-1.5 overflow-hidden relative">
+              <div 
+                className="bg-white h-full absolute top-0 left-0 transition-all duration-1000 ease-linear animate-pulse" 
+                style={{ width: '100%' }}
+              ></div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Preset Manager Modal */}

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
+import sharp from 'sharp';
 
 // --- PROPERTY MAPS ---
 const TAXONOMY_MAP: Record<string, number> = {
@@ -32,11 +33,11 @@ const PROP_PRIMARY_COLOR: Record<string, number> = {
 };
 
 const PROP_OCCASION: Record<string, number> = {
-  "1st birthday": 2773, "Anniversary": 12, "Baby shower": 13, "Bachelor party": 14, "Bachelorette party": 15, "Back to school": 16, "Baptism": 17, "Bar & Bat Mitzvah": 18, "Birthday": 19, "Bridal shower": 20, "Confirmation": 21, "Divorce & breakup": 26, "Engagement": 22, "First Communion": 23, "Graduation": 24, "Grief & mourning": 25, "Housewarming": 27, "LGBTQ pride": 2774, "Moving": 50, "Pet loss": 28, "Retirement": 31, "Wedding": 32,
+  "1st birthday": 2773, "Anniversary": 12, "Baby shower": 13, "Bachelor party": 14, "Bachelorette party": 15, "Back to school": 16, "Baptism": 17, "Bar & Bat Mitzvah": 18, "Birthday": 19, "Bridal shower": 20, "Confirmation": 21, "Divorce & breakup": 26, "Engagement": 22, "First Communion": 23, "Graduation": 24, "Grief & mourning": 25, "House warming": 27, "LGBTQ pride": 2774, "Moving": 50, "Pet loss": 28, "Retirement": 31, "Wedding": 32,
 };
 
 const PROP_HOLIDAY: Record<string, number> = {
-  "Christmas": 35, "Cinco de Mayo": 36, "Dia de los Muertos": 5126, "Diwali": 4562, "Easter": 37, "Eid": 4564, "Father's Day": 38, "Halloween": 39, "Hanukkah": 40, "Holi": 4563, "Independence Day": 41, "Kwanzaa": 42, "Lunar New Year": 34, "Mardi Gras": 5118, "Mother's Day": 43, "New Year's": 44, "Passover": 47, "Ramadan": 5128, "St Patrick's Day": 45, "Thanksgiving": 46, "Valentine's Day": 48, "Veterans Day": 49,
+  "Christmas": 35, "Cinco de Mayo": 36, "Dia de los Muertos": 5126, "Easter": 37, "Eid": 4564, "Father's Day": 38, "Halloween": 39, "Hanukkah": 40, "Holi": 4563, "Independence Day": 41, "Kwanzaa": 42, "Lunar New Year": 34, "Mardi Gras": 5118, "Mother's Day": 43, "New Year's": 44, "Passover": 47, "Ramadan": 5128, "St Patrick's Day": 45, "Thanksgiving": 46, "Valentine's Day": 48, "Veterans Day": 49,
 };
 
 const PROP_ART_SUBJECT: Record<string, number> = {
@@ -78,14 +79,14 @@ export async function POST(req: Request) {
     if (data.updateType === "all" || data.updateType === "text") {
       // 2. Create or Update Draft Listing
         const payload: Record<string, unknown> = {
-          quantity: parseInt(data.quantity),
+          quantity: parseInt(data.quantity) || 999,
           title: data.title ? data.title.substring(0, 140) : undefined,
           description: data.description,
-          price: parseFloat(data.price),
-          who_made: "i_did",
-          when_made: "2020_2026",
+          price: parseFloat(data.price) || 0.0,
+          who_made: data.who_made || "i_did",
+          when_made: data.when_made || "2020_2024",
           taxonomy_id: TAXONOMY_MAP[data.category as string] || 2078,
-          is_supply: false,
+          is_supply: data.is_supply === "true",
           type: "download"
         };
 
@@ -112,22 +113,22 @@ export async function POST(req: Request) {
       // 3. Update Properties
       const propertyUpdates = [];
       if (data.primary_color && PROP_PRIMARY_COLOR[data.primary_color as string]) {
-        propertyUpdates.push({ id: 200, value_ids: [PROP_PRIMARY_COLOR[data.primary_color as string]] });
+        propertyUpdates.push({ id: 200, value_ids: [PROP_PRIMARY_COLOR[data.primary_color as string]], values: [data.primary_color as string] });
       }
       if (data.occasion && PROP_OCCASION[data.occasion as string]) {
-        propertyUpdates.push({ id: 46803063641, value_ids: [PROP_OCCASION[data.occasion as string]] });
+        propertyUpdates.push({ id: 46803063641, value_ids: [PROP_OCCASION[data.occasion as string]], values: [data.occasion as string] });
       }
       if (data.celebration && PROP_HOLIDAY[data.celebration as string]) {
-        propertyUpdates.push({ id: 46803063659, value_ids: [PROP_HOLIDAY[data.celebration as string]] });
+        propertyUpdates.push({ id: 46803063659, value_ids: [PROP_HOLIDAY[data.celebration as string]], values: [data.celebration as string] });
       }
       if (data.subject && PROP_ART_SUBJECT[data.subject as string]) {
-        propertyUpdates.push({ id: 400394338806, value_ids: [PROP_ART_SUBJECT[data.subject as string]] });
+        propertyUpdates.push({ id: 400394338806, value_ids: [PROP_ART_SUBJECT[data.subject as string]], values: [data.subject as string] });
       }
 
       for (const prop of propertyUpdates) {
         try {
           await axios.put(`https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}/properties/${prop.id}`, 
-            { value_ids: prop.value_ids }, 
+            { value_ids: prop.value_ids, values: prop.values }, 
             { headers }
           );
         } catch (err: unknown) {
@@ -193,12 +194,26 @@ export async function POST(req: Request) {
         for (const imgUrl of imageUrls) {
           const absolutePath = resolveFilePath(imgUrl);
           if (absolutePath && fs.existsSync(absolutePath)) {
-            const fileBuffer = fs.readFileSync(absolutePath);
-            const ext = path.extname(absolutePath).toLowerCase();
-            const mimeType = ext === '.png' ? 'image/png' : 'image/jpeg';
-            const blob = new Blob([fileBuffer], { type: mimeType });
+            let finalBuffer: any = fs.readFileSync(absolutePath);
+            let ext = path.extname(absolutePath).toLowerCase();
+            let mimeType = ext === '.png' ? 'image/png' : 'image/jpeg';
+            let fileName = path.basename(absolutePath);
+
+            // Compress massive images (>5MB) into high-quality JPEG
+            if (finalBuffer.length > 5 * 1024 * 1024) {
+               finalBuffer = await sharp(finalBuffer).jpeg({ quality: 85 }).toBuffer();
+               mimeType = 'image/jpeg';
+               ext = '.jpg';
+               fileName = fileName.substring(0, fileName.lastIndexOf('.')) + ext;
+            }
+
+            if (finalBuffer.length > 20 * 1024 * 1024) {
+               throw new Error(`Image ${fileName} exceeds the 20MB limit even after compression.`);
+            }
+
+            const blob = new Blob([finalBuffer], { type: mimeType });
             const formData = new FormData();
-            formData.append("image", blob, path.basename(absolutePath));
+            formData.append("image", blob, fileName);
             formData.append("rank", rank.toString());
             const altTexts = data.alt_text ? data.alt_text.split('|').map((s: string) => s.trim()) : [];
             const currentAltText = altTexts[rank - 1] || "";
@@ -252,7 +267,8 @@ export async function POST(req: Request) {
           }
         }
 
-        const files = data.digital_file.split(",").map((s: string) => s.trim()).filter(Boolean);
+        // Etsy strictly limits digital files to 5 max per listing
+        const files = data.digital_file.split(",").map((s: string) => s.trim()).filter(Boolean).slice(0, 5);
         for (const fileUrl of files) {
           const absolutePath = resolveFilePath(fileUrl);
           if (absolutePath && fs.existsSync(absolutePath)) {

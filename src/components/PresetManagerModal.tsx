@@ -1,9 +1,9 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
-import { X, Plus, Trash2, Edit2, Save } from "lucide-react";
+import React, { useState } from "react";
+import { X, Plus, Trash2, Save } from "lucide-react";
 import toast from "react-hot-toast";
-import { ETSY_CATEGORIES, ETSY_SECTIONS, ETSY_WHEN_MADE, ETSY_SUBJECTS, ETSY_OCCASIONS, ETSY_CELEBRATIONS } from "@/lib/etsyConstants";
+import { ETSY_CATEGORIES, ETSY_SECTIONS, ETSY_WHEN_MADE, ETSY_SUBJECTS, ETSY_OCCASIONS, ETSY_CELEBRATIONS, categorySupportsOccasion, categorySupportsCelebration, categorySupportsSubject } from "@/lib/etsyConstants";
 
 export type Preset = {
   id: string;
@@ -23,21 +23,6 @@ export type Preset = {
   ai_title_rules: string;
   ai_desc_rules: string;
   ai_tag_rules: string;
-};
-
-const categorySupportsOccasion = (cat: string) => {
-  if (!cat) return true;
-  return !["Clip Art", "Digital Patterns", "Fonts", "Digital Paper", "SVG Files", "Lightroom Presets"].includes(cat);
-};
-
-const categorySupportsCelebration = (cat: string) => {
-  if (!cat) return true;
-  if (cat === "Digital Planners") return false;
-  return categorySupportsOccasion(cat);
-};
-
-const categorySupportsSubject = (cat: string) => {
-  return ["Digital Prints", "Wall Art"].includes(cat);
 };
 
 const DEFAULT_PRESET: Preset = {
@@ -174,7 +159,7 @@ export default function PresetManagerModal({ onClose }: PresetManagerModalProps)
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-zinc-900/50 p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-zinc-900/50 p-4" onClick={onClose}>
       <div className="bg-white dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 w-full max-w-4xl flex flex-col max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
         
         {/* Header */}
