@@ -12,7 +12,7 @@ export const ETSY_OCCASIONS = ["", "1st birthday", "Anniversary", "Baby shower",
 
 export const ETSY_CELEBRATIONS = ["", "Christmas", "Cinco de Mayo", "Easter", "Eid", "Father's Day", "Halloween", "Hanukkah", "Holi", "Independence Day", "Kwanzaa", "Lunar New Year", "Mother's Day", "New Year's", "Passover", "Ramadan", "St Patrick's Day", "Thanksgiving", "Valentine's Day", "Veterans Day"];
 
-export const ETSY_STATUSES = ["Draft", "Generate AI", "Generating...", "Review", "Ready to Push", "Update Text & SEO", "Update Images", "Update Digital Files", "Pushing...", "Published", "Error"];
+export const ETSY_STATUSES = ["Draft", "Generating...", "Review", "Pushing...", "Published", "Error"];
 
 export const categorySupportsOccasion = (cat: string) => {
   if (!cat) return true;

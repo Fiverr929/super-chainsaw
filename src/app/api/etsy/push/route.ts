@@ -101,6 +101,15 @@ export async function POST(req: Request) {
           .slice(0, 13);
       }
 
+      if (payload.tags && (payload.tags as string[]).length > 0) {
+        if (!payload.title || !payload.description) {
+          return NextResponse.json({
+            error: 'Failed to push to Etsy',
+            details: 'Etsy requires both a Title and a Description to be set when tags are present. Please generate or enter these fields before pushing.'
+          }, { status: 400 });
+        }
+      }
+
       if (listingId) {
          // Update
          await axios.patch(`https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}`, payload, { headers });
@@ -194,7 +203,7 @@ export async function POST(req: Request) {
         for (const imgUrl of imageUrls) {
           const absolutePath = resolveFilePath(imgUrl);
           if (absolutePath && fs.existsSync(absolutePath)) {
-            let finalBuffer: any = fs.readFileSync(absolutePath);
+            let finalBuffer: Buffer = fs.readFileSync(absolutePath);
             let ext = path.extname(absolutePath).toLowerCase();
             let mimeType = ext === '.png' ? 'image/png' : 'image/jpeg';
             let fileName = path.basename(absolutePath);
@@ -211,7 +220,7 @@ export async function POST(req: Request) {
                throw new Error(`Image ${fileName} exceeds the 20MB limit even after compression.`);
             }
 
-            const blob = new Blob([finalBuffer], { type: mimeType });
+            const blob = new Blob([new Uint8Array(finalBuffer)], { type: mimeType });
             const formData = new FormData();
             formData.append("image", blob, fileName);
             formData.append("rank", rank.toString());
@@ -282,7 +291,7 @@ export async function POST(req: Request) {
             else if (ext === '.rar') mimeType = 'application/x-rar-compressed';
             else if (ext === '.svg') mimeType = 'image/svg+xml';
             
-            const blob = new Blob([fileBuffer], { type: mimeType });
+            const blob = new Blob([new Uint8Array(fileBuffer)], { type: mimeType });
             
             const formData = new FormData();
             formData.append("file", blob, path.basename(absolutePath));
@@ -307,7 +316,7 @@ export async function POST(req: Request) {
     
     // Save to file for debugging
     try {
-      fs.writeFileSync('C:\\Users\\This PC\\Gravity\\SIDE APPS\\workstation-v2\\latest_error.json', JSON.stringify({
+      fs.writeFileSync(path.join(process.cwd(), 'latest_error.json'), JSON.stringify({
         timestamp: new Date().toISOString(),
         requestBody: data,
         error: errorDetails

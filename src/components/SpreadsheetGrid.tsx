@@ -2,6 +2,7 @@
 
 import React, { useCallback, useState, useRef } from "react";
 import Image from "next/image";
+import toast from "react-hot-toast";
 import DataEditor, {
   DataEditorRef,
   GridCell,
@@ -170,6 +171,24 @@ export default function SpreadsheetGrid() {
 
   const processBulkQueue = (action: string, rows: number[]) => {
     if (rows.length === 0) return;
+    
+    // Validation
+    for (const row of rows) {
+      const rowData = dataRef.current[row];
+      if (action.startsWith('update_') && !rowData.listing_id) {
+        toast.error(`Row ${row + 1} is missing a Listing ID for updates.`);
+        return;
+      }
+      if (action === 'publish' && (!rowData.title || !rowData.description)) {
+         toast.error(`Row ${row + 1} is missing a Title or Description required for publishing.`);
+         return;
+      }
+      if (action === 'update_text' && rowData.tags && (!rowData.title || !rowData.description)) {
+         toast.error(`Row ${row + 1} has tags defined. Etsy requires both a Title and Description to update tags.`);
+         return;
+      }
+    }
+
     setShowUpdateMenu(false);
     setShowGenerateMenu(false);
 
@@ -346,12 +365,8 @@ export default function SpreadsheetGrid() {
 
          const state = value || "Draft";
          let textColor = "#64748b"; // Default slate gray
-         if (state === "Generate AI") { textColor = "#a855f7"; }
-         else if (state === "Generating...") { textColor = "#f59e0b"; }
+         if (state === "Generating...") { textColor = "#f59e0b"; }
          else if (state === "Review") { textColor = "#10b981"; }
-         else if (state === "Ready to Push") { textColor = "#3b82f6"; }
-         else if (state === "Update Text & SEO") { textColor = "#3b82f6"; }
-         else if (state === "Update Images" || state === "Update Digital Files") { textColor = "#3b82f6"; }
          else if (state === "Pushing...") { textColor = "#f59e0b"; }
          else if (state === "Published") { textColor = "#059669"; }
          else if (state === "Error") { textColor = "#ef4444"; }
@@ -549,22 +564,10 @@ export default function SpreadsheetGrid() {
       dataRef.current = newDataArray;
       setData(newDataArray);
 
-      // Automatically trigger the AI if Status was changed to 'Generate AI'
-      if (columnId === "status" && newStringValue === "Generate AI") {
-        if (dataRef.current[row].status === "Generating..." || dataRef.current[row].status === "Pushing...") return;
-        triggerAIGeneration(row);
-        return;
-      }
 
-      // Automatically trigger Push/Update to Etsy
-      if (columnId === "status" && (newStringValue === "Ready to Push" || newStringValue === "Update Text & SEO" || newStringValue === "Update Images" || newStringValue === "Update Digital Files")) {
-        if (dataRef.current[row].status === "Generating..." || dataRef.current[row].status === "Pushing...") return;
-        triggerEtsyPush(row, newStringValue);
-        return; // Don't write 'Ready to Push' to state below
-      }
 
     },
-    [columns, triggerAIGeneration, triggerEtsyPush]
+    [columns]
   );
 
   const onColumnResize = useCallback((column: GridColumn, newSize: number) => {
@@ -619,7 +622,6 @@ export default function SpreadsheetGrid() {
 
       return true;
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [columns, triggerFolderAutomation]
   );
 
