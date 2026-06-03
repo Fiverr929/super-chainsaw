@@ -49,6 +49,7 @@ export default function Sidebar() {
     } else {
       localStorage.removeItem("workstation_etsy_active_store_id");
     }
+    window.dispatchEvent(new Event("etsy-store-changed"));
   };
 
   const handleConnect = async () => {
@@ -152,6 +153,7 @@ export default function Sidebar() {
                             setStoreDropdownOpen(false);
                             setActiveStoreId(store.id);
                             localStorage.setItem("workstation_etsy_active_store_id", store.id);
+                            window.dispatchEvent(new Event("etsy-store-changed"));
                           }}
                         >
                           <Check size={11} className={`shrink-0 ${store.id === activeStoreId ? "text-blue-500" : "text-transparent"}`} />

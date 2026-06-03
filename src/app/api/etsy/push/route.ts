@@ -1,8 +1,23 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from 'next/server';
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
 import sharp from 'sharp';
+
+// --- AXIOS RETRY HELPER FOR RATE LIMITS ---
+async function axiosWithRetry(config: any, retries = 3, delay = 2000): Promise<any> {
+  try {
+    return await axios(config);
+  } catch (err: any) {
+    if (err.response?.status === 429 && retries > 0) {
+      console.warn(`Rate limit hit (429) on ${config.url || 'request'}. Retrying in ${delay}ms... (${retries} retries left)`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return axiosWithRetry(config, retries - 1, delay * 2);
+    }
+    throw err;
+  }
+}
 
 // --- PROPERTY MAPS ---
 const TAXONOMY_MAP: Record<string, number> = {
@@ -20,12 +35,6 @@ const TAXONOMY_MAP: Record<string, number> = {
   "Digital Paper": 1251,
   "SVG Files": 7663,
   "Lightroom Presets": 12107
-};
-
-const SECTION_MAP: Record<string, number> = {
-  "Comfort Colors 1717": 58682515,
-  "Gilden 5000": 58682519,
-  "Digital Prints": 58753559
 };
 
 const PROP_PRIMARY_COLOR: Record<string, number> = {
@@ -46,52 +55,81 @@ const PROP_ART_SUBJECT: Record<string, number> = {
 
 export async function POST(req: Request) {
   let data: Record<string, string> = {};
+  let listingId: string | undefined = undefined;
+  let isNewListing = false;
+  let headers: Record<string, string> = {};
+  let shopId = '';
+
   try {
     data = await req.json();
     
     const apiKey = process.env.ETSY_API_KEY;
     const sharedSecret = process.env.ETSY_SHARED_SECRET;
     const refreshToken = process.env.ETSY_REFRESH_TOKEN;
-    const shopId = process.env.ETSY_SHOP_ID;
+    shopId = process.env.ETSY_SHOP_ID || '';
 
     if (!apiKey || !sharedSecret || !refreshToken || !shopId) {
       return NextResponse.json({ error: 'Missing Etsy API credentials in .env.local' }, { status: 400 });
     }
 
     // 1. Get Access Token
-    const tokenRes = await axios.post('https://api.etsy.com/v3/public/oauth/token', {
-      grant_type: 'refresh_token',
-      client_id: apiKey,
-      refresh_token: refreshToken
-    }, {
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+    const tokenRes = await axiosWithRetry({
+      url: 'https://api.etsy.com/v3/public/oauth/token',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      data: new URLSearchParams({
+        grant_type: 'refresh_token',
+        client_id: apiKey,
+        refresh_token: refreshToken
+      })
     });
     
     const accessToken = tokenRes.data.access_token;
-    const headers = {
+    headers = {
       'x-api-key': `${apiKey}:${sharedSecret}`,
       'Authorization': `Bearer ${accessToken}`,
       'Content-Type': 'application/json'
     };
 
-    let listingId = data.listing_id;
+    listingId = data.listing_id;
+    isNewListing = !listingId;
 
     if (data.updateType === "all" || data.updateType === "text") {
-      // 2. Create or Update Draft Listing
-        const payload: Record<string, unknown> = {
-          quantity: parseInt(data.quantity) || 999,
-          title: data.title ? data.title.substring(0, 140) : undefined,
-          description: data.description,
-          price: parseFloat(data.price) || 0.0,
-          who_made: data.who_made || "i_did",
-          when_made: data.when_made || "2020_2026",
-          taxonomy_id: TAXONOMY_MAP[data.category as string] || 2078,
-          is_supply: data.is_supply === "true",
-          type: "download"
-        };
+      // 2. Resolve listing sections dynamically from Etsy
+      let shopSectionId: number | undefined = undefined;
+      if (data.section) {
+        try {
+          const sectionsRes = await axiosWithRetry({
+            url: `https://api.etsy.com/v3/application/shops/${shopId}/sections`,
+            method: 'GET',
+            headers
+          });
+          const matchingSection = (sectionsRes.data.results || []).find(
+            (s: { title: string }) => s.title.toLowerCase() === data.section.toLowerCase()
+          );
+          if (matchingSection) {
+            shopSectionId = matchingSection.shop_section_id;
+          }
+        } catch (err) {
+          console.warn("Failed to fetch shop sections dynamically:", err);
+        }
+      }
 
-      if (data.section && SECTION_MAP[data.section as string]) {
-        payload.shop_section_id = SECTION_MAP[data.section as string];
+      // 3. Create or Update Draft Listing
+      const payload: Record<string, unknown> = {
+        quantity: parseInt(data.quantity) || 999,
+        title: data.title ? data.title.substring(0, 140) : undefined,
+        description: data.description,
+        price: parseFloat(data.price) || 0.0,
+        who_made: data.who_made || "i_did",
+        when_made: data.when_made || "2020_2026",
+        taxonomy_id: TAXONOMY_MAP[data.category as string] || 2078,
+        is_supply: data.is_supply === "true",
+        type: "download"
+      };
+
+      if (shopSectionId !== undefined) {
+        payload.shop_section_id = shopSectionId;
       }
 
       if (data.tags) {
@@ -112,14 +150,24 @@ export async function POST(req: Request) {
 
       if (listingId) {
          // Update
-         await axios.patch(`https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}`, payload, { headers });
+         await axiosWithRetry({
+           url: `https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}`,
+           method: 'PATCH',
+           headers,
+           data: payload
+         });
       } else {
          // Create
-         const listingRes = await axios.post(`https://api.etsy.com/v3/application/shops/${shopId}/listings`, payload, { headers });
-         listingId = listingRes.data.listing_id;
+         const listingRes = await axiosWithRetry({
+           url: `https://api.etsy.com/v3/application/shops/${shopId}/listings`,
+           method: 'POST',
+           headers,
+           data: payload
+         });
+         listingId = String(listingRes.data.listing_id);
       }
 
-      // 3. Update Properties
+      // 4. Update Properties
       const propertyUpdates = [];
       if (data.primary_color && PROP_PRIMARY_COLOR[data.primary_color as string]) {
         propertyUpdates.push({ id: 200, value_ids: [PROP_PRIMARY_COLOR[data.primary_color as string]], values: [data.primary_color as string] });
@@ -136,10 +184,12 @@ export async function POST(req: Request) {
 
       for (const prop of propertyUpdates) {
         try {
-          await axios.put(`https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}/properties/${prop.id}`, 
-            { value_ids: prop.value_ids, values: prop.values }, 
-            { headers }
-          );
+          await axiosWithRetry({
+            url: `https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}/properties/${prop.id}`,
+            method: 'PUT',
+            headers,
+            data: { value_ids: prop.value_ids, values: prop.values }
+          });
         } catch (err: unknown) {
           const error = err as { response?: { data?: unknown }, message?: string };
           console.warn(`Failed to update property ${prop.id}. Ignoring.`, error.response?.data || error.message);
@@ -152,16 +202,14 @@ export async function POST(req: Request) {
     // Helper to resolve paths dynamically
     const resolveFilePath = (fileUrl: string) => {
       if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://') || fileUrl.startsWith('data:')) {
-         return null; // We only support local files for now
+         return null; 
       }
       if (fileUrl.match(/^[A-Za-z]:/)) {
-         return fileUrl; // Already absolute Windows path
+         return fileUrl; 
       }
-      // If it starts with a slash, it's relative to the public folder
       if (fileUrl.startsWith('/')) {
          return path.join(/*turbopackIgnore: true*/ process.cwd(), 'public', fileUrl);
       }
-      // Otherwise assume it's relative to project root
       return path.join(/*turbopackIgnore: true*/ process.cwd(), fileUrl);
     };
 
@@ -175,19 +223,26 @@ export async function POST(req: Request) {
     };
 
     if (data.updateType === "all" || data.updateType === "images") {
-      // 4. Upload Preview Images
-      // We use axios exclusively so unknown network or 4xx/5xx failure correctly throws an error instead of silently passing
+      // 5. Upload Preview Images
       if (data.images) {
         let existingImages: { listing_image_id: number }[] = [];
         if (listingId) {
           try {
-            const existingImagesRes = await axios.get(`https://api.etsy.com/v3/application/listings/${listingId}/images`, { headers });
+            const existingImagesRes = await axiosWithRetry({
+              url: `https://api.etsy.com/v3/application/listings/${listingId}/images`,
+              method: 'GET',
+              headers
+            });
             existingImages = existingImagesRes.data.results || [];
             
-            // Delete all EXCEPT the first one (Etsy requires at least 1 image at all times)
+            // Delete all EXCEPT the first one
             for (let i = 1; i < existingImages.length; i++) {
               try {
-                await axios.delete(`https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}/images/${existingImages[i].listing_image_id}`, { headers });
+                await axiosWithRetry({
+                  url: `https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}/images/${existingImages[i].listing_image_id}`,
+                  method: 'DELETE',
+                  headers
+                });
               } catch (delErr: unknown) {
                 if ((delErr as {response?: {status?: number}}).response?.status !== 404) throw delErr;
               }
@@ -208,7 +263,6 @@ export async function POST(req: Request) {
             let mimeType = ext === '.png' ? 'image/png' : 'image/jpeg';
             let fileName = path.basename(absolutePath);
 
-            // Compress massive images (>5MB) into high-quality JPEG
             if (finalBuffer.length > 5 * 1024 * 1024) {
                finalBuffer = await sharp(finalBuffer).jpeg({ quality: 85 }).toBuffer();
                mimeType = 'image/jpeg';
@@ -234,18 +288,23 @@ export async function POST(req: Request) {
             const uploadHeaders: Record<string, string> = { ...headers };
             delete uploadHeaders['Content-Type'];
 
-            // Use axios so it properly throws on 4xx/5xx failures
-            await axios.post(`https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}/images`, formData, {
-              headers: uploadHeaders
+            await axiosWithRetry({
+              url: `https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}/images`,
+              method: 'POST',
+              headers: uploadHeaders,
+              data: formData
             });
             
-            // Once the first new image is successfully uploaded, we can safely delete the lingering old image
             if (rank === 1 && existingImages.length > 0) {
-                try {
-                   await axios.delete(`https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}/images/${existingImages[0].listing_image_id}`, { headers });
-                } catch (delErr: unknown) {
-                   if ((delErr as {response?: {status?: number}}).response?.status !== 404) throw delErr;
-                }
+                 try {
+                    await axiosWithRetry({
+                      url: `https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}/images/${existingImages[0].listing_image_id}`,
+                      method: 'DELETE',
+                      headers
+                    });
+                 } catch (delErr: unknown) {
+                    if ((delErr as {response?: {status?: number}}).response?.status !== 404) throw delErr;
+                 }
             }
             
             rank++;
@@ -253,19 +312,70 @@ export async function POST(req: Request) {
         }
       }
 
+      // 6. Upload Promo Video
+      if (data.video) {
+        const absoluteVideoPath = resolveFilePath(data.video);
+        if (absoluteVideoPath && fs.existsSync(absoluteVideoPath)) {
+          // Delete existing video(s)
+          try {
+            const existingVideosRes = await axiosWithRetry({
+              url: `https://api.etsy.com/v3/application/listings/${listingId}/videos`,
+              method: 'GET',
+              headers
+            });
+            const existingVideos = existingVideosRes.data.results || [];
+            for (const v of existingVideos) {
+              try {
+                await axiosWithRetry({
+                  url: `https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}/videos/${v.listing_video_id}`,
+                  method: 'DELETE',
+                  headers
+                });
+              } catch (delErr: any) {
+                if (delErr.response?.status !== 404) throw delErr;
+              }
+            }
+          } catch (err) {
+            console.warn("Failed to delete existing video:", err);
+          }
+
+          // Upload new video file
+          const videoBuffer = fs.readFileSync(absoluteVideoPath);
+          const videoBlob = new Blob([new Uint8Array(videoBuffer)], { type: 'video/mp4' });
+          const videoFormData = new FormData();
+          videoFormData.append("video", videoBlob, path.basename(absoluteVideoPath));
+
+          const uploadHeaders: Record<string, string> = { ...headers };
+          delete uploadHeaders['Content-Type'];
+
+          await axiosWithRetry({
+            url: `https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}/videos`,
+            method: 'POST',
+            headers: uploadHeaders,
+            data: videoFormData
+          });
+        }
+      }
     }
 
     if (data.updateType === "all" || data.updateType === "files") {
-      // 5. Upload Digital File
+      // 7. Upload Digital Files
       if (data.digital_file) {
         if (listingId) {
-          // If updating, first delete existing files
           try {
-            const existingFilesRes = await axios.get(`https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}/files`, { headers });
+            const existingFilesRes = await axiosWithRetry({
+              url: `https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}/files`,
+              method: 'GET',
+              headers
+            });
             const existingFiles = existingFilesRes.data;
             for (const f of existingFiles.results || []) {
               try {
-                await axios.delete(`https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}/files/${f.listing_file_id}`, { headers });
+                await axiosWithRetry({
+                  url: `https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}/files/${f.listing_file_id}`,
+                  method: 'DELETE',
+                  headers
+                });
               } catch (delErr: unknown) {
                 if ((delErr as {response?: {status?: number}}).response?.status !== 404) throw delErr;
               }
@@ -276,7 +386,6 @@ export async function POST(req: Request) {
           }
         }
 
-        // Etsy strictly limits digital files to 5 max per listing
         const files = data.digital_file.split(",").map((s: string) => s.trim()).filter(Boolean).slice(0, 5);
         for (const fileUrl of files) {
           const absolutePath = resolveFilePath(fileUrl);
@@ -300,9 +409,11 @@ export async function POST(req: Request) {
             const uploadHeaders: Record<string, string> = { ...headers };
             delete uploadHeaders['Content-Type'];
 
-            // Use axios so it properly throws on 4xx/5xx failures
-            await axios.post(`https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}/files`, formData, {
-              headers: uploadHeaders
+            await axiosWithRetry({
+              url: `https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}/files`,
+              method: 'POST',
+              headers: uploadHeaders,
+              data: formData
             });
           }
         }
@@ -314,6 +425,21 @@ export async function POST(req: Request) {
     const errorDetails = (err as { response?: { data?: unknown } }).response?.data || (err as Error).message;
     console.error("Etsy Push Error:", JSON.stringify(errorDetails, null, 2));
     
+    // TRANSACTION ROLLBACK: Delete newly created draft listing if operations failed
+    if (isNewListing && listingId) {
+      try {
+        console.log(`Triggering rollback deletion for orphan listing draft ID: ${listingId}`);
+        await axiosWithRetry({
+          url: `https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}`,
+          method: 'DELETE',
+          headers
+        });
+        console.log(`Rollback complete: Deleted draft listing ID ${listingId}.`);
+      } catch (rollbackErr: any) {
+        console.error(`Failed to rollback and delete draft listing ID ${listingId}:`, rollbackErr.response?.data || rollbackErr.message);
+      }
+    }
+
     // Save to file for debugging
     try {
       fs.writeFileSync(path.join(process.cwd(), 'latest_error.json'), JSON.stringify({

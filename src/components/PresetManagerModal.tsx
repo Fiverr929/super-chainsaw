@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { X, Plus, Trash2, Save } from "lucide-react";
 import toast from "react-hot-toast";
-import { ETSY_CATEGORIES, ETSY_SECTIONS, ETSY_WHEN_MADE, ETSY_SUBJECTS, ETSY_OCCASIONS, ETSY_CELEBRATIONS, categorySupportsOccasion, categorySupportsCelebration, categorySupportsSubject } from "@/lib/etsyConstants";
+import { ETSY_CATEGORIES, ETSY_WHEN_MADE, ETSY_SUBJECTS, ETSY_OCCASIONS, ETSY_CELEBRATIONS, categorySupportsOccasion, categorySupportsCelebration, categorySupportsSubject } from "@/lib/etsyConstants";
 
 export type Preset = {
   id: string;
@@ -66,11 +66,27 @@ export default function PresetManagerModal({ onClose }: PresetManagerModalProps)
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Preset | null>(null);
   const [isCreatingNew, setIsCreatingNew] = useState(false);
+  const [sections, setSections] = useState<string[]>([""]);
 
   const savePresets = (newPresets: Preset[]) => {
     setPresets(newPresets);
     localStorage.setItem("workstation_v2_presets", JSON.stringify(newPresets));
   };
+
+  React.useEffect(() => {
+     fetch('/api/etsy/sections')
+       .then(res => res.json())
+       .then(data => {
+          if (data.sections && Array.isArray(data.sections)) {
+             setSections(["", ...data.sections.map((s: { title: string }) => s.title)]);
+          } else {
+             setSections(["", "Comfort Colors 1717", "Gilden 5000", "Digital Prints"]);
+          }
+       })
+       .catch(() => {
+          setSections(["", "Comfort Colors 1717", "Gilden 5000", "Digital Prints"]);
+       });
+  }, []);
 
   const handleAddNew = () => {
     const newPreset: Preset = {
@@ -268,7 +284,7 @@ export default function PresetManagerModal({ onClose }: PresetManagerModalProps)
                       className="w-full px-3 py-2 text-sm rounded-none border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                     >
                       <option value="">Select Section...</option>
-                      {ETSY_SECTIONS.map(sec => <option key={sec} value={sec}>{sec}</option>)}
+                      {sections.map(sec => <option key={sec} value={sec}>{sec}</option>)}
                     </select>
                   </div>
                 </div>

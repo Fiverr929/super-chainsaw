@@ -19,7 +19,6 @@ import "@glideapps/glide-data-grid/dist/index.css";
 import {
   ETSY_CATEGORIES,
   ETSY_SUBJECTS,
-  ETSY_SECTIONS,
   ETSY_COLORS,
   ETSY_OCCASIONS,
   ETSY_CELEBRATIONS,
@@ -132,6 +131,31 @@ export default function SpreadsheetGrid() {
   const isProcessingQueue = React.useRef(false);
   const [showUpdateMenu, setShowUpdateMenu] = useState(false);
   const [showGenerateMenu, setShowGenerateMenu] = useState(false);
+  const [sections, setSections] = useState<string[]>([""]);
+
+  const fetchSections = useCallback(() => {
+     fetch('/api/etsy/sections')
+       .then(res => res.json())
+       .then(data => {
+          if (data.sections && Array.isArray(data.sections)) {
+             setSections(["", ...data.sections.map((s: { title: string }) => s.title)]);
+          } else {
+             setSections(["", "Comfort Colors 1717", "Gilden 5000", "Digital Prints"]);
+          }
+       })
+       .catch(err => {
+          console.warn("Failed to load shop sections dynamically:", err);
+          setSections(["", "Comfort Colors 1717", "Gilden 5000", "Digital Prints"]);
+       });
+  }, []);
+
+  React.useEffect(() => {
+     fetchSections();
+     
+     window.addEventListener("etsy-store-changed", fetchSections);
+     return () => window.removeEventListener("etsy-store-changed", fetchSections);
+  }, [fetchSections]);
+
   React.useEffect(() => {
     document.fonts.ready.then(() => {
       setFontsLoaded(true);
@@ -364,12 +388,37 @@ export default function SpreadsheetGrid() {
          }
 
          const state = value || "Draft";
-         let textColor = "#64748b"; // Default slate gray
-         if (state === "Generating...") { textColor = "#f59e0b"; }
-         else if (state === "Review") { textColor = "#10b981"; }
-         else if (state === "Pushing...") { textColor = "#f59e0b"; }
-         else if (state === "Published") { textColor = "#059669"; }
-         else if (state === "Error") { textColor = "#ef4444"; }
+         const isLoading = state === "Generating..." || state === "Pushing...";
+
+         if (isLoading) {
+            const textColor = "#b45309"; // amber-700
+            return {
+               kind: GridCellKind.Text,
+               allowOverlay: false,
+               readonly: true,
+               data: state,
+               displayData: `⏳ ${state}`,
+               themeOverride: {
+                  textDark: textColor,
+                  textLight: textColor,
+                  baseFontStyle: "bold 12px Inter, sans-serif",
+                  bgCell: "#fef3c7" // amber shading
+               }
+            } as GridCell;
+         }
+
+         let textColor = "#4b5563"; // gray-600
+         let bgCell = "#f3f4f6"; // gray-100
+         if (state === "Review") {
+            textColor = "#047857"; // emerald-700
+            bgCell = "#ecfdf5"; // emerald-50
+         } else if (state === "Published") {
+            textColor = "#15803d"; // green-700
+            bgCell = "#dcfce7"; // green-50
+         } else if (state === "Error") {
+            textColor = "#b91c1c"; // red-700
+            bgCell = "#fee2e2"; // red-50
+         }
 
          return {
             kind: GridCellKind.Custom,
@@ -383,7 +432,8 @@ export default function SpreadsheetGrid() {
             themeOverride: { 
               textDark: textColor,
               textLight: textColor,
-              baseFontStyle: "bold 13px Inter, sans-serif"
+              baseFontStyle: "bold 12px Inter, sans-serif",
+              bgCell: bgCell
             }
          } as GridCell;
       }
@@ -429,7 +479,7 @@ export default function SpreadsheetGrid() {
             copyData: value,
             data: {
                kind: "dropdown-cell",
-               allowedValues: ETSY_SECTIONS,
+               allowedValues: sections,
                value: value || ""
             },
             themeOverride: { 
@@ -497,7 +547,7 @@ export default function SpreadsheetGrid() {
         displayData: value,
       } as TextCell;
     },
-    [columns]
+    [columns, sections]
   );
 
   const getCellsForSelection = useCallback(
