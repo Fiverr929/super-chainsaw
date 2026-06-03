@@ -45,3 +45,6 @@ public/listings/*
 # local runtime logs
 latest_error.json
 
+# etsy tokens
+tokens.json
+

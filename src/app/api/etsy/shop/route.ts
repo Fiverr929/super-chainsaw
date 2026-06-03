@@ -1,11 +1,12 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
+import { getEtsyRefreshToken, saveEtsyRefreshToken } from '@/lib/etsyTokenStore';
 
 export async function GET() {
   try {
     const apiKey = process.env.ETSY_API_KEY;
     const sharedSecret = process.env.ETSY_SHARED_SECRET;
-    const refreshToken = process.env.ETSY_REFRESH_TOKEN;
+    const refreshToken = getEtsyRefreshToken();
     const shopId = process.env.ETSY_SHOP_ID;
 
     if (!apiKey || !sharedSecret || !refreshToken || !shopId) {
@@ -22,6 +23,10 @@ export async function GET() {
     });
     
     const accessToken = tokenRes.data.access_token;
+    const newRefreshToken = tokenRes.data.refresh_token;
+    if (newRefreshToken) {
+      saveEtsyRefreshToken(newRefreshToken);
+    }
 
     // 2. Fetch Shop Info
     const shopRes = await axios.get(`https://api.etsy.com/v3/application/shops/${shopId}`, {
