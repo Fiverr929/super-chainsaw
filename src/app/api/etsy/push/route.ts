@@ -344,6 +344,7 @@ export async function POST(req: Request) {
           const videoBlob = new Blob([new Uint8Array(videoBuffer)], { type: 'video/mp4' });
           const videoFormData = new FormData();
           videoFormData.append("video", videoBlob, path.basename(absoluteVideoPath));
+          videoFormData.append("name", path.basename(absoluteVideoPath));
 
           const uploadHeaders: Record<string, string> = { ...headers };
           delete uploadHeaders['Content-Type'];
