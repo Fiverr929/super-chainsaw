@@ -6,7 +6,7 @@ export const ETSY_SUBJECTS = ["", "Abstract & geometric", "Animal", "Anime & car
 
 export const ETSY_SECTIONS = ["", "Comfort Colors 1717", "Gilden 5000", "Digital Prints"];
 
-export const ETSY_COLORS = ["", "Beige", "Black", "Blue", "Bronze", "Brown", "Clear", "Copper", "Gold", "Gray", "Green", "Orange", "Pink", "Purple", "Red", "Rose gold", "Silver", "White", "Yellow"];
+export const ETSY_COLORS = ["", "Beige", "Black", "Blue", "Bronze", "Brown", "Clear", "Copper", "Gold", "Gray", "Green", "Orange", "Pink", "Purple", "Rainbow", "Red", "Rose gold", "Silver", "White", "Yellow"];
 
 export const ETSY_OCCASIONS = ["", "1st birthday", "Anniversary", "Baby shower", "Back to school", "Baptism", "Bar & Bat Mitzvah", "Birthday", "Bridal shower", "Confirmation", "Divorce & breakup", "Engagement", "First Communion", "Graduation", "Grief & mourning", "House warming", "LGBTQ pride", "Moving", "Pet loss", "Retirement", "Wedding"];
 

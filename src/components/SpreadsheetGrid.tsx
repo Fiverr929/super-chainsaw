@@ -958,7 +958,7 @@ export default function SpreadsheetGrid() {
                 row.celebration = preset.celebration || "";
                 row.subject = preset.subject || "";
                 row.who_made = preset.who_made || "i_did";
-                row.when_made = preset.when_made || "2020_2024";
+                row.when_made = preset.when_made || "2020_2026";
                 row.is_supply = preset.is_supply || "false";
                 row.renewal_options = preset.renewal_options || "automatic";
                 row.ai_title_rules = preset.ai_title_rules || "";
