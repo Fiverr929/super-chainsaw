@@ -311,7 +311,9 @@ export async function POST(req: Request) {
           }
         }
       }
+    }
 
+    if (data.updateType === "all" || data.updateType === "video") {
       // 6. Upload Promo Video
       if (data.video) {
         const absoluteVideoPath = resolveFilePath(data.video);

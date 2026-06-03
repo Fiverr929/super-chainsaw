@@ -16,7 +16,8 @@ export function useEtsyPush(
       const rowDataToPush = { 
         ...dataRef.current[row],
         updateType: actionType === "Update Text & SEO" ? "text" :
-                    actionType === "Update Images" ? "images" : 
+                    actionType === "Update Images Only" ? "images" : 
+                    actionType === "Update Video Only" ? "video" : 
                     actionType === "Update Digital Files" ? "files" : "all"
       };
 

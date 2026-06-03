@@ -249,7 +249,9 @@ export default function SpreadsheetGrid() {
         } else if (currentTask.action === "update_text") {
           await triggerEtsyPush(currentTask.row, "Update Text & SEO");
         } else if (currentTask.action === "update_images") {
-          await triggerEtsyPush(currentTask.row, "Update Images");
+          await triggerEtsyPush(currentTask.row, "Update Images Only");
+        } else if (currentTask.action === "update_video") {
+          await triggerEtsyPush(currentTask.row, "Update Video Only");
         } else if (currentTask.action === "update_files") {
           await triggerEtsyPush(currentTask.row, "Update Digital Files");
         }
@@ -1040,7 +1042,8 @@ export default function SpreadsheetGrid() {
                 <div className="absolute bottom-full left-0 mb-3 bg-[#2b52d6] border border-blue-500 shadow-xl flex flex-col p-1 min-w-[200px] animate-in slide-in-from-bottom-2 fade-in duration-200">
                   <span className="text-xs font-bold text-blue-200 px-3 py-1.5 uppercase tracking-wider">Update Options</span>
                   <button onClick={() => processBulkQueue('update_text', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700 transition-colors">Text & SEO</button>
-                  <button onClick={() => processBulkQueue('update_images', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700 transition-colors">Images & Video</button>
+                  <button onClick={() => processBulkQueue('update_images', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700 transition-colors">Images Only</button>
+                  <button onClick={() => processBulkQueue('update_video', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700 transition-colors">Video Only</button>
                   <button onClick={() => processBulkQueue('update_files', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700 transition-colors">Digital Files</button>
                   <div className="h-px bg-blue-500 my-1 mx-2"></div>
                   <button onClick={() => processBulkQueue('publish', selectedRowsList)} className="text-left px-3 py-2 text-sm text-white hover:bg-red-600 transition-colors font-semibold">Force Full Overwrite</button>
