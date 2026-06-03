@@ -16,7 +16,7 @@ export const ETSY_STATUSES = ["Draft", "Generating...", "Review", "Pushing...", 
 
 export const categorySupportsOccasion = (cat: string) => {
   if (!cat) return true;
-  return !["Clip Art", "Digital Patterns", "Fonts", "Digital Paper", "SVG Files", "Lightroom Presets"].includes(cat);
+  return !["Clip Art", "Digital Patterns", "Fonts", "Lightroom Presets", "Social Media Templates", "SVG Files"].includes(cat);
 };
 
 export const categorySupportsCelebration = (cat: string) => {
