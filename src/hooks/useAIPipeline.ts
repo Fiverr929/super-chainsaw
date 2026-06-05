@@ -4,7 +4,9 @@ import toast from 'react-hot-toast';
 
 export function useAIPipeline(
   dataRef: React.MutableRefObject<RowData[]>,
-  setData: React.Dispatch<React.SetStateAction<RowData[]>>
+  setData: React.Dispatch<React.SetStateAction<RowData[]>>,
+  sheetType: 'digital' | 'physical',
+  sheetRef: React.MutableRefObject<'digital' | 'physical'>
 ) {
   const triggerAIGeneration = useCallback((row: number, forceRegenerate: string[] = []): Promise<void> => {
     return new Promise((resolve) => {
@@ -22,7 +24,11 @@ export function useAIPipeline(
     let promptContext = dataRef.current[row].context || "";
     if (dataRef.current[row].folder) promptContext += `\nFolder/Product Name: ${dataRef.current[row].folder}`;
     if (dataRef.current[row].category) promptContext += `\nProduct Category: ${dataRef.current[row].category}`;
-    if (dataRef.current[row].digital_file) promptContext += `\nFormat: Digital Download (NOT a physical item)`;
+    if (sheetType === 'digital') {
+      if (dataRef.current[row].digital_file) promptContext += `\nFormat: Digital Download (NOT a physical item)`;
+    } else {
+      promptContext += `\nFormat: Physical Product (NOT a digital download)`;
+    }
     if (dataRef.current[row].title) promptContext += `\nTitle: ${dataRef.current[row].title}`;
     if (dataRef.current[row].description) promptContext += `\nDescription: ${dataRef.current[row].description}`;
 
@@ -55,22 +61,37 @@ export function useAIPipeline(
       return res.json();
     })
     .then(aiData => {
-      const prev2 = dataRef.current;
-      const newData = [...prev2];
-      newData[row] = {
-        ...newData[row],
-        title: aiData.title || newData[row].title,
-        description: aiData.description || newData[row].description,
-        tags: aiData.tags || newData[row].tags,
-        alt_text: (aiData.alt_texts && Array.isArray(aiData.alt_texts)) ? aiData.alt_texts.join(" | ") : newData[row].alt_text,
-        primary_color: aiData.primary_color !== undefined ? aiData.primary_color : newData[row].primary_color,
-        occasion: aiData.occasion !== undefined ? aiData.occasion : newData[row].occasion,
-        celebration: aiData.celebration !== undefined ? aiData.celebration : newData[row].celebration,
-        subject: aiData.subject !== undefined ? aiData.subject : newData[row].subject,
-        status: aiData.error ? "Error" : "Review"
+      const updatedRow = {
+        title: aiData.title || existingDataPayload.title,
+        description: aiData.description || existingDataPayload.description,
+        tags: aiData.tags || existingDataPayload.tags,
+        alt_text: (aiData.alt_texts && Array.isArray(aiData.alt_texts)) ? aiData.alt_texts.join(' | ') : existingDataPayload.alt_text,
+        primary_color: aiData.primary_color !== undefined ? aiData.primary_color : existingDataPayload.primary_color,
+        occasion: aiData.occasion !== undefined ? aiData.occasion : existingDataPayload.occasion,
+        celebration: aiData.celebration !== undefined ? aiData.celebration : existingDataPayload.celebration,
+        subject: aiData.subject !== undefined ? aiData.subject : existingDataPayload.subject,
+        graphic: aiData.graphic !== undefined ? aiData.graphic : existingDataPayload.graphic,
+        status: aiData.error ? 'Error' : 'Review'
       };
-      dataRef.current = newData;
-      setData(newData);
+
+      if (sheetRef.current === sheetType) {
+        const prev2 = dataRef.current;
+        const newData = [...prev2];
+        newData[row] = {
+          ...newData[row],
+          ...updatedRow
+        };
+        dataRef.current = newData;
+        setData(newData);
+      } else {
+        const key = sheetType === 'digital' ? 'workstation_v2_grid_data' : 'workstation_v2_grid_data_physical';
+        const saved = localStorage.getItem(key);
+        if (saved) {
+           const parsed = JSON.parse(saved);
+           parsed[row] = { ...parsed[row], ...updatedRow };
+           localStorage.setItem(key, JSON.stringify(parsed));
+        }
+      }
 
       if (aiData.error) {
         toast.error(`AI Generation Failed:\n${aiData.error}`);
@@ -83,11 +104,21 @@ export function useAIPipeline(
     .catch(err => {
       clearTimeout(timeoutId);
       console.error("AI Generation failed:", err);
-      const prev2 = dataRef.current;
-      const newData = [...prev2];
-      newData[row] = { ...newData[row], status: "Error" };
-      dataRef.current = newData;
-      setData(newData);
+      if (sheetRef.current === sheetType) {
+        const prev2 = dataRef.current;
+        const newData = [...prev2];
+        newData[row] = { ...newData[row], status: 'Error' };
+        dataRef.current = newData;
+        setData(newData);
+      } else {
+        const key = sheetType === 'digital' ? 'workstation_v2_grid_data' : 'workstation_v2_grid_data_physical';
+        const saved = localStorage.getItem(key);
+        if (saved) {
+           const parsed = JSON.parse(saved);
+           parsed[row] = { ...parsed[row], status: 'Error' };
+           localStorage.setItem(key, JSON.stringify(parsed));
+        }
+      }
       
       if (err.name === 'AbortError') {
         toast.error("AI Generation timed out after 3 minutes. The Google Gemini API might be congested. Please try again.");
@@ -97,7 +128,7 @@ export function useAIPipeline(
       resolve(); // Resolve to prevent queue from blocking indefinitely
     });
     });
-  }, [dataRef, setData]);
+  }, [dataRef, setData, sheetType]);
 
   const triggerFolderAutomation = useCallback((row: number, folderName: string) => {
     if (folderName.trim() === "") return;
@@ -107,7 +138,7 @@ export function useAIPipeline(
     dataRef.current = optimisticArray;
     setData(optimisticArray);
 
-    fetch(`/api/assets?folder=${encodeURIComponent(folderName.trim())}`)
+    fetch(`/api/assets?folder=${encodeURIComponent(folderName.trim())}&type=${sheetType}`)
       .then(res => res.json())
       .then(assetData => {
          if (assetData && !assetData.error) {

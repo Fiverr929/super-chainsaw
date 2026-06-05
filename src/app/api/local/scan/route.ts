@@ -4,9 +4,12 @@ import path from 'path';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const listingsDir = path.join(/*turbopackIgnore: true*/ process.cwd(), 'public', 'listings');
+    const { searchParams } = new URL(request.url);
+    const type = searchParams.get('type') || 'digital';
+    const baseDir = type === 'physical' ? 'listings-physical' : 'listings';
+    const listingsDir = path.join(/*turbopackIgnore: true*/ process.cwd(), 'public', baseDir);
     
     // Create the directory if it doesn't exist yet
     if (!fs.existsSync(listingsDir)) {

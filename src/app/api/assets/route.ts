@@ -7,13 +7,14 @@ export const dynamic = 'force-dynamic';
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const folderName = searchParams.get('folder');
+  const type = searchParams.get('type') || 'digital';
 
   if (!folderName || folderName.includes('..')) {
     return NextResponse.json({ error: 'Invalid folder name' }, { status: 400 });
   }
 
-  // We are scoping the scanner strictly to the public/listings directory for security.
-  const listingsDir = path.join(/*turbopackIgnore: true*/ process.cwd(), 'public', 'listings', folderName);
+  const baseDir = type === 'physical' ? 'listings-physical' : 'listings';
+  const listingsDir = path.join(/*turbopackIgnore: true*/ process.cwd(), 'public', baseDir, folderName);
 
   if (!fs.existsSync(listingsDir)) {
     return NextResponse.json({ error: 'Folder not found' }, { status: 404 });
@@ -30,7 +31,7 @@ export async function GET(request: Request) {
     files.forEach(file => {
       const ext = path.extname(file).toLowerCase();
       // Only serve relative paths so the browser can access them via the public directory
-      const relativeUrl = `/listings/${folderName}/${file}`;
+      const relativeUrl = `/${baseDir}/${folderName}/${file}`;
 
       if (['.png', '.jpg', '.jpeg'].includes(ext)) {
         images.push(relativeUrl);
@@ -43,7 +44,7 @@ export async function GET(request: Request) {
     const digitalDirPath = path.join(listingsDir, 'digital');
     if (fs.existsSync(digitalDirPath) && fs.statSync(digitalDirPath).isDirectory()) {
       const dFiles = fs.readdirSync(digitalDirPath);
-      digitalFile = dFiles.map(f => `/listings/${folderName}/digital/${f}`).join(',');
+      digitalFile = dFiles.map(f => `/${baseDir}/${folderName}/digital/${f}`).join(',');
     }
 
     // Sort images numerically/alphabetically (e.g., 1_main.png before 2_back.png)

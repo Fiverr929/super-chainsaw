@@ -1,4 +1,6 @@
-export const ETSY_CATEGORIES = ["", "Store Graphics", "Digital Prints", "Digital Planners", "Templates", "Clip Art", "Wall Art", "Digital Patterns", "Fonts", "Logos & Branding", "Social Media Templates", "Website Templates", "Digital Paper", "SVG Files", "Lightroom Presets"];
+export const ETSY_DIGITAL_CATEGORIES = ["", "Store Graphics", "Digital Prints", "Digital Planners", "Templates", "Clip Art", "Wall Art", "Digital Patterns", "Fonts", "Logos & Branding", "Social Media Templates", "Website Templates", "Digital Paper", "SVG Files", "Lightroom Presets"];
+
+export const ETSY_PHYSICAL_CATEGORIES = ["", "T-Shirts", "Sweatshirts & Hoodies", "Mugs & Drinkware", "Stickers & Decals", "Posters & Prints", "Tote Bags", "Hats & Caps"];
 
 export const ETSY_WHEN_MADE = ["made_to_order", "2020_2026", "2010_2019", "2007_2009", "before_2007", "2000_2006", "1990s", "1980s", "1970s", "1960s", "1950s", "1940s", "1930s", "1920s", "1910s", "1900_1909", "1800s", "1700s", "before_1700"];
 
@@ -26,5 +28,65 @@ export const categorySupportsCelebration = (cat: string) => {
 };
 
 export const categorySupportsSubject = (cat: string) => {
-  return ["Digital Prints", "Wall Art"].includes(cat);
+  return ["Digital Prints", "Wall Art", "Posters & Prints"].includes(cat);
+};
+export const ETSY_SECONDARY_COLORS = ETSY_COLORS;
+
+export const ETSY_ORIENTATION = ["", "Horizontal", "Vertical", "Square", "Round"];
+
+export const ETSY_FRAMING = ["", "Framed", "Unframed"];
+
+export const ETSY_ASPECT_RATIO = ["", "1:1", "1:2", "2:3", "3:4", "4:5", "5:7 (ISO ratio)", "11:14", "16:9"];
+
+export const ETSY_ROOM = ["", "Bathroom", "Bedroom", "Dorm", "Entryway", "Game room", "Kids", "Kitchen & dining", "Laundry", "Living room", "Nursery", "Office"];
+
+export const ETSY_HOME_STYLE = ["", "Art deco", "Art nouveau", "Bohemian & eclectic", "Coastal & tropical", "Contemporary", "Country & farmhouse", "Gothic", "Industrial & utility", "Lodge", "Mid-century", "Minimalist", "Rustic & primitive", "Southwestern", "Victorian"];
+
+export const ETSY_CAN_BE_PERSONALIZED = ["", "Yes", "No"];
+
+export const ETSY_SLEEVE_LENGTH = ["", "Short sleeve", "Long sleeve", "Sleeveless", "Three-quarter sleeve"];
+
+export const ETSY_NECKLINE = ["", "Crew neck", "V-neck", "Hooded", "Collared", "Off the shoulder", "Scoop neck"];
+
+export const ETSY_CLOTHING_STYLE = ["", "Athletic", "Casual", "Goth", "Minimalist", "Retro", "Streetwear"];
+
+export const ETSY_MUG_CAPACITY = ["", "11 oz", "15 oz", "20 oz", "30 oz"];
+export const categorySupportsGraphic = (cat: string) => {
+  return ["T-Shirts", "Sweatshirts & Hoodies", "Mugs & Drinkware"].includes(cat);
+};
+
+export const ETSY_GRAPHICS = [
+  "",
+  "Abstract & geometric", "Animal", "Anime & cartoon", "Beach & tropical", "Bollywood", 
+  "Brand & logo", "Comics & manga", "Fantasy & Sci Fi", "Fitspiration", "Flowers", 
+  "Food & drink", "Geography & locale", "Horror & gothic", "Humorous saying", 
+  "Inspirational saying", "LGBTQ pride", "Literary", "Love & friendship", 
+  "Military & historical", "Movie", "Music", "Nautical", "Patriotic & flags", 
+  "Phrase & saying", "Plants & trees", "Politics & elections", "Protest", 
+  "Punk & tattoos", "Religious", "Science & tech", "Sports & fitness", 
+  "Stars & celestial", "Steampunk", "Superhero", "Surf & skate", 
+  "Travel & transportation", "TV", "Video game", "Western & cowboy", "Zodiac"
+];
+
+export type VariationPropertyDef = {
+  name: string;
+  propertyId: number;
+  options: string[];
+};
+
+export const ETSY_VARIATION_PROPERTY_DEFS: Record<string, VariationPropertyDef[]> = {
+  "T-Shirts": [
+    { name: "Size", propertyId: 513, options: ["S", "M", "L", "XL", "2XL", "3XL"] },
+    { name: "Primary color", propertyId: 200, options: ["Beige", "Black", "Blue", "Bronze", "Brown", "Clear", "Copper", "Gold", "Gray", "Green", "Orange", "Pink", "Purple", "Rainbow", "Red", "Rose gold", "Silver", "White", "Yellow"] }
+  ],
+  "Sweatshirts & Hoodies": [
+    { name: "Size", propertyId: 513, options: ["S", "M", "L", "XL", "2XL", "3XL"] },
+    { name: "Primary color", propertyId: 200, options: ["Beige", "Black", "Blue", "Bronze", "Brown", "Clear", "Copper", "Gold", "Gray", "Green", "Orange", "Pink", "Purple", "Rainbow", "Red", "Rose gold", "Silver", "White", "Yellow"] }
+  ],
+  "Mugs & Drinkware": [
+    { name: "Capacity", propertyId: 52047898162, options: ["11 oz", "15 oz", "20 oz", "30 oz"] }
+  ],
+  "Posters & Prints": [
+    { name: "Size", propertyId: 513, options: ["8x10", "11x14", "12x16", "16x20", "18x24", "24x36"] }
+  ]
 };

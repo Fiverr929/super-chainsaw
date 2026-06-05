@@ -1,11 +1,36 @@
 "use client";
 
 import React, { useState } from "react";
-import { X, Plus, Trash2, Save } from "lucide-react";
+import { X, Plus, Trash2, Save, ChevronDown } from "lucide-react";
 import toast from "react-hot-toast";
-import { ETSY_CATEGORIES, ETSY_WHEN_MADE, ETSY_SUBJECTS, ETSY_OCCASIONS, ETSY_CELEBRATIONS, categorySupportsOccasion, categorySupportsCelebration, categorySupportsSubject } from "@/lib/etsyConstants";
+import { ETSY_DIGITAL_CATEGORIES, ETSY_PHYSICAL_CATEGORIES, ETSY_WHEN_MADE, ETSY_SUBJECTS, ETSY_OCCASIONS, ETSY_CELEBRATIONS, categorySupportsOccasion, categorySupportsCelebration, categorySupportsSubject, ETSY_ORIENTATION, ETSY_FRAMING, ETSY_ASPECT_RATIO, ETSY_ROOM, ETSY_HOME_STYLE, ETSY_CAN_BE_PERSONALIZED, ETSY_SLEEVE_LENGTH, ETSY_NECKLINE, ETSY_CLOTHING_STYLE, ETSY_MUG_CAPACITY, categorySupportsGraphic, ETSY_GRAPHICS, ETSY_VARIATION_PROPERTY_DEFS } from "@/lib/etsyConstants";
+
+export type VariationCombination = {
+  id: string;
+  values: Record<string, string>;
+  price?: string;
+  quantity?: string;
+  skuTemplate?: string;
+  imageSlot?: number;
+  isEnabled: boolean;
+};
+
+export type VariationProperty = {
+  name: string;
+  propertyId: number;
+  options: string[];
+};
+
+export type PresetVariations = {
+  properties: VariationProperty[];
+  combinations: VariationCombination[];
+  priceOnProperty: string[];
+  quantityOnProperty: string[];
+  skuOnProperty: string[];
+};
 
 export type Preset = {
+  variations?: PresetVariations;
   id: string;
   name: string;
   category: string;
@@ -20,12 +45,25 @@ export type Preset = {
   subject: string;
   occasion: string;
   celebration: string;
+  shipping_profile?: string;
+  readiness_state_id?: string;
   ai_title_rules: string;
   ai_desc_rules: string;
   ai_tag_rules: string;
+  materials?: string;
+  sleeve_length?: string;
+  neckline?: string;
+  clothing_style?: string;
+  capacity?: string;
+  dishwasher_safe?: string;
+  microwave_safe?: string;
+  orientation?: string;
+  framing?: string;
+  aspect_ratio?: string;
+  graphic?: string;
 };
 
-const DEFAULT_PRESET: Preset = {
+export const DEFAULT_PRESET: Preset = {
   id: "default-store-graphics",
   name: "Store Graphics Default",
   category: "Store Graphics",
@@ -40,6 +78,43 @@ const DEFAULT_PRESET: Preset = {
   subject: "",
   occasion: "",
   celebration: "",
+  shipping_profile: "",
+  variations: { properties: [], combinations: [], priceOnProperty: [], quantityOnProperty: [], skuOnProperty: [] },
+  readiness_state_id: "",
+  ai_title_rules: "MUST be exactly 140 characters or less including spaces",
+  ai_desc_rules: "Under 100 words total. One short punchy intro sentence, followed entirely by a scannable bullet-point list of the essential features/specs. NO FLUFF. No conclusion paragraphs.",
+  ai_tag_rules: "EXACTLY 13 Etsy Tags as a comma-separated string. Each individual tag MUST be 20 characters or less.",
+};
+
+export const DEFAULT_PHYSICAL_PRESET: Preset = {
+  id: "default-physical-preset",
+  name: "Physical Listing Default",
+  category: "",
+  materials: "",
+  sleeve_length: "",
+  neckline: "",
+  clothing_style: "",
+  capacity: "",
+  dishwasher_safe: "",
+  microwave_safe: "",
+  orientation: "",
+  framing: "",
+  aspect_ratio: "",
+  graphic: "",
+  section: "",
+  price: "19.99",
+  quantity: "100",
+  context: "This is a physical product.",
+  who_made: "i_did",
+  when_made: "2020_2026",
+  is_supply: "false",
+  renewal_options: "manual",
+  subject: "",
+  occasion: "",
+  celebration: "",
+  shipping_profile: "",
+  variations: { properties: [], combinations: [], priceOnProperty: [], quantityOnProperty: [], skuOnProperty: [] },
+  readiness_state_id: "",
   ai_title_rules: "MUST be exactly 140 characters or less including spaces",
   ai_desc_rules: "Under 100 words total. One short punchy intro sentence, followed entirely by a scannable bullet-point list of the essential features/specs. NO FLUFF. No conclusion paragraphs.",
   ai_tag_rules: "EXACTLY 13 Etsy Tags as a comma-separated string. Each individual tag MUST be 20 characters or less.",
@@ -47,30 +122,157 @@ const DEFAULT_PRESET: Preset = {
 
 interface PresetManagerModalProps {
   onClose: () => void;
+  sheetType: 'digital' | 'physical';
 }
 
-export default function PresetManagerModal({ onClose }: PresetManagerModalProps) {
+export default function PresetManagerModal({ onClose, sheetType }: PresetManagerModalProps) {
   const [presets, setPresets] = useState<Preset[]>(() => {
     if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("workstation_v2_presets");
+      const key = sheetType === "digital" ? "workstation_v2_presets" : "workstation_v2_presets_physical";
+      const saved = localStorage.getItem(key);
       if (saved) {
         try {
           return JSON.parse(saved);
         } catch {
-          return [DEFAULT_PRESET];
+          return [sheetType === "digital" ? DEFAULT_PRESET : DEFAULT_PHYSICAL_PRESET];
         }
       }
     }
-    return [DEFAULT_PRESET];
+    return [sheetType === "digital" ? DEFAULT_PRESET : DEFAULT_PHYSICAL_PRESET];
   });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Preset | null>(null);
   const [isCreatingNew, setIsCreatingNew] = useState(false);
   const [sections, setSections] = useState<string[]>([""]);
+  const [shippingProfiles, setShippingProfiles] = useState<string[]>([""]);
+  const [processingProfiles, setProcessingProfiles] = useState<string[]>([""]);
+  const [isMaterialsOpen, setIsMaterialsOpen] = useState(false);
+  const [isSubjectOpen, setIsSubjectOpen] = useState(false);
+
+  const addVariationProperty = (name: string, propertyId: number) => {
+    if (!editForm) return;
+    const currentProps = editForm.variations?.properties || [];
+    if (currentProps.length >= 2) {
+      toast.error("You can add up to 2 variation properties.");
+      return;
+    }
+    if (currentProps.some(p => p.name.toLowerCase() === name.toLowerCase())) {
+      toast.error("Property " + name + " is already added.");
+      return;
+    }
+    const newProperty: VariationProperty = {
+      name,
+      propertyId,
+      options: []
+    };
+    setEditForm({
+      ...editForm,
+      variations: {
+        properties: [...currentProps, newProperty],
+        combinations: editForm.variations?.combinations || [],
+        priceOnProperty: editForm.variations?.priceOnProperty || [],
+        quantityOnProperty: editForm.variations?.quantityOnProperty || [],
+        skuOnProperty: editForm.variations?.skuOnProperty || []
+      }
+    });
+  };
+
+  const removeVariationProperty = (idx: number) => {
+    if (!editForm) return;
+    const properties = (editForm.variations?.properties || []).filter((_, i) => i !== idx);
+    setEditForm({
+      ...editForm,
+      variations: {
+        properties,
+        combinations: [],
+        priceOnProperty: editForm.variations?.priceOnProperty || [],
+        quantityOnProperty: editForm.variations?.quantityOnProperty || [],
+        skuOnProperty: editForm.variations?.skuOnProperty || []
+      }
+    });
+  };
+
+  const updatePropertyOptions = (propIdx: number, options: string[]) => {
+    if (!editForm) return;
+    const properties = [...(editForm.variations?.properties || [])];
+    if (properties[propIdx]) {
+      properties[propIdx] = { ...properties[propIdx], options };
+    }
+    setEditForm({
+      ...editForm,
+      variations: {
+        properties,
+        combinations: editForm.variations?.combinations || [],
+        priceOnProperty: editForm.variations?.priceOnProperty || [],
+        quantityOnProperty: editForm.variations?.quantityOnProperty || [],
+        skuOnProperty: editForm.variations?.skuOnProperty || []
+      }
+    });
+  };
+
+  const generateMatrixCombinations = () => {
+    if (!editForm) return;
+    const properties = editForm.variations?.properties || [];
+    if (properties.length === 0) {
+      toast.error("Please add at least one property first.");
+      return;
+    }
+    if (properties.some(p => p.options.length === 0)) {
+      toast.error("Please add options to all properties first.");
+      return;
+    }
+
+    const cartesian = (arrays: string[][]): string[][] => {
+      return arrays.reduce((acc: string[][], curr: string[]) => {
+        return acc.flatMap((d: string[]) => curr.map((e: string) => [...d, e]));
+      }, [[]]);
+    };
+
+    const arrays = properties.map(p => p.options);
+    const product = cartesian(arrays);
+
+    const existingCombinations = editForm.variations?.combinations || [];
+    const newCombinations = product.map((optionValues: string[]) => {
+      const values: Record<string, string> = {};
+      properties.forEach((p, idx) => {
+        values[p.name] = optionValues[idx];
+      });
+
+      const id = optionValues.join("-");
+      const existing = existingCombinations.find(c => {
+        return properties.every(p => c.values[p.name] === values[p.name]);
+      });
+
+      if (existing) {
+        return { ...existing, id };
+      }
+
+      const skuSuffix = optionValues.map((v: string) => v.toUpperCase().replace(/\s+/g, '')).join("-");
+      return {
+        id,
+        values,
+        isEnabled: true,
+        skuTemplate: "{folder}-" + skuSuffix
+      } as VariationCombination;
+    });
+
+    setEditForm({
+      ...editForm,
+      variations: {
+        properties,
+        combinations: newCombinations,
+        priceOnProperty: editForm.variations?.priceOnProperty || [],
+        quantityOnProperty: editForm.variations?.quantityOnProperty || [],
+        skuOnProperty: editForm.variations?.skuOnProperty || []
+      }
+    });
+    toast.success("Combinations synced. Don't forget to save the preset!");
+  };
 
   const savePresets = (newPresets: Preset[]) => {
     setPresets(newPresets);
-    localStorage.setItem("workstation_v2_presets", JSON.stringify(newPresets));
+    const key = sheetType === "digital" ? "workstation_v2_presets" : "workstation_v2_presets_physical";
+    localStorage.setItem(key, JSON.stringify(newPresets));
   };
 
   React.useEffect(() => {
@@ -86,7 +288,35 @@ export default function PresetManagerModal({ onClose }: PresetManagerModalProps)
        .catch(() => {
           setSections(["", "Comfort Colors 1717", "Gilden 5000", "Digital Prints"]);
        });
-  }, []);
+
+     if (sheetType === "physical") {
+       fetch('/api/etsy/shipping-profiles')
+         .then(res => res.json())
+         .then(data => {
+            if (data.profiles && Array.isArray(data.profiles)) {
+               setShippingProfiles(["", ...data.profiles.map((p: { title: string }) => p.title)]);
+            } else {
+               setShippingProfiles(["", "Standard Shipping", "Express Shipping"]);
+            }
+         })
+         .catch(() => {
+            setShippingProfiles(["", "Standard Shipping", "Express Shipping"]);
+         });
+
+       fetch('/api/etsy/processing-profiles')
+         .then(res => res.json())
+         .then(data => {
+            if (data.profiles && Array.isArray(data.profiles)) {
+               setProcessingProfiles(["", ...data.profiles.map((p: { title: string }) => p.title)]);
+            } else {
+               setProcessingProfiles([""]);
+            }
+         })
+         .catch(() => {
+            setProcessingProfiles([""]);
+         });
+     }
+  }, [sheetType]);
 
   const handleAddNew = () => {
     const newPreset: Preset = {
@@ -94,8 +324,8 @@ export default function PresetManagerModal({ onClose }: PresetManagerModalProps)
       name: "New Preset",
       category: "",
       section: "",
-      price: "0.00",
-      quantity: "999",
+      price: sheetType === "digital" ? "3.99" : "19.99",
+      quantity: sheetType === "digital" ? "999" : "100",
       context: "",
       who_made: "i_did",
       when_made: "2020_2026",
@@ -104,9 +334,23 @@ export default function PresetManagerModal({ onClose }: PresetManagerModalProps)
       subject: "",
       occasion: "",
       celebration: "",
+      shipping_profile: "",
+      readiness_state_id: "",
       ai_title_rules: "MUST be exactly 140 characters or less including spaces",
       ai_desc_rules: "Under 100 words total. One short punchy intro sentence, followed entirely by a scannable bullet-point list of the essential features/specs. NO FLUFF. No conclusion paragraphs.",
       ai_tag_rules: "EXACTLY 13 Etsy Tags as a comma-separated string. Each individual tag MUST be 20 characters or less.",
+      materials: "",
+      sleeve_length: "",
+      neckline: "",
+      clothing_style: "",
+      capacity: "",
+      dishwasher_safe: "",
+      microwave_safe: "",
+      orientation: "",
+      framing: "",
+      aspect_ratio: "",
+      graphic: "",
+      variations: { properties: [], combinations: [], priceOnProperty: [], quantityOnProperty: [], skuOnProperty: [] },
     };
     
     // Immediately add the pill to the sidebar (top of the list)
@@ -135,6 +379,7 @@ export default function PresetManagerModal({ onClose }: PresetManagerModalProps)
     if (!categorySupportsOccasion(finalForm.category)) finalForm.occasion = "";
     if (!categorySupportsCelebration(finalForm.category)) finalForm.celebration = "";
     if (!categorySupportsSubject(finalForm.category)) finalForm.subject = "";
+    if (!categorySupportsGraphic(finalForm.category)) finalForm.graphic = "";
 
     const existingIndex = presets.findIndex(p => p.id === finalForm.id);
     const newPresets = [...presets];
@@ -273,7 +518,7 @@ export default function PresetManagerModal({ onClose }: PresetManagerModalProps)
                       className="w-full px-3 py-2 text-sm rounded-none border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                     >
                       <option value="">Select Category...</option>
-                      {ETSY_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                      {(sheetType === "digital" ? ETSY_DIGITAL_CATEGORIES : ETSY_PHYSICAL_CATEGORIES).filter(Boolean).map(cat => <option key={cat} value={cat}>{cat}</option>)}
                     </select>
                   </div>
                   <div>
@@ -427,18 +672,596 @@ export default function PresetManagerModal({ onClose }: PresetManagerModalProps)
                 </div>
 
                 {categorySupportsSubject(editForm.category) && (
+                  <div className="relative">
+                    <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">Subject (Art Only - Max 3)</label>
+                    <div 
+                      onClick={() => setIsSubjectOpen(!isSubjectOpen)}
+                      className="w-full px-3 py-2 text-sm border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 flex justify-between items-center cursor-pointer min-h-[38px] select-none"
+                    >
+                      <span className="truncate">
+                        {editForm.subject || "Select subjects..."}
+                      </span>
+                      <ChevronDown size={14} className="text-zinc-500" />
+                    </div>
+                    
+                    {isSubjectOpen && (
+                      <>
+                        <div className="fixed inset-0 z-10" onClick={() => setIsSubjectOpen(false)} />
+                        <div className="absolute left-0 mt-1 w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-750 shadow-lg z-20 max-h-60 overflow-y-auto p-2 space-y-1">
+                          {ETSY_SUBJECTS.filter(Boolean).map(sub => {
+                            const selectedList = (editForm.subject || "").split(",").map(s => s.trim()).filter(Boolean);
+                            const isChecked = selectedList.includes(sub);
+                            
+                            const toggleSubject = () => {
+                              let newList = [...selectedList];
+                              if (isChecked) {
+                                newList = newList.filter(s => s !== sub);
+                              } else {
+                                if (newList.length >= 3) {
+                                  toast.error("You can select up to 3 subjects.");
+                                  return;
+                                }
+                                newList.push(sub);
+                              }
+                              setEditForm({ ...editForm, subject: newList.join(", ") });
+                            };
+
+                            return (
+                              <label key={sub} className="flex items-center gap-2 px-2 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer text-sm text-zinc-800 dark:text-zinc-200 select-none">
+                                <input 
+                                  type="checkbox" 
+                                  checked={isChecked}
+                                  onChange={toggleSubject}
+                                  className="rounded border-zinc-300 dark:border-zinc-700 text-blue-600 focus:ring-blue-500"
+                                />
+                                {sub}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )}
+
+                {categorySupportsGraphic(editForm.category) && (
                   <div>
-                    <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">Subject (Art Only)</label>
+                    <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">Graphic</label>
                     <select
-                      value={editForm.subject}
-                      onChange={e => setEditForm({ ...editForm, subject: e.target.value })}
+                      value={editForm.graphic || ""}
+                      onChange={e => setEditForm({ ...editForm, graphic: e.target.value })}
                       className="w-full px-3 py-2 text-sm rounded-none border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
                     >
                       <option value="">None</option>
-                      {ETSY_SUBJECTS.filter(Boolean).map(sub => (
-                        <option key={sub} value={sub}>{sub}</option>
+                      {ETSY_GRAPHICS.filter(Boolean).map(gr => (
+                        <option key={gr} value={gr}>{gr}</option>
                       ))}
                     </select>
+                  </div>
+                )}
+
+                {sheetType === "physical" && (
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+                        Default Shipping Profile
+                      </label>
+                      <select
+                        value={editForm.shipping_profile || ""}
+                        onChange={e => setEditForm({ ...editForm, shipping_profile: e.target.value })}
+                        className="w-full px-3 py-2 text-sm rounded-none border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                      >
+                        {shippingProfiles.map(prof => (
+                          <option key={prof} value={prof}>
+                            {prof || "None"}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+                        Default Processing Profile
+                      </label>
+                      <select
+                        value={editForm.readiness_state_id || ""}
+                        onChange={e => setEditForm({ ...editForm, readiness_state_id: e.target.value })}
+                        className="w-full px-3 py-2 text-sm rounded-none border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                      >
+                        {processingProfiles.map(prof => (
+                          <option key={prof} value={prof}>
+                            {prof || "None"}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                )}
+
+                {sheetType === "physical" && (
+                  <div className="border border-zinc-200 dark:border-zinc-800 p-3 bg-zinc-50 dark:bg-zinc-850 rounded-none space-y-3">
+                    <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Product Attributes (Structural)</h4>
+                    
+                    <div className="relative">
+                      <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">Materials</label>
+                      <div 
+                        onClick={() => setIsMaterialsOpen(!isMaterialsOpen)}
+                        className="w-full px-3 py-2 text-sm border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 flex justify-between items-center cursor-pointer min-h-[38px] select-none"
+                      >
+                        <span className="truncate">
+                          {editForm.materials || "Select materials..."}
+                        </span>
+                        <ChevronDown size={14} className="text-zinc-500" />
+                      </div>
+                      
+                      {isMaterialsOpen && (
+                        <>
+                          <div className="fixed inset-0 z-10" onClick={() => setIsMaterialsOpen(false)} />
+                          <div className="absolute left-0 mt-1 w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-750 shadow-lg z-20 max-h-60 overflow-y-auto p-2 space-y-1">
+                            {["Cotton", "Polyester", "Ceramic", "Paper", "Canvas", "Wood", "Metal", "Glass", "Enamel", "Plastic", "Vinyl", "Leather"].map(mat => {
+                              const selectedList = (editForm.materials || "").split(",").map(s => s.trim()).filter(Boolean);
+                              const isChecked = selectedList.includes(mat);
+                              
+                              const toggleMaterial = () => {
+                                let newList = [...selectedList];
+                                if (isChecked) {
+                                  newList = newList.filter(m => m !== mat);
+                                } else {
+                                  newList.push(mat);
+                                }
+                                setEditForm({ ...editForm, materials: newList.join(", ") });
+                              };
+
+                              return (
+                                <label key={mat} className="flex items-center gap-2 px-2 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer text-sm text-zinc-800 dark:text-zinc-200 select-none">
+                                  <input 
+                                    type="checkbox" 
+                                    checked={isChecked}
+                                    onChange={toggleMaterial}
+                                    className="rounded border-zinc-300 dark:border-zinc-700 text-blue-600 focus:ring-blue-500"
+                                  />
+                                  {mat}
+                                </label>
+                              );
+                            })}
+                            
+                            <div className="border-t border-zinc-200 dark:border-zinc-800 mt-2 pt-2">
+                              <label className="block text-[10px] font-bold uppercase text-zinc-400 mb-1 px-2">Custom Material</label>
+                              <input
+                                type="text"
+                                placeholder="Add custom, comma-separated..."
+                                value={editForm.materials || ""}
+                                onChange={e => setEditForm({ ...editForm, materials: e.target.value })}
+                                className="w-full px-2 py-1 text-xs border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none"
+                              />
+                            </div>
+                          </div>
+                        </>
+                      )}
+                    </div>
+
+                    {(editForm.category === "T-Shirts" || editForm.category === "Sweatshirts & Hoodies") && (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">Sleeve Length</label>
+                          <select
+                            value={editForm.sleeve_length || ""}
+                            onChange={e => setEditForm({ ...editForm, sleeve_length: e.target.value })}
+                            className="w-full px-3 py-2 text-sm rounded-none border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                          >
+                            {ETSY_SLEEVE_LENGTH.map(sl => (
+                              <option key={sl} value={sl}>{sl || "Select..."}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">Neckline</label>
+                          <select
+                            value={editForm.neckline || ""}
+                            onChange={e => setEditForm({ ...editForm, neckline: e.target.value })}
+                            className="w-full px-3 py-2 text-sm rounded-none border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                          >
+                            {ETSY_NECKLINE.map(nl => (
+                              <option key={nl} value={nl}>{nl || "Select..."}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div className="col-span-2">
+                          <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">Clothing Style</label>
+                          <select
+                            value={editForm.clothing_style || ""}
+                            onChange={e => setEditForm({ ...editForm, clothing_style: e.target.value })}
+                            className="w-full px-3 py-2 text-sm rounded-none border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                          >
+                            {ETSY_CLOTHING_STYLE.map(st => (
+                              <option key={st} value={st}>{st || "Select..."}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    )}
+
+                    {editForm.category === "Mugs & Drinkware" && (
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">Capacity</label>
+                          <select
+                            value={editForm.capacity || ""}
+                            onChange={e => setEditForm({ ...editForm, capacity: e.target.value })}
+                            className="w-full px-3 py-2 text-sm rounded-none border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                          >
+                            {ETSY_MUG_CAPACITY.map(cap => (
+                              <option key={cap} value={cap}>{cap || "Select..."}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">Dishwasher Safe</label>
+                          <select
+                            value={editForm.dishwasher_safe || ""}
+                            onChange={e => setEditForm({ ...editForm, dishwasher_safe: e.target.value })}
+                            className="w-full px-3 py-2 text-sm rounded-none border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                          >
+                            <option value="">Select...</option>
+                            <option value="Yes">Yes</option>
+                            <option value="No">No</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">Microwave Safe</label>
+                          <select
+                            value={editForm.microwave_safe || ""}
+                            onChange={e => setEditForm({ ...editForm, microwave_safe: e.target.value })}
+                            className="w-full px-3 py-2 text-sm rounded-none border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                          >
+                            <option value="">Select...</option>
+                            <option value="Yes">Yes</option>
+                            <option value="No">No</option>
+                          </select>
+                        </div>
+                      </div>
+                    )}
+
+                    {editForm.category === "Posters & Prints" && (
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">Orientation</label>
+                          <select
+                            value={editForm.orientation || ""}
+                            onChange={e => setEditForm({ ...editForm, orientation: e.target.value })}
+                            className="w-full px-3 py-2 text-sm rounded-none border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                          >
+                            {ETSY_ORIENTATION.map(or => (
+                              <option key={or} value={or}>{or || "Select..."}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">Framing</label>
+                          <select
+                            value={editForm.framing || ""}
+                            onChange={e => setEditForm({ ...editForm, framing: e.target.value })}
+                            className="w-full px-3 py-2 text-sm rounded-none border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                          >
+                            {ETSY_FRAMING.map(fr => (
+                              <option key={fr} value={fr}>{fr || "Select..."}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">Aspect Ratio</label>
+                          <select
+                            value={editForm.aspect_ratio || ""}
+                            onChange={e => setEditForm({ ...editForm, aspect_ratio: e.target.value })}
+                            className="w-full px-3 py-2 text-sm rounded-none border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                          >
+                            {ETSY_ASPECT_RATIO.map(ar => (
+                              <option key={ar} value={ar}>{ar || "Select..."}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Variations Section */}
+                    <div className="border-t border-zinc-200 dark:border-zinc-800 pt-3 mt-3 space-y-4">
+                      <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-850 pb-2">
+                        <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Listing Variations</h4>
+                        {(!editForm.variations?.properties || editForm.variations.properties.length < 2) && (
+                          <select
+                            className="text-xs px-2 py-1 border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 focus:outline-none"
+                            onChange={(e) => {
+                              if (e.target.value === "custom") {
+                                const name = prompt("Enter custom variation property name (e.g. Size, Color, Capacity, Style, Material, Paper):");
+                                if (name) {
+                                  addVariationProperty(name, 0);
+                                }
+                              } else if (e.target.value) {
+                                const parts = e.target.value.split(":");
+                                addVariationProperty(parts[0], parseInt(parts[1]));
+                              }
+                              e.target.value = "";
+                            }}
+                          >
+                            <option value="">+ Add Variation Property...</option>
+                            {(() => {
+                              const standardDefs = ETSY_VARIATION_PROPERTY_DEFS[editForm.category] || [];
+                              const currentNames = (editForm.variations?.properties || []).map(p => p.name.toLowerCase());
+                              return standardDefs
+                                .filter(def => !currentNames.includes(def.name.toLowerCase()))
+                                .map(def => (
+                                  <option key={def.name} value={def.name + ":" + def.propertyId}>
+                                    {def.name} (Standard)
+                                  </option>
+                                ));
+                            })()}
+                            <option value="custom">Custom Property...</option>
+                          </select>
+                        )}
+                      </div>
+
+                      {/* Configured properties list */}
+                      {(editForm.variations?.properties || []).map((prop, propIdx) => {
+                        const standardDef = (ETSY_VARIATION_PROPERTY_DEFS[editForm.category] || [])
+                          .find(def => def.name.toLowerCase() === prop.name.toLowerCase());
+                        const allowedSuggestions = standardDef ? standardDef.options : [];
+
+                        return (
+                          <div key={prop.name} className="p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-2 relative">
+                            <button
+                              type="button"
+                              onClick={() => removeVariationProperty(propIdx)}
+                              className="absolute top-2.5 right-2.5 text-[11px] text-red-500 hover:text-red-700"
+                              title="Remove property"
+                            >
+                              Remove
+                            </button>
+                            
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-zinc-700 dark:text-zinc-350">{prop.name}</span>
+                              <span className="text-[10px] text-zinc-400">ID: {prop.propertyId || "Custom"}</span>
+                            </div>
+
+                            {/* Standard Suggestions Checkboxes */}
+                            {allowedSuggestions.length > 0 && (
+                              <div className="space-y-1">
+                                <span className="block text-[10px] font-bold uppercase text-zinc-400">Standard Options:</span>
+                                <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto border border-zinc-100 dark:border-zinc-805 p-1.5 bg-zinc-50 dark:bg-zinc-950">
+                                  {allowedSuggestions.map(opt => {
+                                    const isChecked = prop.options.includes(opt);
+                                    const toggleOpt = () => {
+                                      let newOpts = [...prop.options];
+                                      if (isChecked) {
+                                        newOpts = newOpts.filter(o => o !== opt);
+                                      } else {
+                                        newOpts.push(opt);
+                                      }
+                                      updatePropertyOptions(propIdx, newOpts);
+                                    };
+                                    return (
+                                      <label key={opt} className="flex items-center gap-1 text-[11px] bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 px-1.5 py-0.5 rounded cursor-pointer select-none">
+                                        <input 
+                                          type="checkbox" 
+                                          checked={isChecked}
+                                          onChange={toggleOpt}
+                                          className="w-3.5 h-3.5 rounded text-blue-600 border-zinc-300 dark:border-zinc-700 focus:ring-blue-500"
+                                        />
+                                        {opt}
+                                      </label>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Custom input options */}
+                            <div>
+                              <span className="block text-[10px] font-bold uppercase text-zinc-400 mb-1">Custom Option:</span>
+                              <input
+                                type="text"
+                                placeholder="Type option name and press Enter..."
+                                className="w-full px-2 py-1 text-xs border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 focus:outline-none"
+                                onKeyDown={(e) => {
+                                  if (e.key === "Enter") {
+                                    e.preventDefault();
+                                    const val = e.currentTarget.value.trim();
+                                    if (val && !prop.options.includes(val)) {
+                                      updatePropertyOptions(propIdx, [...prop.options, val]);
+                                      e.currentTarget.value = "";
+                                    }
+                                  }
+                                }}
+                              />
+                              <div className="flex flex-wrap gap-1 mt-1.5">
+                                {prop.options.map(opt => (
+                                  <span key={opt} className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-100 dark:border-blue-800 text-[11px]">
+                                    {opt}
+                                    <button 
+                                      type="button" 
+                                      onClick={() => updatePropertyOptions(propIdx, prop.options.filter(o => o !== opt))}
+                                      className="hover:text-red-500 font-bold"
+                                    >
+                                      ×
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {/* Generate Button */}
+                      {(editForm.variations?.properties || []).length > 0 && (
+                        <div className="flex justify-end pt-1">
+                          <button
+                            type="button"
+                            onClick={generateMatrixCombinations}
+                            className="px-3 py-1.5 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors rounded-none"
+                          >
+                            Generate / Sync Variation Matrix
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Variations Matrix Table */}
+                      {editForm.variations?.combinations && editForm.variations.combinations.length > 0 && (
+                        <div className="space-y-2">
+                          <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300">
+                            Variation Matrix Combinations ({editForm.variations.combinations.filter(c => c.isEnabled).length} active)
+                          </label>
+                          <div className="max-h-80 overflow-y-auto border border-zinc-200 dark:border-zinc-800">
+                            <table className="w-full text-left text-xs border-collapse bg-white dark:bg-zinc-900">
+                              <thead>
+                                <tr className="bg-zinc-100 dark:bg-zinc-850 text-zinc-700 dark:text-zinc-305 border-b border-zinc-200 dark:border-zinc-850">
+                                  <th className="p-2 w-10 text-center">On</th>
+                                  <th className="p-2 font-semibold">Variant Options</th>
+                                  <th className="p-2 font-semibold w-24">Price ($)</th>
+                                  <th className="p-2 font-semibold w-20">Quantity</th>
+                                  <th className="p-2 font-semibold w-36">SKU Template</th>
+                                  <th className="p-2 font-semibold w-28">Image Slot</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {editForm.variations?.combinations.map((comb, combIdx) => {
+                                  const name = Object.keys(comb.values).map(k => comb.values[k]).join(" / ");
+                                  return (
+                                    <tr key={comb.id} className={"border-b border-zinc-100 dark:border-zinc-800/50 hover:bg-zinc-50/50 dark:hover:bg-zinc-800/30 " + (!comb.isEnabled ? "opacity-50 bg-zinc-50/20 dark:bg-zinc-900/20" : "")}>
+                                      <td className="p-2 text-center">
+                                        <input
+                                          type="checkbox"
+                                          checked={comb.isEnabled}
+                                          onChange={(e) => {
+                                            if (!editForm || !editForm.variations) return;
+                                            const copy = { ...comb, isEnabled: e.target.checked };
+                                            const combs = [...editForm.variations.combinations];
+                                            combs[combIdx] = copy;
+                                            setEditForm({
+                                              ...editForm,
+                                              variations: {
+                                                properties: editForm.variations.properties,
+                                                combinations: combs,
+                                                priceOnProperty: editForm.variations.priceOnProperty,
+                                                quantityOnProperty: editForm.variations.quantityOnProperty,
+                                                skuOnProperty: editForm.variations.skuOnProperty
+                                              }
+                                            });
+                                          }}
+                                          className="w-3.5 h-3.5 text-blue-600 border-zinc-300 dark:border-zinc-700"
+                                        />
+                                      </td>
+                                      <td className="p-2 font-medium">{name}</td>
+                                      <td className="p-2">
+                                        <input
+                                          type="text"
+                                          placeholder={editForm.price || "19.99"}
+                                          value={comb.price || ""}
+                                          disabled={!comb.isEnabled}
+                                          onChange={(e) => {
+                                            if (!editForm || !editForm.variations) return;
+                                            const val = e.target.value.replace(/[^0-9.]/g, '');
+                                            const combs = [...editForm.variations.combinations];
+                                            combs[combIdx] = { ...comb, price: val };
+                                            setEditForm({
+                                              ...editForm,
+                                              variations: {
+                                                properties: editForm.variations.properties,
+                                                combinations: combs,
+                                                priceOnProperty: editForm.variations.priceOnProperty,
+                                                quantityOnProperty: editForm.variations.quantityOnProperty,
+                                                skuOnProperty: editForm.variations.skuOnProperty
+                                              }
+                                            });
+                                          }}
+                                          className="w-full px-1.5 py-0.5 border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-white focus:outline-none"
+                                        />
+                                      </td>
+                                      <td className="p-2">
+                                        <input
+                                          type="text"
+                                          placeholder={editForm.quantity || "100"}
+                                          value={comb.quantity || ""}
+                                          disabled={!comb.isEnabled}
+                                          onChange={(e) => {
+                                            if (!editForm || !editForm.variations) return;
+                                            const val = e.target.value.replace(/[^0-9]/g, '');
+                                            const combs = [...editForm.variations.combinations];
+                                            combs[combIdx] = { ...comb, quantity: val };
+                                            setEditForm({
+                                              ...editForm,
+                                              variations: {
+                                                properties: editForm.variations.properties,
+                                                combinations: combs,
+                                                priceOnProperty: editForm.variations.priceOnProperty,
+                                                quantityOnProperty: editForm.variations.quantityOnProperty,
+                                                skuOnProperty: editForm.variations.skuOnProperty
+                                              }
+                                            });
+                                          }}
+                                          className="w-full px-1.5 py-0.5 border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-white focus:outline-none"
+                                        />
+                                      </td>
+                                      <td className="p-2">
+                                        <input
+                                          type="text"
+                                          placeholder="{folder}-variant"
+                                          value={comb.skuTemplate || ""}
+                                          disabled={!comb.isEnabled}
+                                          onChange={(e) => {
+                                            if (!editForm || !editForm.variations) return;
+                                            const combs = [...editForm.variations.combinations];
+                                            combs[combIdx] = { ...comb, skuTemplate: e.target.value };
+                                            setEditForm({
+                                              ...editForm,
+                                              variations: {
+                                                properties: editForm.variations.properties,
+                                                combinations: combs,
+                                                priceOnProperty: editForm.variations.priceOnProperty,
+                                                quantityOnProperty: editForm.variations.quantityOnProperty,
+                                                skuOnProperty: editForm.variations.skuOnProperty
+                                              }
+                                            });
+                                          }}
+                                          className="w-full px-1.5 py-0.5 border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-white focus:outline-none"
+                                        />
+                                      </td>
+                                      <td className="p-2">
+                                        <select
+                                          value={comb.imageSlot || ""}
+                                          disabled={!comb.isEnabled}
+                                          onChange={(e) => {
+                                            if (!editForm || !editForm.variations) return;
+                                            const val = e.target.value ? parseInt(e.target.value) : undefined;
+                                            const combs = [...editForm.variations.combinations];
+                                            combs[combIdx] = { ...comb, imageSlot: val };
+                                            setEditForm({
+                                              ...editForm,
+                                              variations: {
+                                                properties: editForm.variations.properties,
+                                                combinations: combs,
+                                                priceOnProperty: editForm.variations.priceOnProperty,
+                                                quantityOnProperty: editForm.variations.quantityOnProperty,
+                                                skuOnProperty: editForm.variations.skuOnProperty
+                                              }
+                                            });
+                                          }}
+                                          className="w-full px-1.5 py-0.5 border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-800 dark:text-zinc-200 focus:outline-none"
+                                        >
+                                          <option value="">None</option>
+                                          {Array.from({ length: 10 }).map((_, i) => (
+                                            <option key={i} value={i + 1}>Image {i + 1}</option>
+                                          ))}
+                                        </select>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
 

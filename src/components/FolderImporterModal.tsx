@@ -2,14 +2,15 @@
 
 import React, { useState, useEffect } from 'react';
 import { X, Folder, CheckSquare, Square, RefreshCw, Upload } from 'lucide-react';
-import { Preset } from './PresetManagerModal';
+import { Preset, DEFAULT_PRESET, DEFAULT_PHYSICAL_PRESET } from './PresetManagerModal';
 
 interface FolderImporterModalProps {
+  sheetType: 'digital' | 'physical';
   onClose: () => void;
   onImport: (selectedFolders: string[], preset: Preset | null) => void;
 }
 
-export default function FolderImporterModal({ onClose, onImport }: FolderImporterModalProps) {
+export default function FolderImporterModal({ sheetType, onClose, onImport }: FolderImporterModalProps) {
   const [folders, setFolders] = useState<string[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [presets, setPresets] = useState<Preset[]>([]);
@@ -19,7 +20,7 @@ export default function FolderImporterModal({ onClose, onImport }: FolderImporte
   const scanFolders = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/local/scan');
+      const res = await fetch(`/api/local/scan?type=${sheetType}`);
       if (res.ok) {
         const data = await res.json();
         setFolders(data.folders || []);
@@ -35,7 +36,8 @@ export default function FolderImporterModal({ onClose, onImport }: FolderImporte
 
   useEffect(() => {
     // Load presets
-    const saved = localStorage.getItem("workstation_v2_presets");
+    const key = sheetType === 'digital' ? 'workstation_v2_presets' : 'workstation_v2_presets_physical';
+    const saved = localStorage.getItem(key);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
@@ -46,12 +48,17 @@ export default function FolderImporterModal({ onClose, onImport }: FolderImporte
         }
       } catch (e) {
         console.error("Failed to parse presets", e);
+        const defaultPreset = sheetType === 'digital' ? DEFAULT_PRESET : DEFAULT_PHYSICAL_PRESET;
+        setPresets([defaultPreset]);
       }
+    } else {
+      const defaultPreset = sheetType === 'digital' ? DEFAULT_PRESET : DEFAULT_PHYSICAL_PRESET;
+      setPresets([defaultPreset]);
     }
     
     // Scan folders immediately on open
     scanFolders();
-  }, []);
+  }, [sheetType]);
 
   const toggleFolder = (folder: string) => {
     const newSelected = new Set(selected);
@@ -95,7 +102,7 @@ export default function FolderImporterModal({ onClose, onImport }: FolderImporte
           
           <div className="flex items-center justify-between">
             <p className="text-sm text-zinc-600 dark:text-zinc-400">
-              Scanning <code className="bg-zinc-100 dark:bg-zinc-800 px-1 py-0.5 border border-zinc-200 dark:border-zinc-700">public/listings/</code> for product folders.
+              Scanning <code className="bg-zinc-100 dark:bg-zinc-800 px-1 py-0.5 border border-zinc-200 dark:border-zinc-700">public/{sheetType === 'digital' ? 'listings' : 'listings-physical'}/</code> for product folders.
             </p>
             <button 
               onClick={scanFolders}
@@ -124,7 +131,7 @@ export default function FolderImporterModal({ onClose, onImport }: FolderImporte
             <div className="max-h-[300px] overflow-y-auto">
               {folders.length === 0 ? (
                 <div className="p-8 text-center text-sm text-zinc-500">
-                  No subfolders found in <code>public/listings/</code>.
+                  No subfolders found in <code>public/{sheetType === 'digital' ? 'listings' : 'listings-physical'}/</code>.
                 </div>
               ) : (
                 folders.map(folder => (

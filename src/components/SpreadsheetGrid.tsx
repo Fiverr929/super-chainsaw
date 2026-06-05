@@ -17,7 +17,8 @@ import DataEditor, {
 import { allCells } from "@glideapps/glide-data-grid-cells";
 import "@glideapps/glide-data-grid/dist/index.css";
 import {
-  ETSY_CATEGORIES,
+  ETSY_DIGITAL_CATEGORIES,
+  ETSY_PHYSICAL_CATEGORIES,
   ETSY_SUBJECTS,
   ETSY_COLORS,
   ETSY_OCCASIONS,
@@ -25,18 +26,27 @@ import {
   ETSY_STATUSES,
   categorySupportsOccasion,
   categorySupportsCelebration,
-  categorySupportsSubject
+  categorySupportsSubject,
+  categorySupportsGraphic,
+  ETSY_GRAPHICS,
+  ETSY_SLEEVE_LENGTH,
+  ETSY_NECKLINE,
+  ETSY_CLOTHING_STYLE,
+  ETSY_MUG_CAPACITY,
+  ETSY_ORIENTATION,
+  ETSY_FRAMING,
+  ETSY_ASPECT_RATIO
 } from "@/lib/etsyConstants";
 import { useAIPipeline } from "@/hooks/useAIPipeline";
 import { useEtsyPush } from "@/hooks/useEtsyPush";
 import FolderImporterModal from "./FolderImporterModal";
-import PresetManagerModal from "./PresetManagerModal";
+import PresetManagerModal, { PresetVariations } from "./PresetManagerModal";
 import { FolderPlus, Layers, ChevronDown, Trash2 } from "lucide-react";
 
 const imageCache: Record<string, { absoluteUrlArray: string[], thumbnailUrls: string[] }> = {};
 const tagCache: Record<string, string[]> = {};
 
-const COLUMNS: GridColumn[] = [
+const DIGITAL_COLUMNS: GridColumn[] = [
   { title: "Folder", id: "folder", width: 120 },
   { title: "Images", id: "images", width: 150 },
   { title: "Category", id: "category", width: 150 },
@@ -54,7 +64,27 @@ const COLUMNS: GridColumn[] = [
   { title: "Primary Color", id: "primary_color", width: 120 },
   { title: "Occasion", id: "occasion", width: 120 },
   { title: "Celebration", id: "celebration", width: 120 },
-  { title: "Subject", id: "subject", width: 120 },
+  { title: "Subject / Graphic", id: "subject", width: 150 },
+];
+
+const PHYSICAL_COLUMNS: GridColumn[] = [
+  { title: "Folder", id: "folder", width: 120 },
+  { title: "Images", id: "images", width: 150 },
+  { title: "Category", id: "category", width: 150 },
+  { title: "Video", id: "video", width: 120 },
+  { title: "Status", id: "status", width: 100 },
+  { title: "Listing ID", id: "listing_id", width: 120 },
+  { title: "Context", id: "context", width: 200 },
+  { title: "Shipping Profile", id: "shipping_profile", width: 180 },
+  { title: "Title", id: "title", width: 250 },
+  { title: "Description", id: "description", width: 300 },
+  { title: "Tags", id: "tags", width: 200 },
+  { title: "Price", id: "price", width: 80 },
+  { title: "Quantity", id: "quantity", width: 80 },
+  { title: "Variations", id: "variations", width: 150 },
+  { title: "Section", id: "section", width: 120 },
+  { title: "Attributes", id: "attributes", width: 200 },
+  { title: "Processing Profile ID", id: "readiness_state_id", width: 150 },
 ];
 
 export type RowData = {
@@ -84,9 +114,25 @@ export type RowData = {
   ai_title_rules?: string;
   ai_desc_rules?: string;
   ai_tag_rules?: string;
+  shipping_profile?: string;
+  readiness_state_id?: string;
+  secondary_color?: string;
+  graphic?: string;
+  materials?: string;
+  sleeve_length?: string;
+  neckline?: string;
+  clothing_style?: string;
+  capacity?: string;
+  dishwasher_safe?: string;
+  microwave_safe?: string;
+  orientation?: string;
+  framing?: string;
+  aspect_ratio?: string;
+  variations?: PresetVariations;
+  attributes?: string;
 };
 
-const emptyRow: RowData = {
+const emptyRowDigital: RowData = {
   status: "",
   listing_id: "",
   context: "",
@@ -94,12 +140,13 @@ const emptyRow: RowData = {
   video: "",
   alt_text: "",
   digital_file: "",
+  shipping_profile: "",
   title: "",
   description: "",
   tags: "",
   price: "",
   quantity: "",
-  category: "Store Graphics",
+  category: "",
   section: "",
   primary_color: "",
   occasion: "",
@@ -114,24 +161,191 @@ const emptyRow: RowData = {
   ai_tag_rules: "",
 };
 
+const emptyRowPhysical: RowData = {
+  status: "",
+  listing_id: "",
+  context: "",
+  images: "",
+  video: "",
+  alt_text: "",
+  digital_file: "",
+  shipping_profile: "",
+  title: "",
+  description: "",
+  tags: "",
+  price: "",
+  quantity: "",
+  category: "",
+  section: "",
+  primary_color: "",
+  occasion: "",
+  celebration: "",
+  subject: "",
+  who_made: "",
+  when_made: "",
+  is_supply: "",
+  renewal_options: "",
+  ai_title_rules: "",
+  ai_desc_rules: "",
+  ai_tag_rules: "",
+  readiness_state_id: "",
+  secondary_color: "",
+  graphic: "",
+  materials: "",
+  sleeve_length: "",
+  neckline: "",
+  clothing_style: "",
+  capacity: "",
+  dishwasher_safe: "",
+  microwave_safe: "",
+  orientation: "",
+  framing: "",
+  aspect_ratio: "",
+};
+
+const getAttributesSummary = (row: RowData) => {
+  const parts: string[] = [];
+  if (row.primary_color) parts.push(`Color: ${row.primary_color}`);
+  if (row.secondary_color) parts.push(`Sec Color: ${row.secondary_color}`);
+  if (row.materials) parts.push(`Materials: ${row.materials}`);
+  if (row.graphic && categorySupportsGraphic(row.category || "")) parts.push(`Graphic: ${row.graphic}`);
+  if (row.occasion && categorySupportsOccasion(row.category || "")) parts.push(`Occasion: ${row.occasion}`);
+  if (row.celebration && categorySupportsCelebration(row.category || "")) parts.push(`Celebration: ${row.celebration}`);
+  if (row.subject && categorySupportsSubject(row.category || "")) parts.push(`Subject: ${row.subject}`);
+  
+  // Clothing details
+  const isClothing = ["T-Shirts", "Sweatshirts & Hoodies"].includes(row.category || "");
+  if (isClothing) {
+    if (row.sleeve_length) parts.push(`Sleeve: ${row.sleeve_length}`);
+    if (row.neckline) parts.push(`Neckline: ${row.neckline}`);
+    if (row.clothing_style) parts.push(`Style: ${row.clothing_style}`);
+  }
+  
+  // Mug details
+  const isMug = (row.category || "") === "Mugs & Drinkware";
+  if (isMug) {
+    if (row.capacity) parts.push(`Capacity: ${row.capacity}`);
+    if (row.dishwasher_safe === "true") parts.push(`Dishwasher Safe`);
+    if (row.microwave_safe === "true") parts.push(`Microwave Safe`);
+  }
+  
+  // Art details
+  const isArt = (row.category || "") === "Posters & Prints";
+  if (isArt) {
+    if (row.orientation) parts.push(`Orientation: ${row.orientation}`);
+    if (row.framing) parts.push(`Framing: ${row.framing}`);
+    if (row.aspect_ratio) parts.push(`Aspect: ${row.aspect_ratio}`);
+  }
+  
+  return parts.join(" | ");
+};
+
+const ATTRIBUTE_KEYS = [
+  "primary_color", "secondary_color", "materials", "occasion", "celebration",
+  "subject", "sleeve_length", "neckline", "clothing_style", "capacity",
+  "dishwasher_safe", "microwave_safe", "orientation", "framing", "aspect_ratio",
+  "graphic"
+] as const;
+
+const parseAttributesSummary = (summaryText: string): Partial<RowData> => {
+  const result: Partial<RowData> = {};
+
+  const cleanText = summaryText ? summaryText.replace("⚙️", "").replace("Configure...", "").trim() : "";
+  if (!cleanText) {
+    // Clear all attributes
+    for (const key of ATTRIBUTE_KEYS) {
+      result[key] = "";
+    }
+    result.dishwasher_safe = "false";
+    result.microwave_safe = "false";
+    return result;
+  }
+
+  const parts = cleanText.split("|").map(p => p.trim());
+  
+  // If the summary is for Mugs, we can default dishwasher/microwave safe to false unless explicitly seen
+  const isMugSummary = cleanText.toLowerCase().includes("capacity:");
+  if (isMugSummary) {
+    result.dishwasher_safe = "false";
+    result.microwave_safe = "false";
+  }
+
+  for (const part of parts) {
+    if (!part) continue;
+
+    const lowerPart = part.toLowerCase();
+    if (lowerPart === "dishwasher safe") {
+      result.dishwasher_safe = "true";
+      continue;
+    }
+    if (lowerPart === "microwave safe") {
+      result.microwave_safe = "true";
+      continue;
+    }
+
+    const colonIdx = part.indexOf(":");
+    if (colonIdx === -1) continue;
+
+    const key = part.substring(0, colonIdx).trim().toLowerCase();
+    const val = part.substring(colonIdx + 1).trim();
+
+    if (key === "color") {
+      result.primary_color = val;
+    } else if (key === "sec color") {
+      result.secondary_color = val;
+    } else if (key === "materials") {
+      result.materials = val;
+    } else if (key === "graphic") {
+      result.graphic = val;
+    } else if (key === "occasion") {
+      result.occasion = val;
+    } else if (key === "celebration") {
+      result.celebration = val;
+    } else if (key === "subject") {
+      result.subject = val;
+    } else if (key === "sleeve") {
+      result.sleeve_length = val;
+    } else if (key === "neckline") {
+      result.neckline = val;
+    } else if (key === "style") {
+      result.clothing_style = val;
+    } else if (key === "capacity") {
+      result.capacity = val;
+    } else if (key === "orientation") {
+      result.orientation = val;
+    } else if (key === "framing") {
+      result.framing = val;
+    } else if (key === "aspect") {
+      result.aspect_ratio = val;
+    }
+  }
+
+  return result;
+};
+
 export default function SpreadsheetGrid() {
   const gridRef = useRef<DataEditorRef>(null);
-  const [columns, setColumns] = useState(COLUMNS);
+  const [sheet, setSheet] = useState<"digital" | "physical">("digital");
+  const [columns, setColumns] = useState(DIGITAL_COLUMNS);
   const [zoom, setZoom] = useState(1);
   const [gridSelection, setGridSelection] = useState<GridSelection | undefined>(undefined);
   const [globalImageEditor, setGlobalImageEditor] = useState<{row: number, urls: string[], altTexts: string[]} | null>(null);
+  const [globalAttributesEditor, setGlobalAttributesEditor] = useState<{ row: number } | null>(null);
+  const [globalVariationsEditor, setGlobalVariationsEditor] = useState<{ row: number } | null>(null);
   const [fontsLoaded, setFontsLoaded] = useState(false);
   const [isImporterOpen, setIsImporterOpen] = useState(false);
   const [showPresets, setShowPresets] = useState(false);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
   
   // Task Queue State
-  type QueueTask = { id: string; action: string; row: number };
+  type QueueTask = { id: string; action: string; row: number; sheet: "digital" | "physical" };
   const [taskQueue, setTaskQueue] = useState<QueueTask[]>([]);
   const isProcessingQueue = React.useRef(false);
   const [showUpdateMenu, setShowUpdateMenu] = useState(false);
   const [showGenerateMenu, setShowGenerateMenu] = useState(false);
   const [sections, setSections] = useState<string[]>([""]);
+  const [shippingProfiles, setShippingProfiles] = useState<string[]>([""]);
+  const [processingProfiles, setProcessingProfiles] = useState<string[]>([""]);
 
   const fetchSections = useCallback(() => {
      fetch('/api/etsy/sections')
@@ -149,12 +363,52 @@ export default function SpreadsheetGrid() {
        });
   }, []);
 
+  const fetchShippingProfiles = useCallback(() => {
+     fetch('/api/etsy/shipping-profiles')
+       .then(res => res.json())
+       .then(data => {
+          if (data.profiles && Array.isArray(data.profiles)) {
+             setShippingProfiles(["", ...data.profiles.map((p: { title: string }) => p.title)]);
+          } else {
+             setShippingProfiles(["", "Standard Shipping", "Express Shipping"]);
+          }
+       })
+       .catch(err => {
+          console.warn("Failed to load shipping profiles dynamically:", err);
+          setShippingProfiles(["", "Standard Shipping", "Express Shipping"]);
+       });
+  }, []);
+
+  const fetchProcessingProfiles = useCallback(() => {
+     fetch('/api/etsy/processing-profiles')
+       .then(res => res.json())
+       .then(data => {
+          if (data.profiles && Array.isArray(data.profiles)) {
+             setProcessingProfiles(["", ...data.profiles.map((p: { title: string }) => p.title)]);
+          } else {
+             setProcessingProfiles([""]);
+          }
+       })
+       .catch(err => {
+          console.warn("Failed to load processing profiles dynamically:", err);
+          setProcessingProfiles([""]);
+       });
+  }, []);
+
   React.useEffect(() => {
      fetchSections();
+     fetchShippingProfiles();
+     fetchProcessingProfiles();
      
-     window.addEventListener("etsy-store-changed", fetchSections);
-     return () => window.removeEventListener("etsy-store-changed", fetchSections);
-  }, [fetchSections]);
+     const handleChanged = () => {
+        fetchSections();
+        fetchShippingProfiles();
+        fetchProcessingProfiles();
+     };
+
+     window.addEventListener("etsy-store-changed", handleChanged);
+     return () => window.removeEventListener("etsy-store-changed", handleChanged);
+  }, [fetchSections, fetchShippingProfiles, fetchProcessingProfiles]);
 
   React.useEffect(() => {
     document.fonts.ready.then(() => {
@@ -162,27 +416,42 @@ export default function SpreadsheetGrid() {
     });
   }, []);
 
+  // Update columns when sheet changes
+  React.useEffect(() => {
+    setColumns(sheet === "digital" ? DIGITAL_COLUMNS : PHYSICAL_COLUMNS);
+  }, [sheet]);
+
   // Initialize with empty rows (avoids Next.js hydration mismatch)
   const [data, setData] = useState<RowData[]>(() => {
-    return Array.from({ length: 50 }).map(() => ({ ...emptyRow }));
+    return Array.from({ length: 50 }).map(() => ({ ...(sheet === "digital" ? emptyRowDigital : emptyRowPhysical) }));
   });
 
-  // Load from local storage AFTER initial render
+  // Load from local storage AFTER initial render and when sheet changes
   React.useEffect(() => {
-    const saved = localStorage.getItem("workstation_v2_grid_data");
+    setIsDataLoaded(false);
+    const key = sheet === "digital" ? "workstation_v2_grid_data" : "workstation_v2_grid_data_physical";
+    const saved = localStorage.getItem(key);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          // eslint-disable-next-line react-hooks/set-state-in-effect
           setData(parsed);
+          dataRef.current = parsed;
+        } else {
+          const freshData = Array.from({ length: 50 }).map(() => ({ ...(sheet === "digital" ? emptyRowDigital : emptyRowPhysical) }));
+          setData(freshData);
+          dataRef.current = freshData;
         }
       } catch (e) {
         console.error("Failed to parse local storage grid data", e);
       }
+    } else {
+      const freshData = Array.from({ length: 50 }).map(() => ({ ...(sheet === "digital" ? emptyRowDigital : emptyRowPhysical) }));
+      setData(freshData);
+      dataRef.current = freshData;
     }
     setIsDataLoaded(true);
-  }, []);
+  }, [sheet]);
 
   const dataRef = React.useRef(data);
   // Keep the ref strictly synchronized with the state
@@ -190,10 +459,13 @@ export default function SpreadsheetGrid() {
     dataRef.current = data;
   }, [data]);
 
-  const { triggerAIGeneration, triggerFolderAutomation } = useAIPipeline(dataRef, setData);
-  const { triggerEtsyPush } = useEtsyPush(dataRef, setData);
+  const sheetRef = React.useRef(sheet);
+  React.useEffect(() => { sheetRef.current = sheet; }, [sheet]);
+  const { triggerAIGeneration, triggerFolderAutomation } = useAIPipeline(dataRef, setData, sheet, sheetRef);
+  const { triggerEtsyPush } = useEtsyPush(dataRef, setData, sheet, sheetRef);
 
   const processBulkQueue = (action: string, rows: number[]) => {
+    rows = rows.filter(row => dataRef.current[row]?.folder || dataRef.current[row]?.title || dataRef.current[row]?.context);
     if (rows.length === 0) return;
     
     // Validation
@@ -217,6 +489,7 @@ export default function SpreadsheetGrid() {
     setShowGenerateMenu(false);
 
     const newTasks = rows.map(row => ({
+       sheet,
        id: Math.random().toString(36).substring(7),
        action,
        row
@@ -231,7 +504,8 @@ export default function SpreadsheetGrid() {
 
     const processNext = async () => {
       isProcessingQueue.current = true;
-      const currentTask = taskQueue[0];
+      const currentTask = taskQueue.find(t => t.sheet === sheet);
+      if (!currentTask) { isProcessingQueue.current = false; return; }
       
       try {
         if (currentTask.action === "generate") {
@@ -258,7 +532,7 @@ export default function SpreadsheetGrid() {
       } catch (err) {
          console.error("Queue task failed:", err);
       } finally {
-        setTaskQueue(prev => prev.slice(1));
+        setTaskQueue(prev => prev.filter(t => t.id !== currentTask.id));
         isProcessingQueue.current = false;
         
         // Delay to avoid hitting API rate limits if there are more tasks
@@ -269,17 +543,28 @@ export default function SpreadsheetGrid() {
     };
 
     processNext();
-  }, [taskQueue, triggerAIGeneration, triggerEtsyPush]);
+  }, [taskQueue, triggerAIGeneration, triggerEtsyPush, sheet]);
 
   // Persist to local storage with a 500ms debounce (ONLY after initial load)
   React.useEffect(() => {
     if (!isDataLoaded) return;
     
     const handler = setTimeout(() => {
-      localStorage.setItem("workstation_v2_grid_data", JSON.stringify(data));
+      const key = sheet === "digital" ? "workstation_v2_grid_data" : "workstation_v2_grid_data_physical";
+      localStorage.setItem(key, JSON.stringify(data));
     }, 500);
     return () => clearTimeout(handler);
-  }, [data, isDataLoaded]);
+  }, [data, isDataLoaded, sheet]);
+
+  // Ensure data isn't lost if the tab is closed before the 500ms debounce fires
+  React.useEffect(() => {
+    const handleBeforeUnload = () => {
+      const key = sheet === "digital" ? "workstation_v2_grid_data" : "workstation_v2_grid_data_physical";
+      localStorage.setItem(key, JSON.stringify(dataRef.current));
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [sheet]);
 
   const getCellContent = useCallback(
     (cell: Item): GridCell => {
@@ -298,7 +583,91 @@ export default function SpreadsheetGrid() {
 
       const isActiveRow = !!dataRow.status || !!dataRow.folder || !!dataRow.title;
 
-      const value = dataRow[columnId] || "";
+      const value = (typeof dataRow[columnId] === "string" ? dataRow[columnId] : "") as string;
+
+      const hasActiveVariations = sheet === "physical" && dataRow.variations && dataRow.variations.properties && dataRow.variations.properties.length > 0;
+      const enabledCombs = hasActiveVariations ? (dataRow.variations?.combinations || []).filter((c: any) => c.isEnabled) : [];
+
+      if (columnId === "variations") {
+        if (sheet !== "physical") {
+          return {
+            kind: GridCellKind.Text,
+            allowOverlay: false,
+            readonly: true,
+            data: "",
+            displayData: "N/A",
+            themeOverride: { bgCell: "#fafafa" }
+          } as TextCell;
+        }
+        
+        if (hasActiveVariations && enabledCombs.length > 0) {
+          const prices = enabledCombs.map((c: any) => parseFloat(c.price) || parseFloat(dataRow.price) || 0.0);
+          const minPrice = Math.min(...prices);
+          const maxPrice = Math.max(...prices);
+          const priceStr = minPrice === maxPrice ? `$${minPrice.toFixed(2)}` : `$${minPrice.toFixed(2)}-$${maxPrice.toFixed(2)}`;
+          return {
+            kind: GridCellKind.Text,
+            allowOverlay: false,
+            readonly: true,
+            data: `${enabledCombs.length} variants`,
+            displayData: `⚙️ ${enabledCombs.length} Variants (${priceStr})`,
+            themeOverride: {
+              baseFontStyle: "bold 12px Inter, sans-serif",
+              textDark: "#2b52d6",
+              bgCell: "#f0f4ff"
+            }
+          } as TextCell;
+        } else {
+          return {
+            kind: GridCellKind.Text,
+            allowOverlay: false,
+            readonly: true,
+            data: "Configure",
+            displayData: "⚙️ Configure...",
+            themeOverride: {
+              textDark: "#64748b",
+              bgCell: "#f8fafc"
+            }
+          } as TextCell;
+        }
+      }
+
+      // Special rendering for Price column under variations
+      if (columnId === "price") {
+         if (hasActiveVariations && enabledCombs.length > 0) {
+            const prices = enabledCombs.map((c: any) => parseFloat(c.price) || parseFloat(dataRow.price) || 0.0);
+            const minPrice = Math.min(...prices);
+            const maxPrice = Math.max(...prices);
+            const priceStr = minPrice === maxPrice ? `$${minPrice.toFixed(2)}` : `$${minPrice.toFixed(2)} - $${maxPrice.toFixed(2)}`;
+            return {
+              kind: GridCellKind.Text,
+              allowOverlay: true,
+              data: minPrice === maxPrice ? String(minPrice) : "varies",
+              displayData: priceStr,
+              themeOverride: {
+                bgCell: "#f8fafc",
+                textDark: "#334155"
+              }
+            } as TextCell;
+         }
+      }
+
+      // Special rendering for Quantity column under variations
+      if (columnId === "quantity") {
+         if (hasActiveVariations && enabledCombs.length > 0) {
+            const totalQty = enabledCombs.reduce((sum: number, c: any) => sum + (parseInt(c.quantity) || parseInt(dataRow.quantity) || 0), 0);
+            return {
+              kind: GridCellKind.Text,
+              allowOverlay: true,
+              data: String(totalQty),
+              displayData: String(totalQty),
+              themeOverride: {
+                bgCell: "#f8fafc",
+                textDark: "#334155"
+              }
+            } as TextCell;
+         }
+      }
 
       if (columnId === "images") {
         const urlArray = value ? value.split(",").map((s: string) => s.trim()).filter(Boolean) : [];
@@ -447,7 +816,7 @@ export default function SpreadsheetGrid() {
             copyData: value,
             data: {
                kind: "dropdown-cell",
-               allowedValues: ETSY_CATEGORIES,
+               allowedValues: sheet === "digital" ? ETSY_DIGITAL_CATEGORIES : ETSY_PHYSICAL_CATEGORIES,
                value: value || ""
             },
             themeOverride: { 
@@ -456,16 +825,80 @@ export default function SpreadsheetGrid() {
          } as GridCell;
       }
 
-      if (columnId === "subject") {
-         const supported = !isActiveRow || categorySupportsSubject(dataRow.category || "");
-         if (!supported) return { kind: GridCellKind.Text, allowOverlay: false, readonly: true, data: "", displayData: "", themeOverride: { bgCell: "#fafafa" } } as TextCell;
+      if (columnId === "shipping_profile") {
          return {
             kind: GridCellKind.Custom,
             allowOverlay: true,
             copyData: value,
             data: {
                kind: "dropdown-cell",
-               allowedValues: ETSY_SUBJECTS,
+               allowedValues: shippingProfiles,
+               value: value || ""
+            },
+            themeOverride: {
+              baseFontStyle: "13px Inter, sans-serif"
+            }
+         } as GridCell;
+      }
+
+      if (columnId === "readiness_state_id") {
+         return {
+            kind: GridCellKind.Custom,
+            allowOverlay: true,
+            copyData: value,
+            data: {
+               kind: "dropdown-cell",
+               allowedValues: processingProfiles,
+               value: value || ""
+            },
+            themeOverride: {
+              baseFontStyle: "13px Inter, sans-serif"
+            }
+         } as GridCell;
+      }
+
+      if (columnId === "subject") {
+         const supported = !isActiveRow || categorySupportsSubject(dataRow.category || "");
+         if (!supported) return { kind: GridCellKind.Text, allowOverlay: false, readonly: true, data: "", displayData: "N/A", themeOverride: { bgCell: "#fafafa" } } as TextCell;
+         
+         if (sheet === "digital") {
+            return {
+               kind: GridCellKind.Custom,
+               allowOverlay: true,
+               copyData: value,
+               data: {
+                  kind: "dropdown-cell",
+                  allowedValues: ETSY_SUBJECTS,
+                  value: value || ""
+               },
+               themeOverride: { 
+                 baseFontStyle: "13px Inter, sans-serif"
+               }
+            } as GridCell;
+         } else {
+            return {
+               kind: GridCellKind.Text,
+               allowOverlay: false,
+               readonly: true,
+               data: value,
+               displayData: value || "Select subjects...",
+               themeOverride: {
+                  baseFontStyle: "13px Inter, sans-serif"
+               }
+            } as TextCell;
+         }
+      }
+
+      if (columnId === "graphic") {
+         const supported = !isActiveRow || categorySupportsGraphic(dataRow.category || "");
+         if (!supported) return { kind: GridCellKind.Text, allowOverlay: false, readonly: true, data: "", displayData: "N/A", themeOverride: { bgCell: "#fafafa" } } as TextCell;
+         return {
+            kind: GridCellKind.Custom,
+            allowOverlay: true,
+            copyData: value,
+            data: {
+               kind: "dropdown-cell",
+               allowedValues: ETSY_GRAPHICS,
                value: value || ""
             },
             themeOverride: { 
@@ -491,6 +924,22 @@ export default function SpreadsheetGrid() {
       }
 
       if (columnId === "primary_color") {
+         return {
+            kind: GridCellKind.Custom,
+            allowOverlay: true,
+            copyData: value,
+            data: {
+               kind: "dropdown-cell",
+               allowedValues: ETSY_COLORS,
+               value: value || ""
+            },
+            themeOverride: { 
+              baseFontStyle: "13px Inter, sans-serif"
+            }
+         } as GridCell;
+      }
+
+      if (columnId === "secondary_color") {
          return {
             kind: GridCellKind.Custom,
             allowOverlay: true,
@@ -542,6 +991,31 @@ export default function SpreadsheetGrid() {
          } as GridCell;
       }
 
+      if (columnId === "attributes") {
+        const summary = getAttributesSummary(dataRow);
+        if (summary) {
+          return {
+            kind: GridCellKind.Text,
+            allowOverlay: false,
+            readonly: true,
+            data: summary,
+            displayData: summary,
+          } as TextCell;
+        } else {
+          return {
+            kind: GridCellKind.Text,
+            allowOverlay: false,
+            readonly: true,
+            data: "",
+            displayData: "⚙️ Configure...",
+            themeOverride: {
+              textDark: "#64748b",
+              bgCell: "#f8fafc"
+            }
+          } as TextCell;
+        }
+      }
+
       return {
         kind: GridCellKind.Text,
         allowOverlay: true,
@@ -549,7 +1023,7 @@ export default function SpreadsheetGrid() {
         displayData: value,
       } as TextCell;
     },
-    [columns, sections]
+    [columns, sections, sheet, shippingProfiles, processingProfiles]
   );
 
   const getCellsForSelection = useCallback(
@@ -576,6 +1050,59 @@ export default function SpreadsheetGrid() {
       const [col, row] = cell;
       const columnId = columns[col].id as keyof RowData;
 
+      const dataRow = dataRef.current[row];
+      const hasActiveVariations = sheet === "physical" && dataRow && dataRow.variations && dataRow.variations.properties && dataRow.variations.properties.length > 0;
+
+      if (columnId === "price" && hasActiveVariations) {
+         let val = "";
+         if (newValue.kind === GridCellKind.Text) val = newValue.data;
+         
+         if (val && !isNaN(parseFloat(val))) {
+            const confirmed = window.confirm(`This listing uses variations. Do you want to set the price for ALL enabled variants to $${parseFloat(val).toFixed(2)}?`);
+            if (confirmed) {
+               setData(prev => {
+                  const copy = [...prev];
+                  const rData = { ...copy[row] };
+                  if (rData.variations) {
+                     rData.variations = {
+                        ...rData.variations,
+                        combinations: rData.variations.combinations.map(c => ({ ...c, price: val }))
+                     };
+                  }
+                  rData.price = val;
+                  copy[row] = rData;
+                  return copy;
+               });
+               return;
+            }
+         }
+      }
+      
+      if (columnId === "quantity" && hasActiveVariations) {
+         let val = "";
+         if (newValue.kind === GridCellKind.Text) val = newValue.data;
+         
+         if (val && !isNaN(parseInt(val))) {
+            const confirmed = window.confirm(`This listing uses variations. Do you want to set the quantity for ALL enabled variants to ${parseInt(val)}?`);
+            if (confirmed) {
+               setData(prev => {
+                  const copy = [...prev];
+                  const rData = { ...copy[row] };
+                  if (rData.variations) {
+                     rData.variations = {
+                        ...rData.variations,
+                        combinations: rData.variations.combinations.map(c => ({ ...c, quantity: val }))
+                     };
+                  }
+                  rData.quantity = val;
+                  copy[row] = rData;
+                  return copy;
+               });
+               return;
+            }
+         }
+      }
+
       let newStringValue = "";
       if (newValue.kind === GridCellKind.Text) {
         newStringValue = newValue.data;
@@ -593,7 +1120,7 @@ export default function SpreadsheetGrid() {
            return;
         }
       } else if (newValue.kind === GridCellKind.Custom) {
-        const customColumns = ["status", "category", "section", "primary_color", "occasion", "celebration", "subject"];
+        const customColumns = ["status", "category", "section", "primary_color", "secondary_color", "occasion", "celebration", "subject", "graphic", "shipping_profile", "readiness_state_id"];
         if (customColumns.includes(columnId)) {
            newStringValue = (newValue.data as { value: string }).value;
         } else {
@@ -606,7 +1133,7 @@ export default function SpreadsheetGrid() {
       
       // Expand grid if editing outside current bounds
       while (row >= newDataArray.length) {
-        newDataArray.push({ ...emptyRow });
+        newDataArray.push({ ...(sheet === "digital" ? emptyRowDigital : emptyRowPhysical) });
       }
 
       newDataArray[row] = {
@@ -619,7 +1146,26 @@ export default function SpreadsheetGrid() {
 
 
     },
-    [columns]
+    [columns, sheet, setData]
+  );
+
+  const onCellActivated = useCallback(
+    (cell: Item) => {
+      const [col, row] = cell;
+      const columnId = columns[col].id;
+      if (columnId === "attributes" && sheet === "physical") {
+        const dataRow = dataRef.current[row];
+        if (dataRow) {
+          setGlobalAttributesEditor({ row });
+        }
+      } else if (columnId === "variations" && sheet === "physical") {
+        const dataRow = dataRef.current[row];
+        if (dataRow) {
+          setGlobalVariationsEditor({ row });
+        }
+      }
+    },
+    [columns, sheet]
   );
 
   const onColumnResize = useCallback((column: GridColumn, newSize: number) => {
@@ -648,15 +1194,29 @@ export default function SpreadsheetGrid() {
         const newData = [...prev];
         for (let r = 0; r < values.length; r++) {
           while (row + r >= newData.length) {
-            newData.push({ ...emptyRow });
+            newData.push({ ...(sheet === "digital" ? emptyRowDigital : emptyRowPhysical) });
           }
           const dataRow = { ...newData[row + r] };
           for (let c = 0; c < values[r].length; c++) {
             if (col + c >= columns.length) break;
             const columnId = columns[col + c].id;
             if (!columnId) continue;
-            // @ts-expect-error - external type mismatch
-            dataRow[columnId] = values[r][c];
+            
+            const pastedValue = values[r][c];
+            if (columnId === "shipping_profile" && pastedValue && !shippingProfiles.includes(pastedValue)) {
+               continue;
+            }
+            if (columnId === "readiness_state_id" && pastedValue && !processingProfiles.includes(pastedValue)) {
+               continue;
+            }
+            
+            if (columnId === "attributes") {
+              const parsed = parseAttributesSummary(pastedValue);
+              Object.assign(dataRow, parsed);
+            } else {
+              // @ts-expect-error - external type mismatch
+              dataRow[columnId] = pastedValue;
+            }
           }
           newData[row + r] = dataRow as RowData;
         }
@@ -674,7 +1234,7 @@ export default function SpreadsheetGrid() {
 
       return true;
     },
-    [columns, triggerFolderAutomation]
+    [columns, triggerFolderAutomation, sheet, sections, shippingProfiles, processingProfiles]
   );
 
   const onFillPattern = useCallback(
@@ -690,7 +1250,7 @@ export default function SpreadsheetGrid() {
         for (let y = 0; y < fillDestination.height; y++) {
           const destRowIndex = fillDestination.y + y;
           while (destRowIndex >= newData.length) {
-            newData.push({ ...emptyRow });
+            newData.push({ ...(sheet === "digital" ? emptyRowDigital : emptyRowPhysical) });
           }
 
           const sourceRowIndex = patternSource.y + (y % sourceHeight);
@@ -707,8 +1267,14 @@ export default function SpreadsheetGrid() {
 
             if (!sourceColumnId || !destColumnId) continue;
 
-            // @ts-expect-error - external type mismatch
-            destRowData[destColumnId] = sourceRowData[sourceColumnId];
+            if (destColumnId === "attributes") {
+              for (const key of ATTRIBUTE_KEYS) {
+                destRowData[key] = sourceRowData[key] || "";
+              }
+            } else {
+              // @ts-expect-error - external type mismatch
+              destRowData[destColumnId] = sourceRowData[sourceColumnId];
+            }
           }
 
           newData[destRowIndex] = destRowData as RowData;
@@ -856,7 +1422,7 @@ export default function SpreadsheetGrid() {
           </button>
         </div>
       </div>
-      <div className="flex-1 w-full border border-zinc-200 dark:border-zinc-800 rounded-none overflow-hidden relative">
+      <div className="flex-1 w-full border border-zinc-200 dark:border-zinc-800 rounded-none overflow-hidden relative flex flex-col">
         {fontsLoaded && (
           <DataEditor
             ref={gridRef}
@@ -894,6 +1460,7 @@ export default function SpreadsheetGrid() {
             onFillPattern={onFillPattern}
             onDelete={onDelete}
             onCellEdited={onCellEdited}
+            onCellActivated={onCellActivated}
             customRenderers={allCells}
             onColumnResize={onColumnResize}
             onColumnMoved={onColumnMoved}
@@ -915,6 +1482,31 @@ export default function SpreadsheetGrid() {
             }}
           />
         )}
+      </div>
+      {/* Bottom Sheet Tabs Bar */}
+      <div className="flex-none h-10 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 flex items-center justify-between px-3 select-none">
+        <div className="flex items-start gap-1 h-full -mt-[1px]">
+          <button
+            onClick={() => setSheet("digital")}
+            className={`px-4 h-[28px] text-[11px] font-semibold uppercase tracking-wider transition-all border flex items-center rounded-none cursor-pointer ${
+              sheet === "digital"
+                ? "bg-white dark:bg-zinc-950 text-blue-600 dark:text-blue-400 border-zinc-200 dark:border-zinc-800 border-t-white dark:border-t-zinc-950 border-b-2 border-b-blue-600 dark:border-b-blue-500 z-10 font-bold"
+                : "bg-zinc-100/50 dark:bg-zinc-900/30 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 border-transparent border-t border-t-zinc-200 dark:border-t-zinc-800"
+            }`}
+          >
+            Digital Worksheet
+          </button>
+          <button
+            onClick={() => setSheet("physical")}
+            className={`px-4 h-[28px] text-[11px] font-semibold uppercase tracking-wider transition-all border flex items-center rounded-none cursor-pointer ${
+              sheet === "physical"
+                ? "bg-white dark:bg-zinc-950 text-blue-600 dark:text-blue-400 border-zinc-200 dark:border-zinc-800 border-t-white dark:border-t-zinc-950 border-b-2 border-b-blue-600 dark:border-b-blue-500 z-10 font-bold"
+                : "bg-zinc-100/50 dark:bg-zinc-900/30 text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 border-transparent border-t border-t-zinc-200 dark:border-t-zinc-800"
+            }`}
+          >
+            Physical Worksheet
+          </button>
+        </div>
       </div>
 
       {/* Render the independent Custom Image Editor completely outside the grid */}
@@ -939,17 +1531,28 @@ export default function SpreadsheetGrid() {
         />
       )}
 
+      {/* Render the independent Attributes Drawer completely outside the grid */}
+      {globalAttributesEditor !== null && (
+        <AttributesDrawer 
+          row={globalAttributesEditor.row}
+          rowData={data[globalAttributesEditor.row]}
+          onClose={() => setGlobalAttributesEditor(null)}
+          setData={setData}
+        />
+      )}
+
 
 
       {/* Folder Importer Modal */}
       {isImporterOpen && (
         <FolderImporterModal 
+          sheetType={sheet}
           onClose={() => setIsImporterOpen(false)}
           onImport={(selectedFolders, preset) => {
             const newRows = selectedFolders.map(folderName => {
-              const row: RowData = { ...emptyRow, folder: folderName };
+              const row: RowData = { ...(sheet === "digital" ? emptyRowDigital : emptyRowPhysical), folder: folderName };
               if (preset) {
-                row.category = preset.category || "Store Graphics";
+                row.category = preset.category || (sheet === "digital" ? "Store Graphics" : "");
                 row.section = preset.section || "";
                 row.price = preset.price || "";
                 row.quantity = preset.quantity || "";
@@ -964,6 +1567,20 @@ export default function SpreadsheetGrid() {
                 row.ai_title_rules = preset.ai_title_rules || "";
                 row.ai_desc_rules = preset.ai_desc_rules || "";
                 row.ai_tag_rules = preset.ai_tag_rules || "";
+                row.shipping_profile = preset.shipping_profile || "";
+                row.readiness_state_id = preset.readiness_state_id || "";
+                row.materials = preset.materials || "";
+                row.sleeve_length = preset.sleeve_length || "";
+                row.neckline = preset.neckline || "";
+                row.clothing_style = preset.clothing_style || "";
+                row.capacity = preset.capacity || "";
+                row.dishwasher_safe = preset.dishwasher_safe || "";
+                row.microwave_safe = preset.microwave_safe || "";
+                row.orientation = preset.orientation || "";
+                row.framing = preset.framing || "";
+                row.aspect_ratio = preset.aspect_ratio || "";
+                row.graphic = preset.graphic || "";
+                row.variations = preset.variations;
               }
               return row;
             });
@@ -1102,8 +1719,18 @@ export default function SpreadsheetGrid() {
         </div>
       )}
 
+      {/* Variations Editor Side Drawer */}
+      {globalVariationsEditor !== null && (
+         <VariationsDrawer 
+            row={globalVariationsEditor.row} 
+            onClose={() => setGlobalVariationsEditor(null)} 
+            rowData={data[globalVariationsEditor.row]}
+            setData={setData}
+         />
+      )}
+
       {/* Preset Manager Modal */}
-      {showPresets && <PresetManagerModal onClose={() => setShowPresets(false)} />}
+      {showPresets && <PresetManagerModal onClose={() => setShowPresets(false)} sheetType={sheet} />}
     </div>
   );
 }
@@ -1196,8 +1823,727 @@ function CustomImageEditor({ urls, altTexts, onCancel, onChange }: { urls: reado
             Apply & Save
           </button>
         </div>
-
       </div>
     </div>
+  );
+}
+
+interface AttributesDrawerProps {
+  row: number;
+  rowData: RowData;
+  onClose: () => void;
+  setData: React.Dispatch<React.SetStateAction<RowData[]>>;
+}
+
+function AttributesDrawer({ row, rowData, onClose, setData }: AttributesDrawerProps) {
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  const [formData, setFormData] = useState({
+    primary_color: rowData.primary_color || "",
+    secondary_color: rowData.secondary_color || "",
+    materials: rowData.materials || "",
+    occasion: rowData.occasion || "",
+    celebration: rowData.celebration || "",
+    sleeve_length: rowData.sleeve_length || "",
+    neckline: rowData.neckline || "",
+    clothing_style: rowData.clothing_style || "",
+    capacity: rowData.capacity || "",
+    dishwasher_safe: rowData.dishwasher_safe || "false",
+    microwave_safe: rowData.microwave_safe || "false",
+    orientation: rowData.orientation || "",
+    framing: rowData.framing || "",
+    aspect_ratio: rowData.aspect_ratio || "",
+    graphic: rowData.graphic || "",
+  });
+
+  const [selectedSubjects, setSelectedSubjects] = useState<string[]>(() =>
+    (rowData.subject || "").split(",").map(s => s.trim()).filter(Boolean)
+  );
+
+  const toggleSubject = (sub: string) => {
+    if (selectedSubjects.includes(sub)) {
+      setSelectedSubjects(selectedSubjects.filter(s => s !== sub));
+    } else {
+      if (selectedSubjects.length >= 3) {
+        toast.error("You can select up to 3 subjects.");
+        return;
+      }
+      setSelectedSubjects([...selectedSubjects, sub]);
+    }
+  };
+
+  const handleSave = () => {
+    setData(prev => {
+      const copy = [...prev];
+      copy[row] = {
+        ...copy[row],
+        ...formData,
+        subject: selectedSubjects.join(", ")
+      };
+      return copy;
+    });
+    toast.success(`Saved attributes for Row ${row + 1}`);
+    onClose();
+  };
+
+  const category = rowData.category || "";
+  const showOccasion = categorySupportsOccasion(category) || categorySupportsCelebration(category);
+  const showClothing = ["T-Shirts", "Sweatshirts & Hoodies"].includes(category);
+  const showMug = category === "Mugs & Drinkware";
+  const showArt = category === "Posters & Prints";
+  const showGraphic = categorySupportsGraphic(category);
+
+  const hasSpecificAttributes = showOccasion || showClothing || showMug || showArt || showGraphic;
+
+  return (
+    <>
+      <div 
+        className="fixed inset-0 bg-black/20 backdrop-blur-[1px] z-[9998]"
+        onClick={onClose}
+      />
+      <div className="fixed top-0 right-0 h-full w-[500px] bg-white dark:bg-zinc-950 border-l border-zinc-200 dark:border-zinc-800 shadow-2xl z-[9999] flex flex-col animate-in slide-in-from-right duration-200">
+        {/* Header */}
+        <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-900/50">
+          <div>
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider">
+              Row {row + 1} - Edit Attributes
+            </h3>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate max-w-[350px]">
+              {rowData.title || "Untitled Product"}
+            </p>
+          </div>
+          <button 
+            onClick={onClose}
+            className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 font-bold"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          
+          {/* General Attributes */}
+          <div className="space-y-4 border border-zinc-200 dark:border-zinc-800 p-4 bg-zinc-50/50 dark:bg-zinc-900/10">
+            <h4 className="text-[11px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800 pb-1.5">
+              General Attributes
+            </h4>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">Primary Color</label>
+                <select
+                  value={formData.primary_color}
+                  onChange={e => setFormData(prev => ({ ...prev, primary_color: e.target.value }))}
+                  className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs rounded-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200"
+                >
+                  {ETSY_COLORS.map(c => (
+                    <option key={c} value={c}>{c || "None"}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">Secondary Color</label>
+                <select
+                  value={formData.secondary_color}
+                  onChange={e => setFormData(prev => ({ ...prev, secondary_color: e.target.value }))}
+                  className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs rounded-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200"
+                >
+                  {ETSY_COLORS.map(c => (
+                    <option key={c} value={c}>{c || "None"}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">Materials</label>
+              <input
+                type="text"
+                placeholder="e.g. Cotton, Polyester"
+                value={formData.materials}
+                onChange={e => setFormData(prev => ({ ...prev, materials: e.target.value }))}
+                className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs rounded-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200"
+              />
+            </div>
+          </div>
+
+          {/* Category-Specific Warning/Helper */}
+          {!category && (
+            <div className="p-3 border border-dashed border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/30 text-center text-xs text-zinc-500 dark:text-zinc-400">
+              Select a category on the worksheet to enable category-specific attributes.
+            </div>
+          )}
+
+          {category && !hasSpecificAttributes && (
+            <div className="p-3 border border-dashed border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/30 text-center text-xs text-zinc-500 dark:text-zinc-400">
+              No additional specific attributes are supported for category &ldquo;{category}&rdquo;.
+            </div>
+          )}
+
+          {/* Gift Occasions Section */}
+          {showOccasion && (
+            <div className="space-y-4 border border-zinc-200 dark:border-zinc-800 p-4 bg-zinc-50/50 dark:bg-zinc-900/10">
+              <h4 className="text-[11px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800 pb-1.5">
+                Gift Occasions
+              </h4>
+              <div className="grid grid-cols-2 gap-4">
+                {categorySupportsOccasion(category) && (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">Occasion</label>
+                    <select
+                      value={formData.occasion}
+                      onChange={e => setFormData(prev => ({ ...prev, occasion: e.target.value }))}
+                      className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs rounded-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200"
+                    >
+                      {ETSY_OCCASIONS.map(o => (
+                        <option key={o} value={o}>{o || "None"}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {categorySupportsCelebration(category) && (
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">Celebration</label>
+                    <select
+                      value={formData.celebration}
+                      onChange={e => setFormData(prev => ({ ...prev, celebration: e.target.value }))}
+                      className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs rounded-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200"
+                    >
+                      {ETSY_CELEBRATIONS.map(c => (
+                        <option key={c} value={c}>{c || "None"}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Clothing Details Section */}
+          {showClothing && (
+            <div className="space-y-4 border border-zinc-200 dark:border-zinc-800 p-4 bg-zinc-50/50 dark:bg-zinc-900/10">
+              <h4 className="text-[11px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800 pb-1.5">
+                Clothing Details
+              </h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">Sleeve Length</label>
+                  <select
+                    value={formData.sleeve_length}
+                    onChange={e => setFormData(prev => ({ ...prev, sleeve_length: e.target.value }))}
+                    className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs rounded-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200"
+                  >
+                    {ETSY_SLEEVE_LENGTH.map(s => (
+                      <option key={s} value={s}>{s || "None"}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">Neckline</label>
+                  <select
+                    value={formData.neckline}
+                    onChange={e => setFormData(prev => ({ ...prev, neckline: e.target.value }))}
+                    className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs rounded-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200"
+                  >
+                    {ETSY_NECKLINE.map(n => (
+                      <option key={n} value={n}>{n || "None"}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">Clothing Style</label>
+                <select
+                  value={formData.clothing_style}
+                  onChange={e => setFormData(prev => ({ ...prev, clothing_style: e.target.value }))}
+                  className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs rounded-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200"
+                >
+                  {ETSY_CLOTHING_STYLE.map(s => (
+                    <option key={s} value={s}>{s || "None"}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
+          {/* Mug Details Section */}
+          {showMug && (
+            <div className="space-y-4 border border-zinc-200 dark:border-zinc-800 p-4 bg-zinc-50/50 dark:bg-zinc-900/10">
+              <h4 className="text-[11px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800 pb-1.5">
+                Mug Details
+              </h4>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">Mug Capacity</label>
+                <select
+                  value={formData.capacity}
+                  onChange={e => setFormData(prev => ({ ...prev, capacity: e.target.value }))}
+                  className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs rounded-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200"
+                >
+                  {ETSY_MUG_CAPACITY.map(c => (
+                    <option key={c} value={c}>{c || "None"}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-4 pt-1">
+                <div className="flex items-center gap-2 select-none">
+                  <input
+                    type="checkbox"
+                    id="dishwasher-safe-checkbox"
+                    checked={formData.dishwasher_safe === "true"}
+                    onChange={e => setFormData(prev => ({ ...prev, dishwasher_safe: e.target.checked ? "true" : "false" }))}
+                    className="rounded border-zinc-300 dark:border-zinc-700 text-blue-600 focus:ring-blue-500 w-4 h-4"
+                  />
+                  <label htmlFor="dishwasher-safe-checkbox" className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 cursor-pointer">
+                    Dishwasher Safe
+                  </label>
+                </div>
+                <div className="flex items-center gap-2 select-none">
+                  <input
+                    type="checkbox"
+                    id="microwave-safe-checkbox"
+                    checked={formData.microwave_safe === "true"}
+                    onChange={e => setFormData(prev => ({ ...prev, microwave_safe: e.target.checked ? "true" : "false" }))}
+                    className="rounded border-zinc-300 dark:border-zinc-700 text-blue-600 focus:ring-blue-500 w-4 h-4"
+                  />
+                  <label htmlFor="microwave-safe-checkbox" className="text-xs font-semibold text-zinc-600 dark:text-zinc-400 cursor-pointer">
+                    Microwave Safe
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Art Details Section */}
+          {showArt && (
+            <div className="space-y-4 border border-zinc-200 dark:border-zinc-800 p-4 bg-zinc-50/50 dark:bg-zinc-900/10">
+              <h4 className="text-[11px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800 pb-1.5">
+                Art Details
+              </h4>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-400">Orientation</label>
+                  <select
+                    value={formData.orientation}
+                    onChange={e => setFormData(prev => ({ ...prev, orientation: e.target.value }))}
+                    className="w-full px-2 py-1.5 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs rounded-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200"
+                  >
+                    {ETSY_ORIENTATION.map(o => (
+                      <option key={o} value={o}>{o || "None"}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-400">Framing</label>
+                  <select
+                    value={formData.framing}
+                    onChange={e => setFormData(prev => ({ ...prev, framing: e.target.value }))}
+                    className="w-full px-2 py-1.5 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs rounded-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200"
+                  >
+                    {ETSY_FRAMING.map(f => (
+                      <option key={f} value={f}>{f || "None"}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-[11px] font-semibold text-zinc-600 dark:text-zinc-400">Aspect Ratio</label>
+                  <select
+                    value={formData.aspect_ratio}
+                    onChange={e => setFormData(prev => ({ ...prev, aspect_ratio: e.target.value }))}
+                    className="w-full px-2 py-1.5 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs rounded-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200"
+                  >
+                    {ETSY_ASPECT_RATIO.map(a => (
+                      <option key={a} value={a}>{a || "None"}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Subject checklist */}
+              {categorySupportsSubject(category) && (
+                <div className="flex flex-col gap-1.5">
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">Subject (Max 3)</label>
+                    <span className="text-[10px] font-medium text-zinc-400 dark:text-zinc-500">{selectedSubjects.length} / 3 selected</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 border border-zinc-200 dark:border-zinc-800 p-2 max-h-40 overflow-y-auto bg-white dark:bg-zinc-900">
+                    {ETSY_SUBJECTS.filter(Boolean).map(sub => {
+                      const isChecked = selectedSubjects.includes(sub);
+                      const isMaxReached = selectedSubjects.length >= 3 && !isChecked;
+                      return (
+                        <label 
+                          key={sub}
+                          className={`flex items-center gap-2 p-1.5 border text-[11px] cursor-pointer transition-colors ${
+                            isChecked 
+                              ? "bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-400" 
+                              : isMaxReached 
+                                ? "opacity-50 cursor-not-allowed text-zinc-300 dark:text-zinc-600" 
+                                : "bg-white dark:bg-zinc-900 border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            disabled={isMaxReached}
+                            onChange={() => toggleSubject(sub)}
+                            className="rounded border-zinc-300 dark:border-zinc-700 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
+                          />
+                          {sub}
+                        </label>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Graphic Section */}
+          {showGraphic && (
+            <div className="space-y-4 border border-zinc-200 dark:border-zinc-800 p-4 bg-zinc-50/50 dark:bg-zinc-900/10">
+              <h4 className="text-[11px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800 pb-1.5">
+                Graphic
+              </h4>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">Graphic Style</label>
+                <select
+                  value={formData.graphic}
+                  onChange={e => setFormData(prev => ({ ...prev, graphic: e.target.value }))}
+                  className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs rounded-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200"
+                >
+                  {ETSY_GRAPHICS.map(g => (
+                    <option key={g} value={g}>{g || "None"}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 flex justify-end gap-3 bg-zinc-50 dark:bg-zinc-900/50">
+          <button 
+            onClick={onClose}
+            className="px-5 py-2 text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 hover:text-zinc-800 dark:hover:bg-zinc-700 transition-colors"
+          >
+            Cancel
+          </button>
+          <button 
+            onClick={handleSave}
+            className="px-6 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-colors"
+          >
+            Save Changes
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+interface VariationsDrawerProps {
+  row: number;
+  rowData: RowData;
+  onClose: () => void;
+  setData: React.Dispatch<React.SetStateAction<RowData[]>>;
+}
+
+function VariationsDrawer({ row, rowData, onClose, setData }: VariationsDrawerProps) {
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  const [variations, setVariations] = useState<PresetVariations>(() => {
+    if (rowData.variations) {
+      return JSON.parse(JSON.stringify(rowData.variations)); // deep copy
+    }
+    return { properties: [], combinations: [], priceOnProperty: [], quantityOnProperty: [], skuOnProperty: [] };
+  });
+
+  const [globalPrice, setGlobalPrice] = useState("");
+  const [globalQty, setGlobalQty] = useState("");
+
+  const handleApplyGlobalPrice = () => {
+    if (!globalPrice || isNaN(parseFloat(globalPrice))) {
+      toast.error("Please enter a valid price.");
+      return;
+    }
+    setVariations(prev => {
+      const copy = { ...prev };
+      copy.combinations = copy.combinations.map(c => ({ ...c, price: globalPrice }));
+      return copy;
+    });
+    setGlobalPrice("");
+    toast.success("Applied price to all combinations");
+  };
+
+  const handleApplyGlobalQty = () => {
+    if (!globalQty || isNaN(parseInt(globalQty))) {
+      toast.error("Please enter a valid quantity.");
+      return;
+    }
+    setVariations(prev => {
+      const copy = { ...prev };
+      copy.combinations = copy.combinations.map(c => ({ ...c, quantity: globalQty }));
+      return copy;
+    });
+    setGlobalQty("");
+    toast.success("Applied quantity to all combinations");
+  };
+
+  const handleToggleAll = (enabled: boolean) => {
+    setVariations(prev => {
+      const copy = { ...prev };
+      copy.combinations = copy.combinations.map(c => ({ ...c, isEnabled: enabled }));
+      return copy;
+    });
+  };
+
+  const handleSave = () => {
+    setData(prev => {
+      const copy = [...prev];
+      copy[row] = {
+        ...copy[row],
+        variations
+      };
+      return copy;
+    });
+    toast.success(`Saved variations for Row ${row + 1}`);
+    onClose();
+  };
+
+  const hasProperties = variations.properties && variations.properties.length > 0;
+
+  return (
+    <>
+      <div 
+        className="fixed inset-0 bg-black/20 backdrop-blur-[1px] z-[9998]"
+        onClick={onClose}
+      />
+      <div className="fixed top-0 right-0 h-full w-[550px] bg-white dark:bg-zinc-950 border-l border-zinc-200 dark:border-zinc-800 shadow-2xl z-[9999] flex flex-col animate-in slide-in-from-right duration-200">
+        {/* Header */}
+        <div className="p-4 border-b border-zinc-200 dark:border-zinc-800 flex justify-between items-center bg-zinc-50 dark:bg-zinc-900/50">
+          <div>
+            <h3 className="text-sm font-bold text-zinc-900 dark:text-white uppercase tracking-wider">
+              Row {row + 1} - Edit Variations
+            </h3>
+            <p className="text-xs text-zinc-500 dark:text-zinc-400 truncate max-w-[400px]">
+              {rowData.title || "Untitled Product"}
+            </p>
+          </div>
+          <button 
+            onClick={onClose}
+            className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 font-bold"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          {!hasProperties ? (
+            <div className="text-center py-12 space-y-3">
+              <p className="text-sm text-zinc-500 dark:text-zinc-400 font-medium">
+                No variations are configured for this listing.
+              </p>
+              <p className="text-xs text-zinc-400 dark:text-zinc-500 max-w-xs mx-auto">
+                Please configure variations in the Presets Manager first, and apply that preset to this listing.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Quick Actions */}
+              <div className="p-3 bg-zinc-50 dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-none space-y-3">
+                <h4 className="text-xs font-bold text-zinc-700 dark:text-zinc-300 uppercase tracking-wider">Quick Actions</h4>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button 
+                    onClick={() => handleToggleAll(true)}
+                    className="px-2.5 py-1 text-xs font-medium bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors"
+                  >
+                    Enable All
+                  </button>
+                  <button 
+                    onClick={() => handleToggleAll(false)}
+                    className="px-2.5 py-1 text-xs font-medium bg-white dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 text-zinc-700 dark:text-zinc-300 hover:bg-zinc-50 dark:hover:bg-zinc-700 transition-colors"
+                  >
+                    Disable All
+                  </button>
+                </div>
+                <div className="grid grid-cols-2 gap-3 pt-1">
+                  <div className="flex gap-1.5">
+                    <input 
+                      type="text" 
+                      placeholder="Override all prices..."
+                      value={globalPrice}
+                      onChange={e => setGlobalPrice(e.target.value)}
+                      className="flex-1 px-2 py-1 text-xs border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none"
+                    />
+                    <button 
+                      onClick={handleApplyGlobalPrice}
+                      className="px-3 py-1 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                    >
+                      Apply
+                    </button>
+                  </div>
+                  <div className="flex gap-1.5">
+                    <input 
+                      type="text" 
+                      placeholder="Override all quantities..."
+                      value={globalQty}
+                      onChange={e => setGlobalQty(e.target.value)}
+                      className="flex-1 px-2 py-1 text-xs border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none"
+                    />
+                    <button 
+                      onClick={handleApplyGlobalQty}
+                      className="px-3 py-1 text-xs font-medium bg-blue-600 hover:bg-blue-700 text-white transition-colors"
+                    >
+                      Apply
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Variations Table */}
+              <div className="border border-zinc-200 dark:border-zinc-800 overflow-x-auto">
+                <table className="w-full text-left text-xs min-w-[450px]">
+                  <thead className="bg-zinc-50 dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-800 text-zinc-700 dark:text-zinc-300 font-bold">
+                    <tr>
+                      <th className="p-2 w-10 text-center">Use</th>
+                      <th className="p-2">Combination</th>
+                      <th className="p-2 w-20">Price</th>
+                      <th className="p-2 w-16">Qty</th>
+                      <th className="p-2">SKU Suffix</th>
+                      <th className="p-2 w-20">Img Slot</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800 text-zinc-900 dark:text-zinc-100">
+                    {variations.combinations.map((comb, idx) => {
+                      const combLabel = variations.properties.map(p => comb.values[p.name] || "").join(" / ");
+                      return (
+                        <tr key={comb.id} className={comb.isEnabled ? "bg-white dark:bg-zinc-950" : "bg-zinc-50/50 dark:bg-zinc-900/20 opacity-60"}>
+                          <td className="p-2 text-center">
+                            <input 
+                              type="checkbox"
+                              checked={comb.isEnabled}
+                              onChange={e => {
+                                setVariations(prev => {
+                                  const copy = { ...prev };
+                                  copy.combinations = [...copy.combinations];
+                                  copy.combinations[idx] = { ...comb, isEnabled: e.target.checked };
+                                  return copy;
+                                });
+                              }}
+                              className="rounded border-zinc-300 dark:border-zinc-700 text-blue-600 focus:ring-blue-500"
+                            />
+                          </td>
+                          <td className="p-2 font-medium break-all">{combLabel}</td>
+                          <td className="p-2">
+                            <input 
+                              type="text"
+                              value={comb.price || ""}
+                              placeholder={rowData.price || "19.99"}
+                              disabled={!comb.isEnabled}
+                              onChange={e => {
+                                setVariations(prev => {
+                                  const copy = { ...prev };
+                                  copy.combinations = [...copy.combinations];
+                                  copy.combinations[idx] = { ...comb, price: e.target.value };
+                                  return copy;
+                                });
+                              }}
+                              className="w-full px-1.5 py-0.5 border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-xs focus:outline-none disabled:bg-zinc-100 dark:disabled:bg-zinc-800 text-zinc-900 dark:text-white"
+                            />
+                          </td>
+                          <td className="p-2">
+                            <input 
+                              type="text"
+                              value={comb.quantity || ""}
+                              placeholder={rowData.quantity || "100"}
+                              disabled={!comb.isEnabled}
+                              onChange={e => {
+                                setVariations(prev => {
+                                  const copy = { ...prev };
+                                  copy.combinations = [...copy.combinations];
+                                  copy.combinations[idx] = { ...comb, quantity: e.target.value };
+                                  return copy;
+                                });
+                              }}
+                              className="w-full px-1.5 py-0.5 border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-xs focus:outline-none disabled:bg-zinc-100 dark:disabled:bg-zinc-800 text-zinc-900 dark:text-white"
+                            />
+                          </td>
+                          <td className="p-2">
+                            <input 
+                              type="text"
+                              value={comb.skuTemplate || ""}
+                              placeholder="{folder}-variant"
+                              disabled={!comb.isEnabled}
+                              onChange={e => {
+                                setVariations(prev => {
+                                  const copy = { ...prev };
+                                  copy.combinations = [...copy.combinations];
+                                  copy.combinations[idx] = { ...comb, skuTemplate: e.target.value };
+                                  return copy;
+                                });
+                              }}
+                              className="w-full px-1.5 py-0.5 border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-xs focus:outline-none disabled:bg-zinc-100 dark:disabled:bg-zinc-800 text-zinc-900 dark:text-white"
+                            />
+                          </td>
+                          <td className="p-2">
+                            <select
+                              value={comb.imageSlot || ""}
+                              disabled={!comb.isEnabled}
+                              onChange={e => {
+                                const val = e.target.value ? parseInt(e.target.value) : undefined;
+                                setVariations(prev => {
+                                  const copy = { ...prev };
+                                  copy.combinations = [...copy.combinations];
+                                  copy.combinations[idx] = { ...comb, imageSlot: val };
+                                  return copy;
+                                });
+                              }}
+                              className="w-full px-1 py-0.5 border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-950 text-xs focus:outline-none disabled:bg-zinc-100 dark:disabled:bg-zinc-800 text-zinc-800 dark:text-zinc-200"
+                            >
+                              <option value="">None</option>
+                              {Array.from({ length: 10 }).map((_, i) => (
+                                <option key={i} value={i + 1}>Img {i + 1}</option>
+                              ))}
+                            </select>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 border-t border-zinc-200 dark:border-zinc-800 flex justify-end gap-3 bg-zinc-50 dark:bg-zinc-900/50">
+          <button 
+            onClick={onClose}
+            className="px-5 py-2 text-xs font-semibold text-zinc-600 dark:text-zinc-400 hover:text-zinc-900 dark:hover:text-white bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 hover:bg-zinc-50 hover:text-zinc-800 dark:hover:bg-zinc-700 transition-colors"
+          >
+            Cancel
+          </button>
+          <button 
+            onClick={handleSave}
+            disabled={!hasProperties}
+            className="px-6 py-2 text-xs font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            Save Changes
+          </button>
+        </div>
+      </div>
+    </>
   );
 }
