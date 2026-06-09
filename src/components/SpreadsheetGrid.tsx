@@ -1324,17 +1324,26 @@ export default function SpreadsheetGrid() {
           }
         }
 
-        // 2. Delete full rows (splice them out entirely)
+        // 2. Clear full rows (instead of splicing them out entirely)
         if (selection.rows) {
           const selectedRows = typeof selection.rows.toArray === "function" ? selection.rows.toArray() : Array.from(selection.rows);
-          
-          // Sort indices descending so we can splice safely from bottom up without shifting indices
-          const sortedRows = [...selectedRows].sort((a, b) => b - a);
-          
-          for (const r of sortedRows) {
+          for (const r of selectedRows) {
             if (typeof r !== "number" || r >= newData.length) continue;
-            newData.splice(r, 1);
-            didDelete = true;
+            const rowData = { ...newData[r] };
+            for (let c = 0; c < columns.length; c++) {
+              const colId = columns[c].id;
+              if (colId) {
+                if (colId === "variations") {
+                  rowData.variations = undefined;
+                } else {
+                  // @ts-expect-error - dynamic row field clear
+                  rowData[colId] = "";
+                }
+                didDelete = true;
+                cellsToUpdate.push({ cell: [c, r] });
+              }
+            }
+            newData[r] = rowData as RowData;
           }
         }
 
