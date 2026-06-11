@@ -905,68 +905,68 @@ const handleDelete = (id: string) => {
                       </div>
                     )}
 
-                    {/* Materials — visible on both physical and digital sheets */}
-                    <div className="relative">
-                      <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">Materials</label>
-                      <div 
-                        onClick={() => setIsMaterialsOpen(!isMaterialsOpen)}
-                        className="w-full px-3 py-2 text-sm border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 flex justify-between items-center cursor-pointer min-h-[38px] select-none"
-                      >
-                        <span className="truncate">
-                          {editForm.materials || "Select materials..."}
-                        </span>
-                        <ChevronDown size={14} className="text-zinc-500" />
-                      </div>
-                      
-                      {isMaterialsOpen && (
-                        <>
-                          <div className="fixed inset-0 z-10" onClick={() => setIsMaterialsOpen(false)} />
-                          <div className="absolute left-0 mt-1 w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-750 shadow-lg z-20 max-h-60 overflow-y-auto p-2 space-y-1">
-                            {["Cotton", "Polyester", "Ceramic", "Paper", "Canvas", "Wood", "Metal", "Glass", "Enamel", "Plastic", "Vinyl", "Leather"].map(mat => {
-                              const selectedList = (editForm.materials || "").split(",").map(s => s.trim()).filter(Boolean);
-                              const isChecked = selectedList.includes(mat);
-                              
-                              const toggleMaterial = () => {
-                                let newList = [...selectedList];
-                                if (isChecked) {
-                                  newList = newList.filter(m => m !== mat);
-                                } else {
-                                  newList.push(mat);
-                                }
-                                setEditForm({ ...editForm, materials: newList.join(", ") });
-                              };
-
-                              return (
-                                <label key={mat} className="flex items-center gap-2 px-2 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer text-sm text-zinc-800 dark:text-zinc-200 select-none">
-                                  <input 
-                                    type="checkbox" 
-                                    checked={isChecked}
-                                    onChange={toggleMaterial}
-                                    className="rounded border-zinc-300 dark:border-zinc-700 text-blue-600 focus:ring-blue-500"
-                                  />
-                                  {mat}
-                                </label>
-                              );
-                            })}
-                            
-                            <div className="border-t border-zinc-200 dark:border-zinc-800 mt-2 pt-2">
-                              <label className="block text-[10px] font-bold uppercase text-zinc-405 mb-1 px-2">Custom Material</label>
-                              <input
-                                type="text"
-                                placeholder="Add custom, comma-separated..."
-                                value={editForm.materials || ""}
-                                onChange={e => setEditForm({ ...editForm, materials: e.target.value })}
-                                className="w-full px-2 py-1 text-xs border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none"
-                              />
-                            </div>
-                          </div>
-                        </>
-                      )}
-                    </div>
-
                     {sheetType === "physical" && (
                       <div className="border border-zinc-200 dark:border-zinc-800 p-3 bg-zinc-50 dark:bg-zinc-850 rounded-none space-y-4">
-                        <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Physical-only attributes</h4>
+                        <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Physical attributes</h4>
+                        
+                        {/* Materials */}
+                        <div className="relative">
+                          <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">Materials</label>
+                          <div 
+                            onClick={() => setIsMaterialsOpen(!isMaterialsOpen)}
+                            className="w-full px-3 py-2 text-sm border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 flex justify-between items-center cursor-pointer min-h-[38px] select-none"
+                          >
+                            <span className="truncate">
+                              {editForm.materials || "Select materials..."}
+                            </span>
+                            <ChevronDown size={14} className="text-zinc-500" />
+                          </div>
+                          
+                          {isMaterialsOpen && (
+                            <>
+                              <div className="fixed inset-0 z-10" onClick={() => setIsMaterialsOpen(false)} />
+                              <div className="absolute left-0 mt-1 w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-750 shadow-lg z-20 max-h-60 overflow-y-auto p-2 space-y-1">
+                                {["Cotton", "Polyester", "Ceramic", "Paper", "Canvas", "Wood", "Metal", "Glass", "Enamel", "Plastic", "Vinyl", "Leather"].map(mat => {
+                                  const selectedList = (editForm.materials || "").split(",").map(s => s.trim()).filter(Boolean);
+                                  const isChecked = selectedList.includes(mat);
+                                  
+                                  const toggleMaterial = () => {
+                                    let newList = [...selectedList];
+                                    if (isChecked) {
+                                      newList = newList.filter(m => m !== mat);
+                                    } else {
+                                      newList.push(mat);
+                                    }
+                                    setEditForm({ ...editForm, materials: newList.join(", ") });
+                                  };
+
+                                  return (
+                                    <label key={mat} className="flex items-center gap-2 px-2 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer text-sm text-zinc-800 dark:text-zinc-200 select-none">
+                                      <input 
+                                        type="checkbox" 
+                                        checked={isChecked}
+                                        onChange={toggleMaterial}
+                                        className="rounded border-zinc-300 dark:border-zinc-700 text-blue-600 focus:ring-blue-500"
+                                      />
+                                      {mat}
+                                    </label>
+                                  );
+                                })}
+                                
+                                <div className="border-t border-zinc-200 dark:border-zinc-800 mt-2 pt-2">
+                                  <label className="block text-[10px] font-bold uppercase text-zinc-405 mb-1 px-2">Custom Material</label>
+                                  <input
+                                    type="text"
+                                    placeholder="Add custom, comma-separated..."
+                                    value={editForm.materials || ""}
+                                    onChange={e => setEditForm({ ...editForm, materials: e.target.value })}
+                                    className="w-full px-2 py-1 text-xs border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none"
+                                  />
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </div>
 
                         {/* Category-specific fields */}
                         {(editForm.category === "T-Shirts" || editForm.category === "Sweatshirts & Hoodies") && (
