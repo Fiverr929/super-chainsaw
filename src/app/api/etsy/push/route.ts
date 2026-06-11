@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+﻿/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from 'next/server';
 import axios from 'axios';
 import fs from 'fs';
@@ -26,16 +26,16 @@ const TAXONOMY_MAP: Record<string, number> = {
   "Digital Prints": 2078,
   "Digital Planners": 354,
   "Templates": 1874,
-  "Clip Art": 7663,
+  "Clip Art": 6844,         // Clip Art & Image Files
   "Wall Art": 2078,
-  "Digital Patterns": 7192,
-  "Fonts": 10620,
+  "Digital Patterns": 6229,  // Patterns & How To
+  "Fonts": 1875,             // Graphic Design
   "Logos & Branding": 1877,
   "Social Media Templates": 12486,
   "Website Templates": 2818,
   "Digital Paper": 1251,
-  "SVG Files": 7663,
-  "Lightroom Presets": 12107,
+  "SVG Files": 12394,        // Cutting Machine Files
+  "Lightroom Presets": 12106, // Presets & Photo Filters
   "T-Shirts": 559,
   "Sweatshirts & Hoodies": 2198,
   "Mugs & Drinkware": 1062,
@@ -314,7 +314,8 @@ export async function POST(req: Request) {
       }
 
       // 4. Update Properties
-      const propertyUpdates = [];
+      const propertyUpdates: {id: number, value_ids: number[], values: string[]}[] = [];
+      const propertyDeletions: number[] = [];
 
       const PROP_IDS = {
         primary_color: 200,
@@ -336,65 +337,72 @@ export async function POST(req: Request) {
         microwave_safe: 47626760308
       };
 
-      if (data.primary_color && VALUE_IDS_MAP[200] && VALUE_IDS_MAP[200][data.primary_color as string]) {
-        propertyUpdates.push({ id: 200, value_ids: [VALUE_IDS_MAP[200][data.primary_color as string]], values: [data.primary_color as string] });
-      }
+      const processProperty = (key: string, propId: number, supportsMultiple: boolean = false) => {
+         const val = data[key];
+         if (!val || val === "Auto") return;
+         if (val === "None") {
+            if (!isNewListing) propertyDeletions.push(propId);
+            return;
+         }
+         
+         if (supportsMultiple) {
+            const list = String(val).split(',').map(s => s.trim()).filter(Boolean);
+            const subIds = list.map(s => VALUE_IDS_MAP[propId]?.[s]).filter(Boolean);
+            if (subIds.length > 0) {
+               propertyUpdates.push({ id: propId, value_ids: subIds, values: list.filter(s => VALUE_IDS_MAP[propId]?.[s]) });
+            }
+         } else {
+            if (VALUE_IDS_MAP[propId] && VALUE_IDS_MAP[propId][val as string]) {
+               propertyUpdates.push({ id: propId, value_ids: [VALUE_IDS_MAP[propId][val as string]], values: [val as string] });
+            }
+         }
+      };
 
-      if (data.secondary_color && VALUE_IDS_MAP[52047899002] && VALUE_IDS_MAP[52047899002][data.secondary_color as string]) {
-        propertyUpdates.push({ id: 52047899002, value_ids: [VALUE_IDS_MAP[52047899002][data.secondary_color as string]], values: [data.secondary_color as string] });
-      }
+      processProperty('primary_color', 200);
+      processProperty('secondary_color', 52047899002);
+      processProperty('occasion', 46803063641);
+      processProperty('celebration', 46803063659);
+      processProperty('subject', 400394338806, true);
 
-      if (data.occasion && VALUE_IDS_MAP[46803063641] && VALUE_IDS_MAP[46803063641][data.occasion as string]) {
-        propertyUpdates.push({ id: 46803063641, value_ids: [VALUE_IDS_MAP[46803063641][data.occasion as string]], values: [data.occasion as string] });
-      }
-
-      if (data.celebration && VALUE_IDS_MAP[46803063659] && VALUE_IDS_MAP[46803063659][data.celebration as string]) {
-        propertyUpdates.push({ id: 46803063659, value_ids: [VALUE_IDS_MAP[46803063659][data.celebration as string]], values: [data.celebration as string] });
-      }
-
-      // Art subject (ID 400394338806) - supports up to 3 values
-      if (data.subject) {
-        const subList = String(data.subject).split(',').map(s => s.trim()).filter(Boolean);
-        const subIds = subList.map(s => VALUE_IDS_MAP[400394338806]?.[s]).filter(Boolean);
-        if (subIds.length > 0) {
-          propertyUpdates.push({ id: 400394338806, value_ids: subIds, values: subList.filter(s => VALUE_IDS_MAP[400394338806]?.[s]) });
-        }
-      }
-
-      // Graphic (Clothing graphic 332797777099 or Home graphic 396998957792) - supports 1 value
       if (isPhysical) {
         const graphicPropId = (data.category === "T-Shirts" || data.category === "Sweatshirts & Hoodies") ? 332797777099 : (data.category === "Mugs & Drinkware" ? 396998957792 : null);
-        if (graphicPropId && data.graphic && VALUE_IDS_MAP[graphicPropId] && VALUE_IDS_MAP[graphicPropId][data.graphic as string]) {
-          propertyUpdates.push({ id: graphicPropId, value_ids: [VALUE_IDS_MAP[graphicPropId][data.graphic as string]], values: [data.graphic as string] });
+        if (graphicPropId) {
+           processProperty('graphic', graphicPropId);
         }
       }
 
       const otherProps = ['orientation', 'framing', 'aspect_ratio', 'room', 'home_style', 'can_be_personalized', 'sleeve_length', 'neckline', 'clothing_style', 'dishwasher_safe', 'microwave_safe'];
       for (const key of otherProps) {
-        const val = data[key];
-        const propId = (PROP_IDS as any)[key];
-        if (val && propId && VALUE_IDS_MAP[propId] && VALUE_IDS_MAP[propId][val as string]) {
-          propertyUpdates.push({ id: propId, value_ids: [VALUE_IDS_MAP[propId][val as string]], values: [val as string] });
+        if ((PROP_IDS as any)[key]) {
+           processProperty(key, (PROP_IDS as any)[key]);
         }
       }
 
-      if (data.capacity) {
-        propertyUpdates.push({ id: 52047898162, value_ids: [], values: [String(data.capacity)] });
+      if (data.capacity && data.capacity !== "Auto") {
+        if (data.capacity === "None") {
+           if (!isNewListing) propertyDeletions.push(52047898162);
+        } else {
+           propertyUpdates.push({ id: 52047898162, value_ids: [], values: [String(data.capacity)] });
+        }
       }
 
-      if (data.materials) {
-        const matList = String(data.materials).split(',').map(s => s.trim()).filter(s => s.length > 0);
-        const resolvedIds = [];
-        const resolvedNames = [];
-        for (const mat of matList) {
-          const mId = resolveMaterialId(mat);
-          if (mId) {
-            resolvedIds.push(mId);
-            resolvedNames.push(mat);
-          }
-        }
-        if (resolvedIds.length > 0) {
-          propertyUpdates.push({ id: 148789511893, value_ids: resolvedIds, values: resolvedNames });
+      if (data.materials && data.materials !== "Auto") {
+        if (data.materials === "None") {
+           if (!isNewListing) propertyDeletions.push(148789511893);
+        } else {
+           const matList = String(data.materials).split(',').map(s => s.trim()).filter(s => s.length > 0);
+           const resolvedIds = [];
+           const resolvedNames = [];
+           for (const mat of matList) {
+             const mId = resolveMaterialId(mat);
+             if (mId) {
+               resolvedIds.push(mId);
+               resolvedNames.push(mat);
+             }
+           }
+           if (resolvedIds.length > 0) {
+             propertyUpdates.push({ id: 148789511893, value_ids: resolvedIds, values: resolvedNames });
+           }
         }
       }
 
@@ -409,6 +417,19 @@ export async function POST(req: Request) {
         } catch (err: unknown) {
           const error = err as { response?: { data?: unknown }, message?: string };
           console.warn(`Failed to update property ${prop.id}. Ignoring.`, error.response?.data || error.message);
+        }
+      }
+
+      for (const propId of propertyDeletions) {
+        try {
+          await axiosWithRetry({
+            url: `https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}/properties/${propId}`,
+            method: 'DELETE',
+            headers
+          });
+        } catch (err: unknown) {
+          const error = err as { response?: { data?: unknown }, message?: string };
+          console.warn(`Failed to delete property ${propId}. Ignoring.`, error.response?.data || error.message);
         }
       }
     } else {
