@@ -40,7 +40,7 @@ import {
 import { useAIPipeline } from "@/hooks/useAIPipeline";
 import { useEtsyPush } from "@/hooks/useEtsyPush";
 import FolderImporterModal from "./FolderImporterModal";
-import PresetManagerModal, { PresetVariations } from "./PresetManagerModal";
+import PresetManagerModal, { PresetVariations, VariationCombination } from "./PresetManagerModal";
 import { FolderPlus, Layers, ChevronDown, Trash2 } from "lucide-react";
 
 const imageCache: Record<string, { absoluteUrlArray: string[], thumbnailUrls: string[] }> = {};
@@ -61,10 +61,7 @@ const DIGITAL_COLUMNS: GridColumn[] = [
   { title: "Price", id: "price", width: 80 },
   { title: "Quantity", id: "quantity", width: 80 },
   { title: "Section", id: "section", width: 120 },
-  { title: "Primary Color", id: "primary_color", width: 120 },
-  { title: "Occasion", id: "occasion", width: 120 },
-  { title: "Celebration", id: "celebration", width: 120 },
-  { title: "Subject / Graphic", id: "subject", width: 150 },
+  { title: "Attributes", id: "attributes", width: 200 },
 ];
 
 const PHYSICAL_COLUMNS: GridColumn[] = [
@@ -148,10 +145,10 @@ const emptyRowDigital: RowData = {
   quantity: "",
   category: "",
   section: "",
-  primary_color: "",
-  occasion: "",
-  celebration: "",
-  subject: "",
+  primary_color: "Auto",
+  occasion: "Auto",
+  celebration: "Auto",
+  subject: "Auto",
   who_made: "",
   when_made: "",
   is_supply: "",
@@ -325,7 +322,16 @@ const parseAttributesSummary = (summaryText: string): Partial<RowData> => {
 
 export default function SpreadsheetGrid() {
   const gridRef = useRef<DataEditorRef>(null);
+  const [isMounted, setIsMounted] = useState(false);
   const [sheet, setSheet] = useState<"digital" | "physical">("digital");
+
+  React.useEffect(() => {
+    const savedSheet = localStorage.getItem("workstation_v2_active_sheet");
+    if (savedSheet === "digital" || savedSheet === "physical") {
+      setSheet(savedSheet);
+    }
+    setIsMounted(true);
+  }, []);
   const [columns, setColumns] = useState(DIGITAL_COLUMNS);
   const [zoom, setZoom] = useState(1);
   const [gridSelection, setGridSelection] = useState<GridSelection | undefined>(undefined);
@@ -348,7 +354,7 @@ export default function SpreadsheetGrid() {
   const [processingProfiles, setProcessingProfiles] = useState<string[]>([""]);
 
   const fetchSections = useCallback(() => {
-     fetch('/api/etsy/sections')
+     return fetch('/api/etsy/sections')
        .then(res => res.json())
        .then(data => {
           if (data.sections && Array.isArray(data.sections)) {
@@ -364,7 +370,7 @@ export default function SpreadsheetGrid() {
   }, []);
 
   const fetchShippingProfiles = useCallback(() => {
-     fetch('/api/etsy/shipping-profiles')
+     return fetch('/api/etsy/shipping-profiles')
        .then(res => res.json())
        .then(data => {
           if (data.profiles && Array.isArray(data.profiles)) {
@@ -380,7 +386,7 @@ export default function SpreadsheetGrid() {
   }, []);
 
   const fetchProcessingProfiles = useCallback(() => {
-     fetch('/api/etsy/processing-profiles')
+     return fetch('/api/etsy/processing-profiles')
        .then(res => res.json())
        .then(data => {
           if (data.profiles && Array.isArray(data.profiles)) {
@@ -396,14 +402,17 @@ export default function SpreadsheetGrid() {
   }, []);
 
   React.useEffect(() => {
-     fetchSections();
-     fetchShippingProfiles();
-     fetchProcessingProfiles();
+     const init = async () => {
+       await fetchSections();
+       await fetchShippingProfiles();
+       await fetchProcessingProfiles();
+     };
+     init();
      
-     const handleChanged = () => {
-        fetchSections();
-        fetchShippingProfiles();
-        fetchProcessingProfiles();
+     const handleChanged = async () => {
+        await fetchSections();
+        await fetchShippingProfiles();
+        await fetchProcessingProfiles();
      };
 
      window.addEventListener("etsy-store-changed", handleChanged);
@@ -517,7 +526,7 @@ export default function SpreadsheetGrid() {
         } else if (currentTask.action === "generate_tags") {
           await triggerAIGeneration(currentTask.row, ["tags"]);
         } else if (currentTask.action === "generate_all") {
-          await triggerAIGeneration(currentTask.row, ["title", "description", "tags", "primary_color", "occasion", "celebration", "subject"]);
+          await triggerAIGeneration(currentTask.row, ["title", "description", "tags", "primary_color", "secondary_color", "materials", "sleeve_length", "neckline", "clothing_style", "capacity", "dishwasher_safe", "microwave_safe", "orientation", "framing", "aspect_ratio", "occasion", "celebration", "subject", "graphic"]);
         } else if (currentTask.action === "publish") {
           await triggerEtsyPush(currentTask.row, "all");
         } else if (currentTask.action === "update_text") {
@@ -533,12 +542,12 @@ export default function SpreadsheetGrid() {
          console.error("Queue task failed:", err);
       } finally {
         setTaskQueue(prev => prev.filter(t => t.id !== currentTask.id));
-        isProcessingQueue.current = false;
         
         // Delay to avoid hitting API rate limits if there are more tasks
         if (taskQueue.length > 1) {
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
+        isProcessingQueue.current = false;
       }
     };
 
@@ -601,7 +610,7 @@ export default function SpreadsheetGrid() {
         }
         
         if (hasActiveVariations && enabledCombs.length > 0) {
-          const prices = enabledCombs.map((c: any) => parseFloat(c.price) || parseFloat(dataRow.price) || 0.0);
+          const prices = enabledCombs.map((c: VariationCombination) => parseFloat(c.price || "0") || parseFloat(dataRow.price) || 0.0);
           const minPrice = Math.min(...prices);
           const maxPrice = Math.max(...prices);
           const priceStr = minPrice === maxPrice ? `$${minPrice.toFixed(2)}` : `$${minPrice.toFixed(2)}-$${maxPrice.toFixed(2)}`;
@@ -618,13 +627,14 @@ export default function SpreadsheetGrid() {
             }
           } as TextCell;
         } else {
+          const isEmptyRow = !dataRow?.folder && !dataRow?.title && !dataRow?.description;
           return {
             kind: GridCellKind.Text,
             allowOverlay: false,
             readonly: true,
-            data: "Configure",
-            displayData: "⚙️ Configure...",
-            themeOverride: {
+            data: isEmptyRow ? "" : "Configure",
+            displayData: isEmptyRow ? "" : "⚙️ Configure...",
+            themeOverride: isEmptyRow ? undefined : {
               textDark: "#64748b",
               bgCell: "#f8fafc"
             }
@@ -635,7 +645,7 @@ export default function SpreadsheetGrid() {
       // Special rendering for Price column under variations
       if (columnId === "price") {
          if (hasActiveVariations && enabledCombs.length > 0) {
-            const prices = enabledCombs.map((c: any) => parseFloat(c.price) || parseFloat(dataRow.price) || 0.0);
+            const prices = enabledCombs.map((c: VariationCombination) => parseFloat(c.price || "0") || parseFloat(dataRow.price) || 0.0);
             const minPrice = Math.min(...prices);
             const maxPrice = Math.max(...prices);
             const priceStr = minPrice === maxPrice ? `$${minPrice.toFixed(2)}` : `$${minPrice.toFixed(2)} - $${maxPrice.toFixed(2)}`;
@@ -655,7 +665,7 @@ export default function SpreadsheetGrid() {
       // Special rendering for Quantity column under variations
       if (columnId === "quantity") {
          if (hasActiveVariations && enabledCombs.length > 0) {
-            const totalQty = enabledCombs.reduce((sum: number, c: any) => sum + (parseInt(c.quantity) || parseInt(dataRow.quantity) || 0), 0);
+            const totalQty = enabledCombs.reduce((sum: number, c: VariationCombination) => sum + (parseInt(c.quantity || "0") || parseInt(dataRow.quantity) || 0), 0);
             return {
               kind: GridCellKind.Text,
               allowOverlay: true,
@@ -819,9 +829,9 @@ export default function SpreadsheetGrid() {
                allowedValues: sheet === "digital" ? ETSY_DIGITAL_CATEGORIES : ETSY_PHYSICAL_CATEGORIES,
                value: value || ""
             },
-            themeOverride: { 
-              baseFontStyle: "13px Inter, sans-serif"
-            }
+            themeOverride: value === "Auto" 
+              ? { baseFontStyle: "13px Inter, sans-serif", bgCell: "#eff6ff", textDark: "#1d4ed8" }
+              : { baseFontStyle: "13px Inter, sans-serif" }
          } as GridCell;
       }
 
@@ -835,9 +845,9 @@ export default function SpreadsheetGrid() {
                allowedValues: shippingProfiles,
                value: value || ""
             },
-            themeOverride: {
-              baseFontStyle: "13px Inter, sans-serif"
-            }
+            themeOverride: value === "Auto" 
+              ? { baseFontStyle: "13px Inter, sans-serif", bgCell: "#eff6ff", textDark: "#1d4ed8" }
+              : { baseFontStyle: "13px Inter, sans-serif" }
          } as GridCell;
       }
 
@@ -851,9 +861,9 @@ export default function SpreadsheetGrid() {
                allowedValues: processingProfiles,
                value: value || ""
             },
-            themeOverride: {
-              baseFontStyle: "13px Inter, sans-serif"
-            }
+            themeOverride: value === "Auto" 
+              ? { baseFontStyle: "13px Inter, sans-serif", bgCell: "#eff6ff", textDark: "#1d4ed8" }
+              : { baseFontStyle: "13px Inter, sans-serif" }
          } as GridCell;
       }
 
@@ -871,9 +881,9 @@ export default function SpreadsheetGrid() {
                   allowedValues: ETSY_SUBJECTS,
                   value: value || ""
                },
-               themeOverride: { 
-                 baseFontStyle: "13px Inter, sans-serif"
-               }
+               themeOverride: value === "Auto" 
+              ? { baseFontStyle: "13px Inter, sans-serif", bgCell: "#eff6ff", textDark: "#1d4ed8" }
+              : { baseFontStyle: "13px Inter, sans-serif" }
             } as GridCell;
          } else {
             return {
@@ -882,9 +892,9 @@ export default function SpreadsheetGrid() {
                readonly: true,
                data: value,
                displayData: value || "Select subjects...",
-               themeOverride: {
-                  baseFontStyle: "13px Inter, sans-serif"
-               }
+               themeOverride: value === "Auto" 
+              ? { baseFontStyle: "13px Inter, sans-serif", bgCell: "#eff6ff", textDark: "#1d4ed8" }
+              : { baseFontStyle: "13px Inter, sans-serif" }
             } as TextCell;
          }
       }
@@ -901,9 +911,9 @@ export default function SpreadsheetGrid() {
                allowedValues: ETSY_GRAPHICS,
                value: value || ""
             },
-            themeOverride: { 
-              baseFontStyle: "13px Inter, sans-serif"
-            }
+            themeOverride: value === "Auto" 
+              ? { baseFontStyle: "13px Inter, sans-serif", bgCell: "#eff6ff", textDark: "#1d4ed8" }
+              : { baseFontStyle: "13px Inter, sans-serif" }
          } as GridCell;
       }
 
@@ -917,9 +927,9 @@ export default function SpreadsheetGrid() {
                allowedValues: sections,
                value: value || ""
             },
-            themeOverride: { 
-              baseFontStyle: "13px Inter, sans-serif"
-            }
+            themeOverride: value === "Auto" 
+              ? { baseFontStyle: "13px Inter, sans-serif", bgCell: "#eff6ff", textDark: "#1d4ed8" }
+              : { baseFontStyle: "13px Inter, sans-serif" }
          } as GridCell;
       }
 
@@ -933,9 +943,9 @@ export default function SpreadsheetGrid() {
                allowedValues: ETSY_COLORS,
                value: value || ""
             },
-            themeOverride: { 
-              baseFontStyle: "13px Inter, sans-serif"
-            }
+            themeOverride: value === "Auto" 
+              ? { baseFontStyle: "13px Inter, sans-serif", bgCell: "#eff6ff", textDark: "#1d4ed8" }
+              : { baseFontStyle: "13px Inter, sans-serif" }
          } as GridCell;
       }
 
@@ -949,9 +959,9 @@ export default function SpreadsheetGrid() {
                allowedValues: ETSY_COLORS,
                value: value || ""
             },
-            themeOverride: { 
-              baseFontStyle: "13px Inter, sans-serif"
-            }
+            themeOverride: value === "Auto" 
+              ? { baseFontStyle: "13px Inter, sans-serif", bgCell: "#eff6ff", textDark: "#1d4ed8" }
+              : { baseFontStyle: "13px Inter, sans-serif" }
          } as GridCell;
       }
 
@@ -967,9 +977,9 @@ export default function SpreadsheetGrid() {
                allowedValues: ETSY_OCCASIONS,
                value: value || ""
             },
-            themeOverride: { 
-              baseFontStyle: "13px Inter, sans-serif"
-            }
+            themeOverride: value === "Auto" 
+              ? { baseFontStyle: "13px Inter, sans-serif", bgCell: "#eff6ff", textDark: "#1d4ed8" }
+              : { baseFontStyle: "13px Inter, sans-serif" }
          } as GridCell;
       }
 
@@ -985,9 +995,9 @@ export default function SpreadsheetGrid() {
                allowedValues: ETSY_CELEBRATIONS,
                value: value || ""
             },
-            themeOverride: { 
-              baseFontStyle: "13px Inter, sans-serif"
-            }
+            themeOverride: value === "Auto" 
+              ? { baseFontStyle: "13px Inter, sans-serif", bgCell: "#eff6ff", textDark: "#1d4ed8" }
+              : { baseFontStyle: "13px Inter, sans-serif" }
          } as GridCell;
       }
 
@@ -1002,13 +1012,14 @@ export default function SpreadsheetGrid() {
             displayData: summary,
           } as TextCell;
         } else {
+          const isEmptyRow = !dataRow?.folder && !dataRow?.title && !dataRow?.description;
           return {
             kind: GridCellKind.Text,
             allowOverlay: false,
             readonly: true,
             data: "",
-            displayData: "⚙️ Configure...",
-            themeOverride: {
+            displayData: isEmptyRow ? "" : "⚙️ Configure...",
+            themeOverride: isEmptyRow ? undefined : {
               textDark: "#64748b",
               bgCell: "#f8fafc"
             }
@@ -1153,7 +1164,7 @@ export default function SpreadsheetGrid() {
     (cell: Item) => {
       const [col, row] = cell;
       const columnId = columns[col].id;
-      if (columnId === "attributes" && sheet === "physical") {
+      if (columnId === "attributes") {
         const dataRow = dataRef.current[row];
         if (dataRow) {
           setGlobalAttributesEditor({ row });
@@ -1313,8 +1324,12 @@ export default function SpreadsheetGrid() {
                 if (colIdx >= columns.length) continue;
                 const colId = columns[colIdx].id;
                 if (colId) {
-                  // @ts-expect-error - external type mismatch
-                  rowData[colId] = "";
+                  if (colId === "attributes") {
+                    for (const key of ATTRIBUTE_KEYS) rowData[key] = "";
+                  } else {
+                    // @ts-expect-error - external type mismatch
+                    rowData[colId] = "";
+                  }
                   didDelete = true;
                   cellsToUpdate.push({ cell: [colIdx, rowIdx] });
                 }
@@ -1335,6 +1350,8 @@ export default function SpreadsheetGrid() {
               if (colId) {
                 if (colId === "variations") {
                   rowData.variations = undefined;
+                } else if (colId === "attributes") {
+                  for (const key of ATTRIBUTE_KEYS) rowData[key] = "";
                 } else {
                   // @ts-expect-error - dynamic row field clear
                   rowData[colId] = "";
@@ -1356,8 +1373,12 @@ export default function SpreadsheetGrid() {
               if (typeof c !== "number" || c >= columns.length) continue;
               const colId = columns[c].id;
               if (colId) {
-                // @ts-expect-error - external type mismatch
-                rowData[colId] = "";
+                if (colId === "attributes") {
+                  for (const key of ATTRIBUTE_KEYS) rowData[key] = "";
+                } else {
+                  // @ts-expect-error - external type mismatch
+                  rowData[colId] = "";
+                }
                 didDelete = true;
                 cellsToUpdate.push({ cell: [c, r] });
               }
@@ -1409,6 +1430,10 @@ export default function SpreadsheetGrid() {
       ? gridSelection.rows.toArray() 
       : Array.from(gridSelection.rows);
   }, [gridSelection]);
+
+  if (!isMounted) {
+    return <div className="w-full h-full p-4 bg-white dark:bg-zinc-950 flex flex-col justify-center items-center"><div className="text-zinc-500 text-sm font-medium">Loading worksheet...</div></div>;
+  }
 
   return (
     <div className="w-full h-full p-4 bg-white dark:bg-zinc-950 flex flex-col" onWheel={onWheel}>
@@ -1496,7 +1521,10 @@ export default function SpreadsheetGrid() {
       <div className="flex-none h-10 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 flex items-center justify-between px-3 select-none">
         <div className="flex items-start gap-1 h-full -mt-[1px]">
           <button
-            onClick={() => setSheet("digital")}
+            onClick={() => {
+              setSheet("digital");
+              localStorage.setItem("workstation_v2_active_sheet", "digital");
+            }}
             className={`px-4 h-[28px] text-[11px] font-semibold uppercase tracking-wider transition-all border flex items-center rounded-none cursor-pointer ${
               sheet === "digital"
                 ? "bg-white dark:bg-zinc-950 text-blue-600 dark:text-blue-400 border-zinc-200 dark:border-zinc-800 border-t-white dark:border-t-zinc-950 border-b-2 border-b-blue-600 dark:border-b-blue-500 z-10 font-bold"
@@ -1506,7 +1534,10 @@ export default function SpreadsheetGrid() {
             Digital Worksheet
           </button>
           <button
-            onClick={() => setSheet("physical")}
+            onClick={() => {
+              setSheet("physical");
+              localStorage.setItem("workstation_v2_active_sheet", "physical");
+            }}
             className={`px-4 h-[28px] text-[11px] font-semibold uppercase tracking-wider transition-all border flex items-center rounded-none cursor-pointer ${
               sheet === "physical"
                 ? "bg-white dark:bg-zinc-950 text-blue-600 dark:text-blue-400 border-zinc-200 dark:border-zinc-800 border-t-white dark:border-t-zinc-950 border-b-2 border-b-blue-600 dark:border-b-blue-500 z-10 font-bold"
@@ -1563,6 +1594,8 @@ export default function SpreadsheetGrid() {
               if (preset) {
                 row.category = preset.category || (sheet === "digital" ? "Store Graphics" : "");
                 row.section = preset.section || "";
+                row.primary_color = preset.primary_color || "Auto";
+                row.secondary_color = preset.secondary_color || "Auto";
                 row.price = preset.price || "";
                 row.quantity = preset.quantity || "";
                 row.context = preset.context || "";
@@ -1871,6 +1904,8 @@ function AttributesDrawer({ row, rowData, onClose, setData }: AttributesDrawerPr
     graphic: rowData.graphic || "",
   });
 
+  const [isMaterialsOpen, setIsMaterialsOpen] = useState(false);
+
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>(() =>
     (rowData.subject || "").split(",").map(s => s.trim()).filter(Boolean)
   );
@@ -1952,7 +1987,7 @@ function AttributesDrawer({ row, rowData, onClose, setData }: AttributesDrawerPr
                   className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs rounded-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200"
                 >
                   {ETSY_COLORS.map(c => (
-                    <option key={c} value={c}>{c || "None"}</option>
+                    <option key={c} value={c} className={c === "Auto" ? "bg-blue-100 text-blue-800 font-medium" : ""}>{c}</option>
                   ))}
                 </select>
               </div>
@@ -1964,20 +1999,67 @@ function AttributesDrawer({ row, rowData, onClose, setData }: AttributesDrawerPr
                   className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs rounded-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200"
                 >
                   {ETSY_COLORS.map(c => (
-                    <option key={c} value={c}>{c || "None"}</option>
+                    <option key={c} value={c} className={c === "Auto" ? "bg-blue-100 text-blue-800 font-medium" : ""}>{c}</option>
                   ))}
                 </select>
               </div>
             </div>
-            <div className="flex flex-col gap-1">
+            <div className="flex flex-col gap-1 relative">
               <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">Materials</label>
-              <input
-                type="text"
-                placeholder="e.g. Cotton, Polyester"
-                value={formData.materials}
-                onChange={e => setFormData(prev => ({ ...prev, materials: e.target.value }))}
-                className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs rounded-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200"
-              />
+              <div 
+                onClick={() => setIsMaterialsOpen(!isMaterialsOpen)}
+                className="w-full px-3 py-2 text-xs border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 rounded-none focus:outline-none flex justify-between items-center cursor-pointer min-h-[34px] select-none"
+              >
+                <span className="truncate">
+                  {formData.materials || "Select materials..."}
+                </span>
+                <ChevronDown size={14} className="text-zinc-500" />
+              </div>
+              
+              {isMaterialsOpen && (
+                <>
+                  <div className="fixed inset-0 z-10" onClick={() => setIsMaterialsOpen(false)} />
+                  <div className="absolute left-0 mt-[54px] w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-750 shadow-lg z-20 max-h-60 overflow-y-auto p-2 space-y-1">
+                    {["Cotton", "Polyester", "Ceramic", "Paper", "Canvas", "Wood", "Metal", "Glass", "Enamel", "Plastic", "Vinyl", "Leather"].map(mat => {
+                      const selectedList = (formData.materials || "").split(",").map(s => s.trim()).filter(Boolean);
+                      const isChecked = selectedList.includes(mat);
+                      
+                      const toggleMaterial = () => {
+                        let newList = [...selectedList];
+                        if (isChecked) {
+                          newList = newList.filter(m => m !== mat);
+                        } else {
+                          newList.push(mat);
+                        }
+                        setFormData(prev => ({ ...prev, materials: newList.join(", ") }));
+                      };
+
+                      return (
+                        <label key={mat} className="flex items-center gap-2 px-2 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer text-xs text-zinc-800 dark:text-zinc-200 select-none">
+                          <input 
+                            type="checkbox" 
+                            checked={isChecked}
+                            onChange={toggleMaterial}
+                            className="rounded border-zinc-300 dark:border-zinc-700 text-blue-600 focus:ring-blue-500"
+                          />
+                          {mat}
+                        </label>
+                      );
+                    })}
+                    
+                    <div className="border-t border-zinc-200 dark:border-zinc-800 mt-2 pt-2">
+                      <label className="block text-[9px] font-bold uppercase text-zinc-400 mb-1 px-2">Custom Material</label>
+                      <input
+                        type="text"
+                        placeholder="Add custom, comma-separated..."
+                        value={formData.materials || ""}
+                        onChange={e => setFormData(prev => ({ ...prev, materials: e.target.value }))}
+                        className="w-full px-2 py-1 text-xs border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
 
@@ -2010,7 +2092,7 @@ function AttributesDrawer({ row, rowData, onClose, setData }: AttributesDrawerPr
                       className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs rounded-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200"
                     >
                       {ETSY_OCCASIONS.map(o => (
-                        <option key={o} value={o}>{o || "None"}</option>
+                        <option key={o} value={o} className={o === "Auto" ? "bg-blue-100 text-blue-800 font-medium" : ""}>{o}</option>
                       ))}
                     </select>
                   </div>
@@ -2024,7 +2106,7 @@ function AttributesDrawer({ row, rowData, onClose, setData }: AttributesDrawerPr
                       className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs rounded-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200"
                     >
                       {ETSY_CELEBRATIONS.map(c => (
-                        <option key={c} value={c}>{c || "None"}</option>
+                        <option key={c} value={c} className={c === "Auto" ? "bg-blue-100 text-blue-800 font-medium" : ""}>{c}</option>
                       ))}
                     </select>
                   </div>
@@ -2048,7 +2130,7 @@ function AttributesDrawer({ row, rowData, onClose, setData }: AttributesDrawerPr
                     className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs rounded-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200"
                   >
                     {ETSY_SLEEVE_LENGTH.map(s => (
-                      <option key={s} value={s}>{s || "None"}</option>
+                      <option key={s} value={s} className={s === "Auto" ? "bg-blue-100 text-blue-800 font-medium" : ""}>{s}</option>
                     ))}
                   </select>
                 </div>
@@ -2060,7 +2142,7 @@ function AttributesDrawer({ row, rowData, onClose, setData }: AttributesDrawerPr
                     className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs rounded-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200"
                   >
                     {ETSY_NECKLINE.map(n => (
-                      <option key={n} value={n}>{n || "None"}</option>
+                      <option key={n} value={n} className={n === "Auto" ? "bg-blue-100 text-blue-800 font-medium" : ""}>{n}</option>
                     ))}
                   </select>
                 </div>
@@ -2073,7 +2155,7 @@ function AttributesDrawer({ row, rowData, onClose, setData }: AttributesDrawerPr
                   className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs rounded-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200"
                 >
                   {ETSY_CLOTHING_STYLE.map(s => (
-                    <option key={s} value={s}>{s || "None"}</option>
+                    <option key={s} value={s} className={s === "Auto" ? "bg-blue-100 text-blue-800 font-medium" : ""}>{s}</option>
                   ))}
                 </select>
               </div>
@@ -2094,7 +2176,7 @@ function AttributesDrawer({ row, rowData, onClose, setData }: AttributesDrawerPr
                   className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs rounded-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200"
                 >
                   {ETSY_MUG_CAPACITY.map(c => (
-                    <option key={c} value={c}>{c || "None"}</option>
+                    <option key={c} value={c} className={c === "Auto" ? "bg-blue-100 text-blue-800 font-medium" : ""}>{c}</option>
                   ))}
                 </select>
               </div>
@@ -2142,7 +2224,7 @@ function AttributesDrawer({ row, rowData, onClose, setData }: AttributesDrawerPr
                     className="w-full px-2 py-1.5 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs rounded-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200"
                   >
                     {ETSY_ORIENTATION.map(o => (
-                      <option key={o} value={o}>{o || "None"}</option>
+                      <option key={o} value={o} className={o === "Auto" ? "bg-blue-100 text-blue-800 font-medium" : ""}>{o}</option>
                     ))}
                   </select>
                 </div>
@@ -2154,7 +2236,7 @@ function AttributesDrawer({ row, rowData, onClose, setData }: AttributesDrawerPr
                     className="w-full px-2 py-1.5 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs rounded-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200"
                   >
                     {ETSY_FRAMING.map(f => (
-                      <option key={f} value={f}>{f || "None"}</option>
+                      <option key={f} value={f} className={f === "Auto" ? "bg-blue-100 text-blue-800 font-medium" : ""}>{f}</option>
                     ))}
                   </select>
                 </div>
@@ -2166,7 +2248,7 @@ function AttributesDrawer({ row, rowData, onClose, setData }: AttributesDrawerPr
                     className="w-full px-2 py-1.5 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs rounded-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200"
                   >
                     {ETSY_ASPECT_RATIO.map(a => (
-                      <option key={a} value={a}>{a || "None"}</option>
+                      <option key={a} value={a} className={a === "Auto" ? "bg-blue-100 text-blue-800 font-medium" : ""}>{a}</option>
                     ))}
                   </select>
                 </div>
@@ -2225,7 +2307,7 @@ function AttributesDrawer({ row, rowData, onClose, setData }: AttributesDrawerPr
                   className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs rounded-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200"
                 >
                   {ETSY_GRAPHICS.map(g => (
-                    <option key={g} value={g}>{g || "None"}</option>
+                    <option key={g} value={g} className={g === "Auto" ? "bg-blue-100 text-blue-800 font-medium" : ""}>{g}</option>
                   ))}
                 </select>
               </div>
