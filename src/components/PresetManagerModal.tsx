@@ -431,6 +431,33 @@ const handleDelete = (id: string) => {
     }
   };
 
+  const hasUnsavedChanges = () => {
+    if (!editingId || !editForm) return false;
+    const savedPresets = JSON.parse(localStorage.getItem(sheetType === "digital" ? "workstation_v2_presets" : "workstation_v2_presets_physical") || "[]");
+    const original = savedPresets.find((p: Preset) => p.id === editingId);
+    if (!original) return true; // New or duplicated preset
+    return JSON.stringify(original) !== JSON.stringify(editForm);
+  };
+
+  const attemptNavigation = () => {
+    if (hasUnsavedChanges()) {
+      if (!confirm("You have unsaved changes. Discard them?")) return false;
+      // Prune ghost preset if it was never saved
+      const savedPresets = JSON.parse(localStorage.getItem(sheetType === "digital" ? "workstation_v2_presets" : "workstation_v2_presets_physical") || "[]");
+      if (!savedPresets.some((p: Preset) => p.id === editingId)) {
+        setPresets(prev => prev.filter(p => p.id !== editingId));
+      }
+    }
+    return true;
+  };
+
+  const handleClose = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (attemptNavigation()) {
+      onClose();
+    }
+  };
+
   const startEditing = (preset: Preset) => {
     // If abandoning an unsaved new preset, we could remove it here, but we will leave it for safety
     setEditingId(preset.id);
@@ -440,19 +467,19 @@ const handleDelete = (id: string) => {
   };
 
   return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-zinc-900/50 p-4" onClick={onClose}>
-      <div className="bg-white dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 w-full max-w-4xl flex flex-col max-h-[90vh] overflow-hidden" onClick={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-zinc-900/50 p-4" onClick={handleClose}>
+      <div className="bg-white dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 w-full max-w-4xl flex flex-col overflow-hidden shadow-2xl" style={{ height: "80vh", minHeight: "600px", maxHeight: "850px" }} onClick={e => e.stopPropagation()}>
         
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900">
           <h2 className="text-base font-semibold text-zinc-800 dark:text-zinc-200">Listing Presets</h2>
-          <button onClick={onClose} className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-500">
+          <button onClick={handleClose} className="p-1 hover:bg-zinc-200 dark:hover:bg-zinc-800 text-zinc-500">
             <X size={18} />
           </button>
         </div>
 
         {/* Content Area - Split View */}
-        <div className="flex flex-1 overflow-hidden min-h-[400px]">
+        <div className="flex flex-1 overflow-hidden min-h-0">
           {/* Left Side: Preset List */}
           <div className="w-1/3 border-r border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50 flex flex-col overflow-hidden">
             <div className="p-3 border-b border-zinc-300 dark:border-zinc-700">
@@ -506,83 +533,77 @@ const handleDelete = (id: string) => {
           </div>
 
           {/* Right Side: Editor */}
-          <div className="w-2/3 bg-white dark:bg-zinc-950 p-6 overflow-y-auto">
+          <div className="w-2/3 bg-white dark:bg-zinc-950 flex flex-col h-full relative min-h-0">
             {editingId && editForm ? (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between mb-4 pb-2 border-b border-zinc-200 dark:border-zinc-800">
-                  <h3 className="text-base font-semibold text-zinc-800 dark:text-zinc-200">
-                    {isCreatingNew ? 'Create New Preset' : 'Edit Preset'}
-                  </h3>
-                  <button 
-                    onClick={handleSaveEdit}
-                    className="flex items-center gap-2 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium border border-blue-700"
-                  >
-                    <Save size={14} /> {isCreatingNew ? 'Create Preset' : 'Save Changes'}
-                  </button>
-                </div>
-
-                {/* Tab Navigation */}
-                <div className="flex border-b border-zinc-200 dark:border-zinc-800 text-xs font-semibold uppercase tracking-wider text-zinc-500 overflow-x-auto select-none gap-2 mb-4">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('core')}
-                    className={`pb-2 px-3 border-b-2 transition-all duration-155 -mb-[2px] ${
-                      activeTab === 'core'
-                        ? 'border-blue-600 text-blue-600 dark:text-blue-400 font-bold'
-                        : 'border-transparent hover:text-zinc-700 dark:hover:text-zinc-300'
-                    }`}
-                  >
-                    Core Details
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('options')}
-                    className={`pb-2 px-3 border-b-2 transition-all duration-155 -mb-[2px] ${
-                      activeTab === 'options'
-                        ? 'border-blue-600 text-blue-600 dark:text-blue-400 font-bold'
-                        : 'border-transparent hover:text-zinc-700 dark:hover:text-zinc-300'
-                    }`}
-                  >
-                    Etsy Options
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('attributes')}
-                    className={`pb-2 px-3 border-b-2 transition-all duration-155 -mb-[2px] ${
-                      activeTab === 'attributes'
-                        ? 'border-blue-600 text-blue-600 dark:text-blue-400 font-bold'
-                        : 'border-transparent hover:text-zinc-700 dark:hover:text-zinc-300'
-                    }`}
-                  >
-                    Attributes
-                  </button>
-                  {sheetType === "physical" && (
+              <div className="flex flex-col h-full min-h-0">
+                                {/* Header/Tabs */}
+                <div className="p-6 pb-0 shrink-0">
+                  <div className="flex items-end justify-between border-b border-zinc-200 dark:border-zinc-800 pb-0">
+                    <div className="flex flex-1 min-w-0 text-xs font-semibold uppercase tracking-wider text-zinc-500 overflow-x-auto select-none gap-2 pr-4 custom-scrollbar -mb-px">
                     <button
                       type="button"
-                      onClick={() => setActiveTab('variations')}
-                      className={`pb-2 px-3 border-b-2 transition-all duration-155 -mb-[2px] ${
-                        activeTab === 'variations'
+                      onClick={() => setActiveTab('core')}
+                      className={`whitespace-nowrap shrink-0 pb-2 px-3 border-b-2 transition-all duration-155 ${
+                        activeTab === 'core'
                           ? 'border-blue-600 text-blue-600 dark:text-blue-400 font-bold'
                           : 'border-transparent hover:text-zinc-700 dark:hover:text-zinc-300'
                       }`}
                     >
-                      Variations Matrix
+                      Core Details
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('ai')}
-                    className={`pb-2 px-3 border-b-2 transition-all duration-155 -mb-[2px] ${
-                      activeTab === 'ai'
-                        ? 'border-blue-600 text-blue-600 dark:text-blue-400 font-bold'
-                        : 'border-transparent hover:text-zinc-700 dark:hover:text-zinc-300'
-                    }`}
-                  >
-                    AI Rules
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('options')}
+                      className={`whitespace-nowrap shrink-0 pb-2 px-3 border-b-2 transition-all duration-155 ${
+                        activeTab === 'options'
+                          ? 'border-blue-600 text-blue-600 dark:text-blue-400 font-bold'
+                          : 'border-transparent hover:text-zinc-700 dark:hover:text-zinc-300'
+                      }`}
+                    >
+                      Etsy Options
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('attributes')}
+                      className={`whitespace-nowrap shrink-0 pb-2 px-3 border-b-2 transition-all duration-155 ${
+                        activeTab === 'attributes'
+                          ? 'border-blue-600 text-blue-600 dark:text-blue-400 font-bold'
+                          : 'border-transparent hover:text-zinc-700 dark:hover:text-zinc-300'
+                      }`}
+                    >
+                      Attributes
+                    </button>
+                    {sheetType === "physical" && (
+                      <button
+                        type="button"
+                        onClick={() => setActiveTab('variations')}
+                        className={`whitespace-nowrap shrink-0 pb-2 px-3 border-b-2 transition-all duration-155 ${
+                          activeTab === 'variations'
+                            ? 'border-blue-600 text-blue-600 dark:text-blue-400 font-bold'
+                            : 'border-transparent hover:text-zinc-700 dark:hover:text-zinc-300'
+                        }`}
+                      >
+                        Variations Matrix
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('ai')}
+                      className={`whitespace-nowrap shrink-0 pb-2 px-3 border-b-2 transition-all duration-155 ${
+                        activeTab === 'ai'
+                          ? 'border-blue-600 text-blue-600 dark:text-blue-400 font-bold'
+                          : 'border-transparent hover:text-zinc-700 dark:hover:text-zinc-300'
+                      }`}
+                    >
+                      AI Rules
+                    </button>
+                    </div>
+                  </div>
                 </div>
-
-                {/* Tab Content */}
+                
+                {/* Scrollable Content */}
+                <div className="flex-1 overflow-y-auto p-6 pt-4 custom-scrollbar space-y-4">
+                  {/* Tab Content */}
                 {activeTab === 'core' && (
                   <div className="space-y-4">
                     <div>
@@ -1451,6 +1472,16 @@ const handleDelete = (id: string) => {
                     </details>
                   </div>
                 )}
+                </div>
+                {/* Sticky Footer */}
+                <div className="shrink-0 p-4 px-6 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 flex justify-end">
+                  <button 
+                    onClick={handleSaveEdit}
+                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium border border-blue-700 transition-colors shadow-sm rounded-sm"
+                  >
+                    <Save size={14} /> {isCreatingNew ? 'Create Preset' : 'Save Changes'}
+                  </button>
+                </div>
               </div>
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-zinc-400 dark:text-zinc-600">

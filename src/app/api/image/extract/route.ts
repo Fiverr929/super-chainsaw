@@ -4,6 +4,9 @@ export async function POST(request: Request) {
   try {
     const formData = await request.formData();
     const imageFile = formData.get('image') as File | null;
+    const resolution = formData.get('resolution') as string || '1K';
+    const aspectRatio = formData.get('aspectRatio') as string || '1:1';
+    const prompt = formData.get('prompt') as string || '';
 
     if (!imageFile) {
       return NextResponse.json({ error: 'No image provided' }, { status: 400 });
@@ -19,7 +22,7 @@ export async function POST(request: Request) {
     const base64Image = buffer.toString('base64');
     const mimeType = imageFile.type || 'image/jpeg';
 
-    const systemPrompt = "Extract the main graphic/design from this t-shirt and place it on a solid white background. Return only the image.";
+    const systemPrompt = prompt || "Extract ONLY the printed graphic design from this t-shirt. The extracted graphic MUST fill the entire output image from edge to edge. Do not leave ANY empty white space, margins, or padding around the design. Zoom in so the graphic is completely full-bleed and touches the boundaries of the image. Do not include any fabric, wrinkles, or the t-shirt shape.";
 
     const response = await fetch(`https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-3.1-flash-image-preview:generateContent?key=${apiKey}`, {
       method: 'POST',
@@ -40,7 +43,13 @@ export async function POST(request: Request) {
               }
             ]
           }
-        ]
+        ],
+        generationConfig: {
+          imageConfig: {
+            imageSize: resolution,
+            aspectRatio: aspectRatio
+          }
+        }
       })
     });
 
@@ -80,4 +89,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
+
+
+
+
+
+
 
