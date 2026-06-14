@@ -72,12 +72,24 @@ export async function POST(request: Request) {
     if (!existingData.title || forceRegenerate.includes('title')) missingFields.push(`"title" (${aiRules.title || defaultTitleRule})`);
     if (!existingData.description || forceRegenerate.includes('description')) missingFields.push(`"description" (${aiRules.description || defaultDescRule})`);
     if (!existingData.tags || forceRegenerate.includes('tags')) missingFields.push(`"tags" (${aiRules.tags || defaultTagRule})`);
-    if (!existingData.primary_color || forceRegenerate.includes('primary_color')) missingFields.push('"primary_color"');
+    if (existingData.primary_color === "Auto" || forceRegenerate.includes('primary_color')) missingFields.push('"primary_color"');
+    if (existingData.secondary_color === "Auto" || forceRegenerate.includes('secondary_color')) missingFields.push('"secondary_color"');
+    if (existingData.materials === "Auto" || forceRegenerate.includes('materials')) missingFields.push('"materials"');
+    if (existingData.sleeve_length === "Auto" || forceRegenerate.includes('sleeve_length')) missingFields.push('"sleeve_length"');
+    if (existingData.neckline === "Auto" || forceRegenerate.includes('neckline')) missingFields.push('"neckline"');
+    if (existingData.clothing_style === "Auto" || forceRegenerate.includes('clothing_style')) missingFields.push('"clothing_style"');
+    if (existingData.capacity === "Auto" || forceRegenerate.includes('capacity')) missingFields.push('"capacity"');
+    if (existingData.dishwasher_safe === "Auto" || forceRegenerate.includes('dishwasher_safe')) missingFields.push('"dishwasher_safe"');
+    if (existingData.microwave_safe === "Auto" || forceRegenerate.includes('microwave_safe')) missingFields.push('"microwave_safe"');
+    if (existingData.orientation === "Auto" || forceRegenerate.includes('orientation')) missingFields.push('"orientation"');
+    if (existingData.framing === "Auto" || forceRegenerate.includes('framing')) missingFields.push('"framing"');
+    if (existingData.aspect_ratio === "Auto" || forceRegenerate.includes('aspect_ratio')) missingFields.push('"aspect_ratio"');
+
     
-    if ((!existingData.occasion || forceRegenerate.includes('occasion')) && categorySupportsOccasion(existingData.category)) missingFields.push('"occasion"');
-    if ((!existingData.celebration || forceRegenerate.includes('celebration')) && categorySupportsCelebration(existingData.category)) missingFields.push('"celebration"');
-    if ((!existingData.subject || forceRegenerate.includes('subject')) && categorySupportsSubject(existingData.category)) missingFields.push('"subject"');
-    if ((!existingData.graphic || forceRegenerate.includes('graphic')) && categorySupportsGraphic(existingData.category)) missingFields.push('"graphic"');
+    if ((existingData.occasion === "Auto" || forceRegenerate.includes('occasion')) && categorySupportsOccasion(existingData.category)) missingFields.push('"occasion"');
+    if ((existingData.celebration === "Auto" || forceRegenerate.includes('celebration')) && categorySupportsCelebration(existingData.category)) missingFields.push('"celebration"');
+    if ((existingData.subject === "Auto" || forceRegenerate.includes('subject')) && categorySupportsSubject(existingData.category)) missingFields.push('"subject"');
+    if ((existingData.graphic === "Auto" || forceRegenerate.includes('graphic')) && categorySupportsGraphic(existingData.category)) missingFields.push('"graphic"');
 
     const systemPrompt = `You are a professional Etsy copywriter and SEO expert. 
 You will receive a context or prompt about a product.
@@ -92,13 +104,24 @@ If the list of fields to generate is "None", you should return an empty JSON obj
 
 For taxonomy attributes, if none fit perfectly, leave the string empty (""):
 - primary_color: Choose exactly one from: "Beige", "Black", "Blue", "Bronze", "Brown", "Clear", "Copper", "Gold", "Gray", "Green", "Orange", "Pink", "Purple", "Rainbow", "Red", "Rose gold", "Silver", "White", "Yellow".
+- secondary_color: Choose exactly one from: "Beige", "Black", "Blue", "Bronze", "Brown", "Clear", "Copper", "Gold", "Gray", "Green", "Orange", "Pink", "Purple", "Rainbow", "Red", "Rose gold", "Silver", "White", "Yellow".
+- materials: A comma-separated string of materials (e.g., "100% Cotton", "Ceramic").
+- sleeve_length: Choose exactly one from: "Short sleeve", "Long sleeve", "Sleeveless", "3/4 sleeve", "Half sleeve".
+- neckline: Choose exactly one from: "Crew neck", "V-neck", "Hooded", "Collared", "Off the shoulder", "Scoop neck".
+- clothing_style: Choose exactly one from: "Athletic", "Casual", "Goth", "Minimalist", "Retro", "Streetwear".
+- capacity: Choose exactly one from: "11 oz", "15 oz", "20 oz", "30 oz".
+- dishwasher_safe: Choose exactly one from: "true", "false".
+- microwave_safe: Choose exactly one from: "true", "false".
+- orientation: Choose exactly one from: "Horizontal", "Vertical", "Square", "Round".
+- framing: Choose exactly one from: "Framed", "Unframed".
+- aspect_ratio: Choose exactly one from: "1:1", "1:2", "2:3", "3:4", "4:5", "5:7 (ISO ratio)", "11:14", "16:9".
 - occasion: Choose exactly one from: "1st birthday", "Anniversary", "Baby shower", "Back to school", "Baptism", "Bar & Bat Mitzvah", "Birthday", "Bridal shower", "Confirmation", "Divorce & breakup", "Engagement", "First Communion", "Graduation", "Grief & mourning", "House warming", "LGBTQ pride", "Moving", "Pet loss", "Retirement", "Wedding".
 - celebration: Choose exactly one from: "Christmas", "Cinco de Mayo", "Easter", "Eid", "Father's Day", "Halloween", "Hanukkah", "Holi", "Independence Day", "Kwanzaa", "Lunar New Year", "Mother's Day", "New Year's", "Passover", "Ramadan", "St Patrick's Day", "Thanksgiving", "Valentine's Day", "Veterans Day".
 - subject: Choose exactly one from: "Abstract & geometric", "Animal", "Anime & cartoon", "Architecture & cityscape", "Beach & tropical", "Comics & manga", "Educational", "Fantasy & Sci Fi", "Fashion", "Flowers", "Food & drink", "Horror & gothic", "Humorous saying", "Inspirational saying", "Landscape & scenery", "Love & friendship", "Movie", "Music", "Nautical", "People & portrait", "Pet portrait", "Phrase & saying", "Plants & trees", "Religious", "Science & tech", "Sports & fitness", "Stars & celestial", "Steampunk", "Superhero", "Travel & transportation", "TV", "Typography & symbols", "Video game", "Western & cowboy", "Zodiac".
 - graphic: Choose exactly one from: "Abstract & geometric", "Animal", "Anime & cartoon", "Beach & tropical", "Bollywood", "Brand & logo", "Comics & manga", "Fantasy & Sci Fi", "Fitspiration", "Flowers", "Food & drink", "Geography & locale", "Horror & gothic", "Humorous saying", "Inspirational saying", "LGBTQ pride", "Literary", "Love & friendship", "Military & historical", "Movie", "Music", "Nautical", "Patriotic & flags", "Phrase & saying", "Plants & trees", "Politics & elections", "Protest", "Punk & tattoos", "Religious", "Science & tech", "Sports & fitness", "Stars & celestial", "Steampunk", "Superhero", "Surf & skate", "Travel & transportation", "TV", "Video game", "Western & cowboy", "Zodiac".
 
 Return ONLY valid JSON with no markdown formatting. The JSON MUST contain ALL of the exact keys listed in "The fields you need to generate are:", even if the value is an empty string. Do not omit any requested keys.
-Format example: { "title": "...", "primary_color": "...", "occasion": "", "celebration": "", "subject": "", "graphic": "" }`;
+Format example: { "title": "...", "primary_color": "...", "secondary_color": "...", "materials": "...", "sleeve_length": "...", "occasion": "", "celebration": "", "subject": "", "graphic": "" }`;
 
     let finalPrompt = systemPrompt;
     if (imageParts.length > 0) {
@@ -172,6 +195,13 @@ Format example: { "title": "...", "primary_color": "...", "occasion": "", "celeb
         }
         newTitle += content.title.substring(lastIndex);
         content.title = newTitle;
+      }
+    }
+
+    // Enforce Etsy's 140 character limit
+    if (content.title && typeof content.title === 'string') {
+      if (content.title.length > 140) {
+        content.title = content.title.substring(0, 140).replace(/\s+\S*$/, '').trim();
       }
     }
 

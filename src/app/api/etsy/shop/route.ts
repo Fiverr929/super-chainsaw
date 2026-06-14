@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import axios from 'axios';
 import { getEtsyRefreshToken, saveEtsyRefreshToken } from '@/lib/etsyTokenStore';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET() {
   try {
     const apiKey = process.env.ETSY_API_KEY;

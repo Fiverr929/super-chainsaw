@@ -61,16 +61,35 @@ export function useAIPipeline(
       return res.json();
     })
     .then(aiData => {
+            const getVal = (aiVal: string | undefined, existingVal: string | undefined) => {
+          if (aiVal === undefined) {
+            return existingVal === "Auto" ? "None" : (existingVal || "");
+          }
+          if (aiVal === "") return "None";
+          return aiVal;
+        };
+
       const updatedRow = {
         title: aiData.title || existingDataPayload.title,
         description: aiData.description || existingDataPayload.description,
         tags: aiData.tags || existingDataPayload.tags,
         alt_text: (aiData.alt_texts && Array.isArray(aiData.alt_texts)) ? aiData.alt_texts.join(' | ') : existingDataPayload.alt_text,
-        primary_color: aiData.primary_color !== undefined ? aiData.primary_color : existingDataPayload.primary_color,
-        occasion: aiData.occasion !== undefined ? aiData.occasion : existingDataPayload.occasion,
-        celebration: aiData.celebration !== undefined ? aiData.celebration : existingDataPayload.celebration,
-        subject: aiData.subject !== undefined ? aiData.subject : existingDataPayload.subject,
-        graphic: aiData.graphic !== undefined ? aiData.graphic : existingDataPayload.graphic,
+        primary_color: getVal(aiData.primary_color, existingDataPayload.primary_color),
+        secondary_color: getVal(aiData.secondary_color, existingDataPayload.secondary_color),
+        materials: getVal(aiData.materials, existingDataPayload.materials),
+        sleeve_length: getVal(aiData.sleeve_length, existingDataPayload.sleeve_length),
+        neckline: getVal(aiData.neckline, existingDataPayload.neckline),
+        clothing_style: getVal(aiData.clothing_style, existingDataPayload.clothing_style),
+        capacity: getVal(aiData.capacity, existingDataPayload.capacity),
+        dishwasher_safe: getVal(aiData.dishwasher_safe, existingDataPayload.dishwasher_safe),
+        microwave_safe: getVal(aiData.microwave_safe, existingDataPayload.microwave_safe),
+        orientation: getVal(aiData.orientation, existingDataPayload.orientation),
+        framing: getVal(aiData.framing, existingDataPayload.framing),
+        aspect_ratio: getVal(aiData.aspect_ratio, existingDataPayload.aspect_ratio),
+        occasion: getVal(aiData.occasion, existingDataPayload.occasion),
+        celebration: getVal(aiData.celebration, existingDataPayload.celebration),
+        subject: getVal(aiData.subject, existingDataPayload.subject),
+        graphic: getVal(aiData.graphic, existingDataPayload.graphic),
         status: aiData.error ? 'Error' : 'Review'
       };
 
@@ -128,7 +147,7 @@ export function useAIPipeline(
       resolve(); // Resolve to prevent queue from blocking indefinitely
     });
     });
-  }, [dataRef, setData, sheetType]);
+  }, [dataRef, setData, sheetType, sheetRef]);
 
   const triggerFolderAutomation = useCallback((row: number, folderName: string) => {
     if (folderName.trim() === "") return;
@@ -162,7 +181,7 @@ export function useAIPipeline(
          console.error("Asset scan failed:", err);
          toast.error("Network error while trying to scan folder.");
       });
-  }, [dataRef, setData, triggerAIGeneration]);
+  }, [dataRef, setData, triggerAIGeneration, sheetType, sheetRef]);
 
   return { triggerAIGeneration, triggerFolderAutomation };
 }

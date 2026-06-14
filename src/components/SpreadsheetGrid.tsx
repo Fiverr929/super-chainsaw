@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import React, { useCallback, useState, useRef } from "react";
 import Image from "next/image";
@@ -35,7 +35,10 @@ import {
   ETSY_MUG_CAPACITY,
   ETSY_ORIENTATION,
   ETSY_FRAMING,
-  ETSY_ASPECT_RATIO
+  ETSY_ASPECT_RATIO,
+  ETSY_ROOM,
+  ETSY_HOME_STYLE,
+  ETSY_CAN_BE_PERSONALIZED
 } from "@/lib/etsyConstants";
 import { useAIPipeline } from "@/hooks/useAIPipeline";
 import { useEtsyPush } from "@/hooks/useEtsyPush";
@@ -125,6 +128,9 @@ export type RowData = {
   orientation?: string;
   framing?: string;
   aspect_ratio?: string;
+  room?: string;
+  home_style?: string;
+  can_be_personalized?: string;
   variations?: PresetVariations;
   attributes?: string;
 };
@@ -198,6 +204,9 @@ const emptyRowPhysical: RowData = {
   orientation: "",
   framing: "",
   aspect_ratio: "",
+  room: "",
+  home_style: "",
+  can_be_personalized: "",
 };
 
 const getAttributesSummary = (row: RowData) => {
@@ -227,7 +236,7 @@ const getAttributesSummary = (row: RowData) => {
   }
   
   // Art details
-  const isArt = (row.category || "") === "Posters & Prints";
+  const isArt = ["Posters & Prints", "Digital Prints", "Wall Art"].includes(row.category || "");
   if (isArt) {
     if (row.orientation) parts.push(`Orientation: ${row.orientation}`);
     if (row.framing) parts.push(`Framing: ${row.framing}`);
@@ -241,13 +250,13 @@ const ATTRIBUTE_KEYS = [
   "primary_color", "secondary_color", "materials", "occasion", "celebration",
   "subject", "sleeve_length", "neckline", "clothing_style", "capacity",
   "dishwasher_safe", "microwave_safe", "orientation", "framing", "aspect_ratio",
-  "graphic"
+  "graphic", "room", "home_style", "can_be_personalized"
 ] as const;
 
 const parseAttributesSummary = (summaryText: string): Partial<RowData> => {
   const result: Partial<RowData> = {};
 
-  const cleanText = summaryText ? summaryText.replace("⚙️", "").replace("Configure...", "").trim() : "";
+  const cleanText = summaryText ? summaryText.replace("âš™ï¸", "").replace("Configure...", "").trim() : "";
   if (!cleanText) {
     // Clear all attributes
     for (const key of ATTRIBUTE_KEYS) {
@@ -619,7 +628,7 @@ export default function SpreadsheetGrid() {
             allowOverlay: false,
             readonly: true,
             data: `${enabledCombs.length} variants`,
-            displayData: `⚙️ ${enabledCombs.length} Variants (${priceStr})`,
+            displayData: `âš™ï¸ ${enabledCombs.length} Variants (${priceStr})`,
             themeOverride: {
               baseFontStyle: "bold 12px Inter, sans-serif",
               textDark: "#2b52d6",
@@ -633,7 +642,7 @@ export default function SpreadsheetGrid() {
             allowOverlay: false,
             readonly: true,
             data: isEmptyRow ? "" : "Configure",
-            displayData: isEmptyRow ? "" : "⚙️ Configure...",
+            displayData: isEmptyRow ? "" : "âš™ï¸ Configure...",
             themeOverride: isEmptyRow ? undefined : {
               textDark: "#64748b",
               bgCell: "#f8fafc"
@@ -778,7 +787,7 @@ export default function SpreadsheetGrid() {
                allowOverlay: false,
                readonly: true,
                data: state,
-               displayData: `⏳ ${state}`,
+               displayData: `â³ ${state}`,
                themeOverride: {
                   textDark: textColor,
                   textLight: textColor,
@@ -1018,7 +1027,7 @@ export default function SpreadsheetGrid() {
             allowOverlay: false,
             readonly: true,
             data: "",
-            displayData: isEmptyRow ? "" : "⚙️ Configure...",
+            displayData: isEmptyRow ? "" : "âš™ï¸ Configure...",
             themeOverride: isEmptyRow ? undefined : {
               textDark: "#64748b",
               bgCell: "#f8fafc"
@@ -1726,7 +1735,7 @@ export default function SpreadsheetGrid() {
             Delete <Trash2 size={14} />
           </button>
           <button onClick={() => setGridSelection(undefined)} className="flex items-center justify-center w-8 h-8 hover:bg-blue-700 transition-colors ml-1">
-            ✕
+            âœ•
           </button>
         </div>
       )}
@@ -1747,7 +1756,7 @@ export default function SpreadsheetGrid() {
                   className="text-blue-300 hover:text-red-400 transition-colors"
                   title="Cancel remaining tasks"
                 >
-                  ✕
+                  âœ•
                 </button>
               </div>
             </div>
@@ -1831,7 +1840,7 @@ function CustomImageEditor({ urls, altTexts, onCancel, onChange }: { urls: reado
                 onClick={() => removeItem(i)} 
                 className="absolute top-1 right-1 bg-white/90 backdrop-blur-sm text-gray-500 hover:text-red-600 hover:bg-white w-6 h-6 rounded-none flex items-center justify-center text-xs font-bold z-10 opacity-0 group-hover:opacity-100 transition-all duration-200 shadow-sm"
               >
-                ✕
+                âœ•
               </button>
               <span className="absolute top-1 left-1 bg-[#2b52d6]/90 backdrop-blur-sm text-white w-5 h-5 rounded-sm flex items-center justify-center text-[10px] font-bold z-10 shadow-sm">
                 {i + 1}
@@ -1902,6 +1911,9 @@ function AttributesDrawer({ row, rowData, onClose, setData }: AttributesDrawerPr
     framing: rowData.framing || "",
     aspect_ratio: rowData.aspect_ratio || "",
     graphic: rowData.graphic || "",
+    room: rowData.room || "",
+    home_style: rowData.home_style || "",
+    can_be_personalized: rowData.can_be_personalized || "",
   });
 
   const [isMaterialsOpen, setIsMaterialsOpen] = useState(false);
@@ -1940,7 +1952,7 @@ function AttributesDrawer({ row, rowData, onClose, setData }: AttributesDrawerPr
   const showOccasion = categorySupportsOccasion(category) || categorySupportsCelebration(category);
   const showClothing = ["T-Shirts", "Sweatshirts & Hoodies"].includes(category);
   const showMug = category === "Mugs & Drinkware";
-  const showArt = category === "Posters & Prints";
+  const showArt = ["Posters & Prints", "Digital Prints", "Wall Art"].includes(category);
   const showGraphic = categorySupportsGraphic(category);
 
   const hasSpecificAttributes = showOccasion || showClothing || showMug || showArt || showGraphic;
@@ -1966,7 +1978,7 @@ function AttributesDrawer({ row, rowData, onClose, setData }: AttributesDrawerPr
             onClick={onClose}
             className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 font-bold"
           >
-            ✕
+            âœ•
           </button>
         </div>
 
@@ -2292,6 +2304,53 @@ function AttributesDrawer({ row, rowData, onClose, setData }: AttributesDrawerPr
               )}
             </div>
           )}
+          {/* Art Home Details - Room, Home Style, Can Be Personalized (Digital Prints / Wall Art) */}
+          {showArt && (
+            <div className="space-y-4 border border-zinc-200 dark:border-zinc-800 p-4 bg-zinc-50/50 dark:bg-zinc-900/10">
+              <h4 className="text-[11px] font-bold text-zinc-400 dark:text-zinc-500 uppercase tracking-wider border-b border-zinc-100 dark:border-zinc-800 pb-1.5">
+                Home &amp; Display
+              </h4>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">Room</label>
+                  <select
+                    value={formData.room}
+                    onChange={e => setFormData(prev => ({ ...prev, room: e.target.value }))}
+                    className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs rounded-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200"
+                  >
+                    {ETSY_ROOM.map(r => (
+                      <option key={r} value={r} className={r === "Auto" ? "bg-blue-100 text-blue-800 font-medium" : ""}>{r}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">Home Style</label>
+                  <select
+                    value={formData.home_style}
+                    onChange={e => setFormData(prev => ({ ...prev, home_style: e.target.value }))}
+                    className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs rounded-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200"
+                  >
+                    {ETSY_HOME_STYLE.map(s => (
+                      <option key={s} value={s} className={s === "Auto" ? "bg-blue-100 text-blue-800 font-medium" : ""}>{s}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-semibold text-zinc-600 dark:text-zinc-400">Can Be Personalized</label>
+                <select
+                  value={formData.can_be_personalized}
+                  onChange={e => setFormData(prev => ({ ...prev, can_be_personalized: e.target.value }))}
+                  className="w-full px-3 py-2 border border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 text-xs rounded-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-800 dark:text-zinc-200"
+                >
+                  {ETSY_CAN_BE_PERSONALIZED.map(v => (
+                    <option key={v} value={v} className={v === "Auto" ? "bg-blue-100 text-blue-800 font-medium" : ""}>{v}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
+
 
           {/* Graphic Section */}
           {showGraphic && (
@@ -2434,7 +2493,7 @@ function VariationsDrawer({ row, rowData, onClose, setData }: VariationsDrawerPr
             onClick={onClose}
             className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 font-bold"
           >
-            ✕
+            âœ•
           </button>
         </div>
 

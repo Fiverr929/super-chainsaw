@@ -1,7 +1,7 @@
-"use client";
+﻿"use client";
 
 import React, { useState, useEffect } from "react";
-import { ChevronLeft, ChevronRight, ShoppingBag, Plus, Check, Loader2, ChevronDown, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, ShoppingBag, Plus, Check, Loader2, ChevronDown, Trash2, LayoutGrid, Image as ImageIcon } from "lucide-react";
 import toast from "react-hot-toast";
 
 type Store = {
@@ -9,8 +9,20 @@ type Store = {
   name: string;
 };
 
-export default function Sidebar() {
-  const [isOpen, setIsOpen] = useState(false);
+export default function Sidebar({ activeView = "spreadsheet", setActiveView }: { activeView?: "spreadsheet" | "image", setActiveView?: (view: "spreadsheet" | "image") => void }) {
+  const [isOpen, setIsOpen] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("workstation_sidebar_open") === "true";
+    }
+    return false;
+  });
+
+  const handleSetIsOpen = (open: boolean) => {
+    setIsOpen(open);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("workstation_sidebar_open", String(open));
+    }
+  };;
   const [stores, setStores] = useState<Store[]>([]);
   const [activeStoreId, setActiveStoreId] = useState<string | null>(null);
   
@@ -91,14 +103,14 @@ export default function Sidebar() {
         className="w-12 h-full border-r border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-950 flex flex-col items-center py-4 transition-all duration-300 relative z-10"
       >
         <button 
-          onClick={() => setIsOpen(true)}
+          onClick={() => handleSetIsOpen(true)}
           className="p-1.5 rounded-none hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500 mb-4"
           title="Expand sidebar"
         >
           <ChevronRight size={18} />
         </button>
         <button 
-          onClick={() => setIsOpen(true)}
+          onClick={() => handleSetIsOpen(true)}
           className={`p-2 rounded-none transition-colors ${hasStores ? 'text-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'text-zinc-400 hover:bg-zinc-100 dark:hover:bg-zinc-800'}`}
           title={hasStores ? "Etsy Connected" : "Connect Etsy"}
         >
@@ -114,13 +126,31 @@ export default function Sidebar() {
         <div className="flex items-center justify-between p-3 border-b border-zinc-200 dark:border-zinc-800">
           <span className="text-sm font-semibold text-zinc-800 dark:text-zinc-200">Workstation</span>
           <button 
-            onClick={() => setIsOpen(false)}
+            onClick={() => handleSetIsOpen(false)}
             className="p-1.5 rounded-none hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500"
           >
             <ChevronLeft size={16} />
           </button>
         </div>
 
+                <div className="px-3 py-2 border-b border-zinc-200 dark:border-zinc-800">
+          <div className="space-y-1">
+            <button
+              onClick={() => setActiveView?.('spreadsheet')}
+              className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-none text-sm transition-colors ${activeView === 'spreadsheet' ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 font-medium' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800/50'}`}
+            >
+              <LayoutGrid size={16} />
+              Spreadsheet
+            </button>
+            <button
+              onClick={() => setActiveView?.('image')}
+              className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-none text-sm transition-colors ${activeView === 'image' ? 'bg-blue-50 text-blue-600 dark:bg-blue-900/20 dark:text-blue-400 font-medium' : 'text-zinc-600 hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800/50'}`}
+            >
+              <ImageIcon size={16} />
+              Image Pipeline
+            </button>
+          </div>
+        </div>
         <div className="flex-1 overflow-y-auto p-3">
           {hasStores && activeStore ? (
             <div className="mb-3">
@@ -239,3 +269,6 @@ export default function Sidebar() {
     </>
   );
 }
+
+
+
