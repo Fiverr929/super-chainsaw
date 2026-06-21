@@ -1,4 +1,5 @@
-﻿import { NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
+import axios from 'axios';
 
 export async function POST(request: Request) {
   try {
@@ -22,60 +23,81 @@ export async function POST(request: Request) {
     const base64Image = buffer.toString('base64');
     const mimeType = imageFile.type || 'image/jpeg';
 
-    const systemPrompt = prompt || "Extract ONLY the printed graphic design from this t-shirt. The extracted graphic MUST fill the entire output image from edge to edge. Do not leave ANY empty white space, margins, or padding around the design. Zoom in so the graphic is completely full-bleed and touches the boundaries of the image. Do not include any fabric, wrinkles, or the t-shirt shape.";
+    const systemPrompt = prompt;
+    let thinkingLevel = formData.get('thinkingLevel') as string || 'High';
+    if (thinkingLevel === 'Medium' || thinkingLevel === 'Low') {
+      // Map legacy saved preset values to Minimal to prevent silent UI desync bugs
+      thinkingLevel = 'Minimal';
+    }
 
-    const response = await fetch(`https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-3.1-flash-image-preview:generateContent?key=${apiKey}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: "user",
-            parts: [
-              { text: systemPrompt },
-              {
-                inlineData: {
-                  mimeType: mimeType,
-                  data: base64Image
+    let data;
+    try {
+      const payload = {
+          contents: [
+            {
+              role: "user",
+              parts: [
+                { text: systemPrompt },
+                {
+                  inlineData: {
+                    mimeType: mimeType,
+                    data: base64Image
+                  }
                 }
+              ]
+            }
+          ],
+          generationConfig: {
+            ...(thinkingLevel !== 'Minimal' && thinkingLevel.toLowerCase() !== 'minimal' && {
+              thinkingConfig: {
+                thinkingLevel: thinkingLevel.toUpperCase() // Must be LOW, MEDIUM, or HIGH
               }
-            ]
+            }),
+            imageConfig: {
+              imageSize: resolution,
+              aspectRatio: aspectRatio
+            }
           }
-        ],
-        generationConfig: {
-          imageConfig: {
-            imageSize: resolution,
-            aspectRatio: aspectRatio
-          }
-        }
-      })
-    });
+        };
+        
+        console.log("SENDING GEMINI PAYLOAD:", JSON.stringify({
+          ...payload, 
+          contents: [{ parts: [{ text: systemPrompt }, { inlineData: "[BASE64_IMAGE_TRUNCATED]" }]}]
+        }, null, 2));
 
-    if (!response.ok) {
-      const errorText = await response.text();
+        const response = await axios.post(
+          `https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-3.1-flash-image-preview:generateContent?key=${apiKey}`,
+          payload,
+          {
+            headers: { 'Content-Type': 'application/json' },
+          timeout: 120000 // 2 minute timeout
+        }
+      );
+      data = response.data;
+    } catch (axiosError: any) {
+      const errorText = axiosError.response?.data ? JSON.stringify(axiosError.response.data) : axiosError.message;
       console.error("Gemini API Error:", errorText);
       return NextResponse.json({ error: `Failed to analyze image: ${errorText}` }, { status: 500 });
     }
-
-    const data = await response.json();
     
     // Attempt to extract base64 from various possible response structures
     let extractedBase64 = null;
     let extractedMimeType = "image/png";
 
-    if (data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data) {
-        extractedBase64 = data.candidates[0].content.parts[0].inlineData.data;
-        extractedMimeType = data.candidates[0].content.parts[0].inlineData.mimeType || "image/png";
+    const parts = data.candidates?.[0]?.content?.parts || [];
+    
+    // Find the part that contains inlineData (the image)
+    const imagePart = parts.find((p: any) => p.inlineData && p.inlineData.data);
+    const textPart = parts.find((p: any) => p.text);
+
+    if (imagePart) {
+        extractedBase64 = imagePart.inlineData.data;
+        extractedMimeType = imagePart.inlineData.mimeType || "image/png";
     } else if (data.predictions?.[0]?.bytesBase64Encoded) {
         extractedBase64 = data.predictions[0].bytesBase64Encoded;
-    } else if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
+    } else if (textPart && (textPart.text.startsWith("iVBOR") || textPart.text.length > 1000)) {
         // Fallback if it returned text representing base64
-        const text = data.candidates[0].content.parts[0].text;
-        if (text.startsWith("iVBOR") || text.length > 1000) { 
-            extractedBase64 = text;
-        }
+        extractedBase64 = textPart.text;
     }
 
     if (!extractedBase64) {
@@ -89,10 +111,3 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
-
-
-
-
-
-
-

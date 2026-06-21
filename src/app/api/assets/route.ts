@@ -13,7 +13,13 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Invalid folder name' }, { status: 400 });
   }
 
-  const baseDir = type === 'physical' ? 'listings-physical' : 'listings';
+  let baseDir = 'listings';
+  if (type === 'physical') {
+    baseDir = 'listings-physical';
+  } else if (type === 'amazon') {
+    baseDir = 'listings-amazon';
+  }
+  
   const listingsDir = path.join(/*turbopackIgnore: true*/ process.cwd(), 'public', baseDir, folderName);
 
   if (!fs.existsSync(listingsDir)) {
@@ -30,7 +36,7 @@ export async function GET(request: Request) {
 
     files.forEach(file => {
       const ext = path.extname(file).toLowerCase();
-      // Only serve relative paths so the browser can access them via the public directory
+      // Serve relative paths so the browser can access them via the public directory
       const relativeUrl = `/${baseDir}/${folderName}/${file}`;
 
       if (['.png', '.jpg', '.jpeg'].includes(ext)) {

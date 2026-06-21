@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import React, { useCallback, useState, useRef } from "react";
 import Image from "next/image";
@@ -44,7 +44,9 @@ import { useAIPipeline } from "@/hooks/useAIPipeline";
 import { useEtsyPush } from "@/hooks/useEtsyPush";
 import FolderImporterModal from "./FolderImporterModal";
 import PresetManagerModal, { PresetVariations, VariationCombination } from "./PresetManagerModal";
+import AmazonPresetManagerModal, { AmazonPreset } from "./AmazonPresetManagerModal";
 import { FolderPlus, Layers, ChevronDown, Trash2 } from "lucide-react";
+import { AMAZON_COLUMNS } from "@/lib/amazonConstants";
 
 const imageCache: Record<string, { absoluteUrlArray: string[], thumbnailUrls: string[] }> = {};
 const tagCache: Record<string, string[]> = {};
@@ -94,19 +96,18 @@ export type RowData = {
   listing_id?: string;
   context?: string;
   folder?: string;
-  digital_file: string;
-  title: string;
+  digital_file?: string;
+  title?: string;
   description?: string;
-  tags: string;
-  price: string;
-  quantity: string;
-  category: string;
-  section: string;
-  primary_color: string;
-  occasion: string;
-  celebration: string;
-  subject: string;
-  alt_text: string;
+  tags?: string;
+  price?: string;
+  quantity?: string;
+  section?: string;
+  primary_color?: string;
+  occasion?: string;
+  celebration?: string;
+  subject?: string;
+  alt_text?: string;
   who_made?: string;
   when_made?: string;
   is_supply?: string;
@@ -133,6 +134,21 @@ export type RowData = {
   can_be_personalized?: string;
   variations?: PresetVariations;
   attributes?: string;
+  [key: string]: any;
+};
+
+const emptyRowAmazon: RowData = {
+  status: "",
+  col_1: "",
+  col_2: "",
+  col_3: "",
+  col_4: "",
+  col_5: "",
+  col_6: "",
+  col_7: "",
+  col_8: "",
+  col_9: "",
+  col_10: ""
 };
 
 const emptyRowDigital: RowData = {
@@ -329,7 +345,7 @@ const parseAttributesSummary = (summaryText: string): Partial<RowData> => {
   return result;
 };
 
-export default function SpreadsheetGrid() {
+export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?: "etsy" | "amazon" }) {
   const gridRef = useRef<DataEditorRef>(null);
   const [isMounted, setIsMounted] = useState(false);
   const [sheet, setSheet] = useState<"digital" | "physical">("digital");
@@ -341,7 +357,9 @@ export default function SpreadsheetGrid() {
     }
     setIsMounted(true);
   }, []);
-  const [columns, setColumns] = useState(DIGITAL_COLUMNS);
+  const [columns, setColumns] = useState(() => {
+    return workstation === "amazon" ? AMAZON_COLUMNS : DIGITAL_COLUMNS;
+  });
   const [zoom, setZoom] = useState(1);
   const [gridSelection, setGridSelection] = useState<GridSelection | undefined>(undefined);
   const [globalImageEditor, setGlobalImageEditor] = useState<{row: number, urls: string[], altTexts: string[]} | null>(null);
@@ -436,18 +454,47 @@ export default function SpreadsheetGrid() {
 
   // Update columns when sheet changes
   React.useEffect(() => {
-    setColumns(sheet === "digital" ? DIGITAL_COLUMNS : PHYSICAL_COLUMNS);
-  }, [sheet]);
+    if (workstation === "amazon") {
+      setColumns(AMAZON_COLUMNS);
+    } else {
+      setColumns(sheet === "digital" ? DIGITAL_COLUMNS : PHYSICAL_COLUMNS);
+    }
+  }, [sheet, workstation]);
 
   // Initialize with empty rows (avoids Next.js hydration mismatch)
   const [data, setData] = useState<RowData[]>(() => {
+    if (workstation === "amazon") {
+      return Array.from({ length: 50 }).map(() => ({ ...emptyRowAmazon } as RowData));
+    }
     return Array.from({ length: 50 }).map(() => ({ ...(sheet === "digital" ? emptyRowDigital : emptyRowPhysical) }));
   });
 
   // Load from local storage AFTER initial render and when sheet changes
+  const getStorageKey = (ws: "etsy" | "amazon", sType: "digital" | "physical") => {
+    if (ws === "amazon") {
+      return "workstation_v2_grid_data_amazon";
+    }
+    return sType === "digital" ? "workstation_v2_grid_data_etsy_digital" : "workstation_v2_grid_data_etsy_physical";
+  };
+
   React.useEffect(() => {
     setIsDataLoaded(false);
-    const key = sheet === "digital" ? "workstation_v2_grid_data" : "workstation_v2_grid_data_physical";
+    
+    // Migrate old keys
+    if (typeof window !== "undefined") {
+      const oldDigital = localStorage.getItem("workstation_v2_grid_data");
+      const oldPhysical = localStorage.getItem("workstation_v2_grid_data_physical");
+      const newDigital = localStorage.getItem("workstation_v2_grid_data_etsy_digital");
+      const newPhysical = localStorage.getItem("workstation_v2_grid_data_etsy_physical");
+      if (oldDigital && !newDigital) {
+        localStorage.setItem("workstation_v2_grid_data_etsy_digital", oldDigital);
+      }
+      if (oldPhysical && !newPhysical) {
+        localStorage.setItem("workstation_v2_grid_data_etsy_physical", oldPhysical);
+      }
+    }
+
+    const key = getStorageKey(workstation, sheet);
     const saved = localStorage.getItem(key);
     if (saved) {
       try {
@@ -456,7 +503,9 @@ export default function SpreadsheetGrid() {
           setData(parsed);
           dataRef.current = parsed;
         } else {
-          const freshData = Array.from({ length: 50 }).map(() => ({ ...(sheet === "digital" ? emptyRowDigital : emptyRowPhysical) }));
+          const freshData = Array.from({ length: 50 }).map(() => ({
+            ...(workstation === "amazon" ? emptyRowAmazon : (sheet === "digital" ? emptyRowDigital : emptyRowPhysical))
+          }));
           setData(freshData);
           dataRef.current = freshData;
         }
@@ -464,12 +513,14 @@ export default function SpreadsheetGrid() {
         console.error("Failed to parse local storage grid data", e);
       }
     } else {
-      const freshData = Array.from({ length: 50 }).map(() => ({ ...(sheet === "digital" ? emptyRowDigital : emptyRowPhysical) }));
+      const freshData = Array.from({ length: 50 }).map(() => ({
+        ...(workstation === "amazon" ? emptyRowAmazon : (sheet === "digital" ? emptyRowDigital : emptyRowPhysical))
+      }));
       setData(freshData);
       dataRef.current = freshData;
     }
     setIsDataLoaded(true);
-  }, [sheet]);
+  }, [sheet, workstation]);
 
   const dataRef = React.useRef(data);
   // Keep the ref strictly synchronized with the state
@@ -568,21 +619,21 @@ export default function SpreadsheetGrid() {
     if (!isDataLoaded) return;
     
     const handler = setTimeout(() => {
-      const key = sheet === "digital" ? "workstation_v2_grid_data" : "workstation_v2_grid_data_physical";
+      const key = getStorageKey(workstation, sheet);
       localStorage.setItem(key, JSON.stringify(data));
     }, 500);
     return () => clearTimeout(handler);
-  }, [data, isDataLoaded, sheet]);
+  }, [data, isDataLoaded, sheet, workstation]);
 
   // Ensure data isn't lost if the tab is closed before the 500ms debounce fires
   React.useEffect(() => {
     const handleBeforeUnload = () => {
-      const key = sheet === "digital" ? "workstation_v2_grid_data" : "workstation_v2_grid_data_physical";
+      const key = getStorageKey(workstation, sheetRef.current);
       localStorage.setItem(key, JSON.stringify(dataRef.current));
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [sheet]);
+  }, [workstation]);
 
   const getCellContent = useCallback(
     (cell: Item): GridCell => {
@@ -603,6 +654,15 @@ export default function SpreadsheetGrid() {
 
       const value = (typeof dataRow[columnId] === "string" ? dataRow[columnId] : "") as string;
 
+      if (workstation === "amazon") {
+        return {
+          kind: GridCellKind.Text,
+          allowOverlay: true,
+          data: value,
+          displayData: value,
+        } as TextCell;
+      }
+
       const hasActiveVariations = sheet === "physical" && dataRow.variations && dataRow.variations.properties && dataRow.variations.properties.length > 0;
       const enabledCombs = hasActiveVariations ? (dataRow.variations?.combinations || []).filter((c: any) => c.isEnabled) : [];
 
@@ -619,7 +679,7 @@ export default function SpreadsheetGrid() {
         }
         
         if (hasActiveVariations && enabledCombs.length > 0) {
-          const prices = enabledCombs.map((c: VariationCombination) => parseFloat(c.price || "0") || parseFloat(dataRow.price) || 0.0);
+          const prices = enabledCombs.map((c: VariationCombination) => parseFloat(c.price || "0") || parseFloat(dataRow.price || "0") || 0.0);
           const minPrice = Math.min(...prices);
           const maxPrice = Math.max(...prices);
           const priceStr = minPrice === maxPrice ? `$${minPrice.toFixed(2)}` : `$${minPrice.toFixed(2)}-$${maxPrice.toFixed(2)}`;
@@ -654,7 +714,7 @@ export default function SpreadsheetGrid() {
       // Special rendering for Price column under variations
       if (columnId === "price") {
          if (hasActiveVariations && enabledCombs.length > 0) {
-            const prices = enabledCombs.map((c: VariationCombination) => parseFloat(c.price || "0") || parseFloat(dataRow.price) || 0.0);
+            const prices = enabledCombs.map((c: VariationCombination) => parseFloat(c.price || "0") || parseFloat(dataRow.price || "0") || 0.0);
             const minPrice = Math.min(...prices);
             const maxPrice = Math.max(...prices);
             const priceStr = minPrice === maxPrice ? `$${minPrice.toFixed(2)}` : `$${minPrice.toFixed(2)} - $${maxPrice.toFixed(2)}`;
@@ -674,7 +734,7 @@ export default function SpreadsheetGrid() {
       // Special rendering for Quantity column under variations
       if (columnId === "quantity") {
          if (hasActiveVariations && enabledCombs.length > 0) {
-            const totalQty = enabledCombs.reduce((sum: number, c: VariationCombination) => sum + (parseInt(c.quantity || "0") || parseInt(dataRow.quantity) || 0), 0);
+            const totalQty = enabledCombs.reduce((sum: number, c: VariationCombination) => sum + (parseInt(c.quantity || "0") || parseInt(dataRow.quantity || "0") || 0), 0);
             return {
               kind: GridCellKind.Text,
               allowOverlay: true,
@@ -1070,6 +1130,26 @@ export default function SpreadsheetGrid() {
       const [col, row] = cell;
       const columnId = columns[col].id as keyof RowData;
 
+      if (workstation === "amazon") {
+        let newStringValue = "";
+        if (newValue.kind === GridCellKind.Text) {
+          newStringValue = newValue.data;
+        } else {
+          return;
+        }
+        const newDataArray = [...dataRef.current];
+        while (row >= newDataArray.length) {
+          newDataArray.push({ ...emptyRowAmazon });
+        }
+        newDataArray[row] = {
+          ...newDataArray[row],
+          [columnId]: newStringValue,
+        };
+        dataRef.current = newDataArray;
+        setData(newDataArray);
+        return;
+      }
+
       const dataRow = dataRef.current[row];
       const hasActiveVariations = sheet === "physical" && dataRow && dataRow.variations && dataRow.variations.properties && dataRow.variations.properties.length > 0;
 
@@ -1141,7 +1221,7 @@ export default function SpreadsheetGrid() {
         }
       } else if (newValue.kind === GridCellKind.Custom) {
         const customColumns = ["status", "category", "section", "primary_color", "secondary_color", "occasion", "celebration", "subject", "graphic", "shipping_profile", "readiness_state_id"];
-        if (customColumns.includes(columnId)) {
+        if (customColumns.includes(columnId as string)) {
            newStringValue = (newValue.data as { value: string }).value;
         } else {
            return;
@@ -1234,7 +1314,6 @@ export default function SpreadsheetGrid() {
               const parsed = parseAttributesSummary(pastedValue);
               Object.assign(dataRow, parsed);
             } else {
-              // @ts-expect-error - external type mismatch
               dataRow[columnId] = pastedValue;
             }
           }
@@ -1292,7 +1371,6 @@ export default function SpreadsheetGrid() {
                 destRowData[key] = sourceRowData[key] || "";
               }
             } else {
-              // @ts-expect-error - external type mismatch
               destRowData[destColumnId] = sourceRowData[sourceColumnId];
             }
           }
@@ -1336,7 +1414,6 @@ export default function SpreadsheetGrid() {
                   if (colId === "attributes") {
                     for (const key of ATTRIBUTE_KEYS) rowData[key] = "";
                   } else {
-                    // @ts-expect-error - external type mismatch
                     rowData[colId] = "";
                   }
                   didDelete = true;
@@ -1362,7 +1439,6 @@ export default function SpreadsheetGrid() {
                 } else if (colId === "attributes") {
                   for (const key of ATTRIBUTE_KEYS) rowData[key] = "";
                 } else {
-                  // @ts-expect-error - dynamic row field clear
                   rowData[colId] = "";
                 }
                 didDelete = true;
@@ -1385,7 +1461,6 @@ export default function SpreadsheetGrid() {
                 if (colId === "attributes") {
                   for (const key of ATTRIBUTE_KEYS) rowData[key] = "";
                 } else {
-                  // @ts-expect-error - external type mismatch
                   rowData[colId] = "";
                 }
                 didDelete = true;
@@ -1440,6 +1515,108 @@ export default function SpreadsheetGrid() {
       : Array.from(gridSelection.rows);
   }, [gridSelection]);
 
+  const [showAmazonPresets, setShowAmazonPresets] = useState(false);
+  const [isAmazonImporterOpen, setIsAmazonImporterOpen] = useState(false);
+
+  const handleApplyAmazonPreset = useCallback((preset: AmazonPreset) => {
+    setData(prev => {
+      const newData = [...prev];
+      selectedRowsList.forEach(rowIndex => {
+        if (rowIndex < newData.length) {
+          const row: RowData = { ...newData[rowIndex] };
+          for (let i = 1; i <= 10; i++) {
+            const key = `col_${i}`;
+            if (preset[key] !== undefined && preset[key] !== "") {
+              row[key] = preset[key];
+            }
+          }
+          newData[rowIndex] = row;
+        }
+      });
+      dataRef.current = newData;
+      return newData;
+    });
+    toast.success(`Applied preset "${preset.name}" to ${selectedRowsList.length} row(s)`);
+  }, [selectedRowsList, setData]);
+
+  const handleAmazonImport = useCallback((selectedFolders: string[], preset: AmazonPreset | null) => {
+    const newRows = selectedFolders.map(folderName => {
+      const row: RowData = {
+        ...emptyRowAmazon,
+        col_1: folderName,
+      };
+      if (preset) {
+        for (let i = 1; i <= 10; i++) {
+          const key = `col_${i}`;
+          if (i === 1) {
+            row.col_1 = folderName || preset.col_1 || "";
+          } else {
+            if (preset[key] !== undefined && preset[key] !== "") {
+              row[key] = preset[key];
+            }
+          }
+        }
+      }
+      return row;
+    });
+
+    const rowsToScan: { rowIndex: number, folderName: string }[] = [];
+
+    setData(prev => {
+      const newData = [...prev];
+      let insertedCount = 0;
+      
+      for (let i = 0; i < newData.length && insertedCount < newRows.length; i++) {
+        const row = newData[i];
+        const isEmpty = !row.col_1 && !row.col_2 && !row.col_3 && !row.col_4 && !row.col_5 && !row.col_6 && !row.col_7 && !row.col_8 && !row.col_9 && !row.col_10;
+        if (isEmpty) {
+          newData[i] = newRows[insertedCount];
+          rowsToScan.push({ rowIndex: i, folderName: newRows[insertedCount].col_1 || "" });
+          insertedCount++;
+        }
+      }
+      
+      while (insertedCount < newRows.length) {
+        const rowIndex = newData.length;
+        newData.push(newRows[insertedCount]);
+        rowsToScan.push({ rowIndex, folderName: newRows[insertedCount].col_1 || "" });
+        insertedCount++;
+      }
+      
+      dataRef.current = newData;
+      return newData;
+    });
+
+    setIsAmazonImporterOpen(false);
+
+    // Scan found images and map them to Col 2
+    rowsToScan.forEach(({ rowIndex, folderName }) => {
+      if (!folderName) return;
+      fetch(`/api/assets?folder=${encodeURIComponent(folderName.trim())}&type=amazon`)
+        .then(res => res.json())
+        .then(assetData => {
+          if (assetData && !assetData.error) {
+            setData(prev => {
+              const updated = [...prev];
+              if (rowIndex < updated.length) {
+                updated[rowIndex] = {
+                  ...updated[rowIndex],
+                  col_2: assetData.images || ""
+                };
+              }
+              dataRef.current = updated;
+              return updated;
+            });
+          } else {
+            toast.error(`Folder Scan Failed: ${assetData.error || "Unknown error"}`);
+          }
+        })
+        .catch(err => {
+          console.error("Amazon folder assets scan failed:", err);
+        });
+    });
+  }, [setData]);
+
   if (!isMounted) {
     return <div className="w-full h-full p-4 bg-white dark:bg-zinc-950 flex flex-col justify-center items-center"><div className="text-zinc-500 text-sm font-medium">Loading worksheet...</div></div>;
   }
@@ -1447,17 +1624,31 @@ export default function SpreadsheetGrid() {
   return (
     <div className="w-full h-full p-4 bg-white dark:bg-zinc-950 flex flex-col" onWheel={onWheel}>
       <div className="flex-none mb-4 flex items-center justify-between border border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 p-2 px-4 rounded-none">
-        <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 uppercase tracking-wider">Spreadsheet Database</h2>
+        <h2 className="text-sm font-semibold text-zinc-800 dark:text-zinc-200 uppercase tracking-wider">
+          {workstation === "etsy" ? "Spreadsheet Database" : "Amazon Spreadsheet Planner"}
+        </h2>
         <div className="flex items-center gap-3">
           <button 
-            onClick={() => setShowPresets(true)}
+            onClick={() => {
+              if (workstation === "etsy") {
+                setShowPresets(true);
+              } else {
+                setShowAmazonPresets(true);
+              }
+            }}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-white dark:bg-zinc-800 border border-zinc-200 dark:border-zinc-700 hover:bg-blue-50 hover:text-blue-600 dark:hover:bg-zinc-700 transition-colors rounded-none"
           >
             <Layers size={14} />
             Presets
           </button>
           <button 
-            onClick={() => setIsImporterOpen(true)}
+            onClick={() => {
+              if (workstation === "etsy") {
+                setIsImporterOpen(true);
+              } else {
+                setIsAmazonImporterOpen(true);
+              }
+            }}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors rounded-none"
           >
             <FolderPlus size={14} />
@@ -1527,7 +1718,8 @@ export default function SpreadsheetGrid() {
         )}
       </div>
       {/* Bottom Sheet Tabs Bar */}
-      <div className="flex-none h-10 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 flex items-center justify-between px-3 select-none">
+      {workstation === "etsy" && (
+        <div className="flex-none h-10 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 flex items-center justify-between px-3 select-none">
         <div className="flex items-start gap-1 h-full -mt-[1px]">
           <button
             onClick={() => {
@@ -1557,6 +1749,7 @@ export default function SpreadsheetGrid() {
           </button>
         </div>
       </div>
+      )}
 
       {/* Render the independent Custom Image Editor completely outside the grid */}
       {globalImageEditor && (
@@ -1681,7 +1874,9 @@ export default function SpreadsheetGrid() {
           <span className="text-sm font-medium px-3 border-r border-blue-500 mr-1">
             {selectedRowsList.length} Selected
           </span>
-          <div className="relative flex items-center">
+          {workstation === "etsy" && (
+            <>
+              <div className="relative flex items-center">
             <button onClick={() => { setShowGenerateMenu(!showGenerateMenu); setShowUpdateMenu(false); }} className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium hover:bg-blue-700 transition-colors">
               {selectedRowsList.length > 1 ? "Bulk Generate" : "Generate"} 
               <ChevronDown size={14} className={`transition-transform ${showGenerateMenu ? 'rotate-180' : ''}`} />
@@ -1724,6 +1919,8 @@ export default function SpreadsheetGrid() {
             </button>
           )}
 
+          </>
+          )}
           <div className="w-px h-5 bg-blue-500 mx-1"></div>
           
           <button onClick={() => {
@@ -1782,6 +1979,24 @@ export default function SpreadsheetGrid() {
 
       {/* Preset Manager Modal */}
       {showPresets && <PresetManagerModal onClose={() => setShowPresets(false)} sheetType={sheet} />}
+
+      {/* Amazon Preset Manager Modal */}
+      {showAmazonPresets && (
+        <AmazonPresetManagerModal 
+          onClose={() => setShowAmazonPresets(false)} 
+          selectedRowsCount={selectedRowsList.length}
+          onApplyPreset={handleApplyAmazonPreset}
+        />
+      )}
+
+      {/* Amazon Folder Importer Modal */}
+      {isAmazonImporterOpen && (
+        <FolderImporterModal 
+          sheetType="amazon"
+          onClose={() => setIsAmazonImporterOpen(false)}
+          onImport={handleAmazonImport}
+        />
+      )}
     </div>
   );
 }

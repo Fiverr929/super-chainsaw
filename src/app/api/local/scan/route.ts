@@ -8,7 +8,14 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const type = searchParams.get('type') || 'digital';
-    const baseDir = type === 'physical' ? 'listings-physical' : 'listings';
+    
+    let baseDir = 'listings';
+    if (type === 'physical') {
+      baseDir = 'listings-physical';
+    } else if (type === 'amazon') {
+      baseDir = 'listings-amazon';
+    }
+    
     const listingsDir = path.join(/*turbopackIgnore: true*/ process.cwd(), 'public', baseDir);
     
     // Create the directory if it doesn't exist yet

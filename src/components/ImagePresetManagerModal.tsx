@@ -10,14 +10,16 @@ export type ImagePreset = {
   prompt: string;
   resolution: string;
   aspectRatio: string;
+  thinkingLevel: string;
 };
 
 export const DEFAULT_IMAGE_PRESET: ImagePreset = {
   id: "default-graphic-extractor",
-  name: "T-Shirt Graphic Extractor",
-  prompt: "Extract ONLY the printed graphic design from this t-shirt. The extracted graphic MUST fill the entire output image from edge to edge. Do not leave ANY empty white space, margins, or padding around the design. Zoom in so the graphic is completely full-bleed and touches the boundaries of the image. Do not include any fabric, wrinkles, or the t-shirt shape.",
+  name: "Graphic Extractor",
+  prompt: "",
   resolution: "1K",
-  aspectRatio: "Auto"
+  aspectRatio: "Auto",
+  thinkingLevel: "High"
 };
 
 interface ImagePresetManagerModalProps {
@@ -60,11 +62,12 @@ export default function ImagePresetManagerModal({ onClose, onSelectDefault }: Im
     setIsCreatingNew(true);
     setEditForm({
       id: "preset-" + Date.now(),
-      name: "New Preset",
-      prompt: "Extract the graphic...",
+        name: "New Preset",
+        prompt: "",
       resolution: "1K",
-      aspectRatio: "Auto"
-    });
+      aspectRatio: "Auto",
+        thinkingLevel: "High"
+      });
   };
 
   const handleEdit = (preset: ImagePreset) => {
@@ -253,6 +256,20 @@ export default function ImagePresetManagerModal({ onClose, onSelectDefault }: Im
                         <option value="16:9">16:9 (Wide)</option>
                       </select>
                     </div>
+                      
+                      <div>
+                        <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+                          Thinking Level
+                        </label>
+                        <select 
+                          value={editForm.thinkingLevel || 'High'}
+                          onChange={e => setEditForm({ ...editForm, thinkingLevel: e.target.value })}
+                          className="w-full px-3 py-2 text-sm rounded-none border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+                        >
+                          <option value="Minimal">Minimal</option>
+                          <option value="High">High</option>
+                        </select>
+                      </div>
                   </div>
 
                   <div>

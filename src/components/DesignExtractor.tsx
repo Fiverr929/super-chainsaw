@@ -1,7 +1,7 @@
 ﻿"use client";
 
 import React, { useState, useRef, useEffect } from 'react';
-import { UploadCloud, ImageIcon, RefreshCw, Settings2, Download, Loader2 } from 'lucide-react';
+import { UploadCloud, FileText, ImageIcon, RefreshCw, Settings2, Download, Loader2, Eraser } from 'lucide-react';
 import toast from 'react-hot-toast';
 import ImagePresetManagerModal, { ImagePreset, DEFAULT_IMAGE_PRESET } from './ImagePresetManagerModal';
 
@@ -10,8 +10,25 @@ export default function DesignExtractor() {
   const [originalImageUrl, setOriginalImageUrl] = useState<string | null>(null);
   const [extractedImageUrl, setExtractedImageUrl] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+    const [isRemovingBg, setIsRemovingBg] = useState(false);
   
   const [showPresets, setShowPresets] = useState(false);
+    
+    const testFileInputRef = useRef<HTMLInputElement>(null);
+    const handleTestFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+      const file = e.target.files?.[0];
+      if (file) {
+        if (!file.type.startsWith('image/')) {
+          toast.error('Please upload an image file');
+          return;
+        }
+        const url = URL.createObjectURL(file);
+        setExtractedImageUrl(url);
+        // Clear the actual extracted image if any, so we strictly test the uploaded one
+        // Note: we leave originalImageUrl alone so the left side doesn't break, 
+        // or we could clear it if we want.
+      }
+    };
   const [defaultPreset, setDefaultPreset] = useState<ImagePreset>(DEFAULT_IMAGE_PRESET);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -52,6 +69,7 @@ export default function DesignExtractor() {
         else finalAspectRatio = "1:1";
       }
       formData.append('aspectRatio', finalAspectRatio);
+      formData.append('thinkingLevel', activePreset.thinkingLevel || 'Medium');
 
       const response = await fetch('/api/image/extract', {
         method: 'POST',
@@ -92,7 +110,66 @@ export default function DesignExtractor() {
     }
   };
 
-  const handleDownload = () => {
+  
+    
+    
+    const applyColorKey = () => {
+      const toleranceLevel = 40;
+      if (!extractedImageUrl) return;
+      
+      const img = new window.Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.width;
+        canvas.height = img.height;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        if (!ctx) return;
+
+        ctx.drawImage(img, 0, 0);
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+
+        // Sample top-left corner as the definitive background color
+        // Averaging corners fails if the background is a gradient.
+        const avgR = data[0];
+        const avgG = data[1];
+        const avgB = data[2];
+
+        for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i+1];
+            const b = data[i+2];
+
+            const dist = Math.sqrt(
+                Math.pow(r - avgR, 2) + 
+                Math.pow(g - avgG, 2) + 
+                Math.pow(b - avgB, 2)
+            );
+
+            if (dist <= toleranceLevel) {
+                data[i+3] = 0; // Make transparent
+            } else if (dist <= toleranceLevel * 1.5) {
+                // Soft edge blending
+                const alphaStr = (dist - toleranceLevel) / (toleranceLevel * 0.5);
+                data[i+3] = Math.min(255, Math.floor(255 * alphaStr));
+            }
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+        // Display directly in a secondary preview if we wanted, but we'll just overwrite
+        const newUrl = canvas.toDataURL('image/png');
+        setExtractedImageUrl(newUrl);
+        setIsRemovingBg(false);
+      };
+      img.src = extractedImageUrl;
+    };
+
+    const handleRemoveBackground = () => {
+      setIsRemovingBg(true);
+      applyColorKey();
+    };
+
+    const handleDownload = () => {
     if (!extractedImageUrl) return;
     const a = document.createElement('a');
     a.href = extractedImageUrl;
@@ -127,7 +204,22 @@ export default function DesignExtractor() {
             className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-zinc-700 bg-white border border-zinc-200 rounded-md hover:bg-zinc-50 dark:bg-zinc-900 dark:border-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-800 transition-colors shadow-sm"
           >
             <Settings2 size={14} className="text-zinc-400" /> Presets
-          </button>
+            </button>
+
+            <input 
+              type="file" 
+              ref={testFileInputRef} 
+              onChange={handleTestFileChange} 
+              accept="image/*" 
+              className="hidden" 
+            />
+            <button
+              onClick={() => testFileInputRef.current?.click()}
+              className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md hover:bg-emerald-100 dark:bg-emerald-900/30 dark:border-emerald-800/50 dark:text-emerald-400 dark:hover:bg-emerald-900/50 transition-colors shadow-sm"
+              title="Upload a local image directly into the right-hand column to test the Background Removal algorithm without hitting the Gemini API."
+            >
+              <FileText size={14} className="text-emerald-500" /> Test Local Image
+            </button>
 
           {originalImageUrl && (
             <button
@@ -172,8 +264,10 @@ export default function DesignExtractor() {
             <div className="p-3 border-b border-zinc-200 dark:border-zinc-800 bg-white dark:bg-zinc-900 font-medium text-xs text-zinc-700 dark:text-zinc-300 flex items-center gap-2 shrink-0">
               <ImageIcon size={12} /> Original Photo
             </div>
-            <div className="flex-1 min-h-0 p-6 lg:p-12 relative overflow-hidden flex items-center justify-center">
-              <img src={originalImageUrl} alt="Original" className="max-w-full max-h-full object-contain bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm rounded-lg p-2" />
+            <div className="flex-1 min-h-0 p-6 lg:p-12 relative overflow-hidden">
+              <div className="w-full h-full relative flex items-center justify-center">
+                <img src={originalImageUrl} alt="Original" className="absolute inset-0 w-full h-full object-contain bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm rounded-lg p-2" />
+              </div>
             </div>
           </div>
 
@@ -183,20 +277,31 @@ export default function DesignExtractor() {
               <div className="flex items-center gap-2">
                 <ImageIcon size={12} /> Extracted Graphic
               </div>
-              {extractedImageUrl && (
-                <button
-                  onClick={handleDownload}
-                  className="flex items-center gap-1.5 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
-                >
-                  <Download size={12} /> Download
-                </button>
-              )}
+                              {extractedImageUrl && (
+                  <div className="flex items-center gap-4">
+                    <button
+                      onClick={handleRemoveBackground}
+                      disabled={isRemovingBg}
+                      className="flex items-center gap-1.5 text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 transition-colors disabled:opacity-50"
+                    >
+                      {isRemovingBg ? <Loader2 size={12} className="animate-spin" /> : <Eraser size={12} />} 
+                      {isRemovingBg ? 'Removing...' : 'Remove BG'}
+                    </button>
+                    <button
+                      onClick={handleDownload}
+                      className="flex items-center gap-1.5 text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition-colors"
+                    >
+                      <Download size={12} /> Download
+                    </button>
+                  </div>
+                )}
             </div>
-            <div className="flex-1 min-h-0 p-6 lg:p-12 relative overflow-hidden flex items-center justify-center">
+            <div className="flex-1 min-h-0 p-6 lg:p-12 relative overflow-hidden">
+              <div className="w-full h-full relative flex items-center justify-center">
                 {extractedImageUrl ? (
-                  <img src={extractedImageUrl} alt="Extracted" className="max-w-full max-h-full object-contain bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm rounded-lg p-2 animate-in zoom-in duration-300" />
+                  <img src={extractedImageUrl} alt="Extracted" className="absolute inset-0 w-full h-full object-contain bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm rounded-lg p-2 animate-in zoom-in duration-300" />
                 ) : (
-                  <div className="w-full h-full max-w-sm max-h-sm mx-auto bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm rounded-lg flex flex-col items-center justify-center text-zinc-400 dark:text-zinc-600 gap-3 p-6">
+                  <div className="w-full max-w-sm aspect-square mx-auto bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm rounded-lg flex flex-col items-center justify-center text-zinc-400 dark:text-zinc-600 gap-3 p-6 relative z-10">
                     {isProcessing ? (
                       <>
                         <Loader2 size={24} className="animate-spin text-blue-500" />
@@ -211,6 +316,7 @@ export default function DesignExtractor() {
                     )}
                   </div>
                 )}
+              </div>
             </div>
           </div>
 

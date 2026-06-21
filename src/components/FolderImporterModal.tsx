@@ -3,17 +3,18 @@
 import React, { useState, useEffect } from 'react';
 import { X, Folder, CheckSquare, Square, RefreshCw, Upload } from 'lucide-react';
 import { Preset, DEFAULT_PRESET, DEFAULT_PHYSICAL_PRESET } from './PresetManagerModal';
+import { AmazonPreset, DEFAULT_AMAZON_PRESET } from './AmazonPresetManagerModal';
 
 interface FolderImporterModalProps {
-  sheetType: 'digital' | 'physical';
+  sheetType: 'digital' | 'physical' | 'amazon';
   onClose: () => void;
-  onImport: (selectedFolders: string[], preset: Preset | null) => void;
+  onImport: (selectedFolders: string[], preset: any) => void;
 }
 
 export default function FolderImporterModal({ sheetType, onClose, onImport }: FolderImporterModalProps) {
   const [folders, setFolders] = useState<string[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [presets, setPresets] = useState<Preset[]>([]);
+  const [presets, setPresets] = useState<any[]>([]);
   const [selectedPresetId, setSelectedPresetId] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
 
@@ -35,24 +36,33 @@ export default function FolderImporterModal({ sheetType, onClose, onImport }: Fo
   };
 
   useEffect(() => {
-    // Load presets
-    const key = sheetType === 'digital' ? 'workstation_v2_presets' : 'workstation_v2_presets_physical';
+    // Load presets based on sheet type
+    let key = '';
+    let defaultPreset: any = null;
+    if (sheetType === 'digital') {
+      key = 'workstation_v2_presets';
+      defaultPreset = DEFAULT_PRESET;
+    } else if (sheetType === 'physical') {
+      key = 'workstation_v2_presets_physical';
+      defaultPreset = DEFAULT_PHYSICAL_PRESET;
+    } else if (sheetType === 'amazon') {
+      key = 'workstation_v2_presets_amazon';
+      defaultPreset = DEFAULT_AMAZON_PRESET;
+    }
+
     const saved = localStorage.getItem(key);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        // eslint-disable-next-line react-hooks/set-state-in-effect
         setPresets(parsed);
         if (parsed.length > 0) {
           setSelectedPresetId(parsed[0].id);
         }
       } catch (e) {
         console.error("Failed to parse presets", e);
-        const defaultPreset = sheetType === 'digital' ? DEFAULT_PRESET : DEFAULT_PHYSICAL_PRESET;
         setPresets([defaultPreset]);
       }
     } else {
-      const defaultPreset = sheetType === 'digital' ? DEFAULT_PRESET : DEFAULT_PHYSICAL_PRESET;
       setPresets([defaultPreset]);
     }
     
@@ -84,6 +94,12 @@ export default function FolderImporterModal({ sheetType, onClose, onImport }: Fo
     onImport(Array.from(selected), chosenPreset);
   };
 
+  const getScanPath = () => {
+    if (sheetType === 'digital') return 'public/listings/';
+    if (sheetType === 'physical') return 'public/listings-physical/';
+    return 'public/listings-amazon/';
+  };
+
   return (
     <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-zinc-900/50 p-4" onClick={onClose}>
       <div className="bg-white dark:bg-zinc-950 border border-zinc-300 dark:border-zinc-700 w-full max-w-2xl flex flex-col max-h-[85vh] overflow-hidden" onClick={e => e.stopPropagation()}>
@@ -102,7 +118,7 @@ export default function FolderImporterModal({ sheetType, onClose, onImport }: Fo
           
           <div className="flex items-center justify-between">
             <p className="text-sm text-zinc-600 dark:text-zinc-400">
-              Scanning <code className="bg-zinc-100 dark:bg-zinc-800 px-1 py-0.5 border border-zinc-200 dark:border-zinc-700">public/{sheetType === 'digital' ? 'listings' : 'listings-physical'}/</code> for product folders.
+              Scanning <code className="bg-zinc-100 dark:bg-zinc-800 px-1 py-0.5 border border-zinc-200 dark:border-zinc-700">{getScanPath()}</code> for product folders.
             </p>
             <button 
               onClick={scanFolders}
@@ -131,7 +147,7 @@ export default function FolderImporterModal({ sheetType, onClose, onImport }: Fo
             <div className="max-h-[300px] overflow-y-auto">
               {folders.length === 0 ? (
                 <div className="p-8 text-center text-sm text-zinc-500">
-                  No subfolders found in <code>public/{sheetType === 'digital' ? 'listings' : 'listings-physical'}/</code>.
+                  No subfolders found in <code>{getScanPath()}</code>.
                 </div>
               ) : (
                 folders.map(folder => (
