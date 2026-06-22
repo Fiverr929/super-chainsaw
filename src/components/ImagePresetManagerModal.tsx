@@ -100,7 +100,7 @@ export default function ImagePresetManagerModal({ onClose, onSelectDefault }: Im
       return;
     }
 
-    let newPresets = [...presets];
+    const newPresets = [...presets];
     if (isCreatingNew) {
       newPresets.push(editForm);
     } else {

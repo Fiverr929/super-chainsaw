@@ -1,5 +1,3 @@
-const fs = require("fs");
-
 async function test() {
   const formData = new FormData();
   // Create a 1x1 dummy image

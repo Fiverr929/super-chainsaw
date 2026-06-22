@@ -1,4 +1,4 @@
-﻿/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from 'next/server';
 import axios from 'axios';
 import fs from 'fs';
@@ -436,18 +436,14 @@ export async function POST(req: Request) {
       if (!listingId) throw new Error("Cannot update media without a valid listing ID");
     }
 
-    // Helper to resolve paths dynamically
+    // Resolve browser-facing asset URLs only within the public directory.
     const resolveFilePath = (fileUrl: string) => {
-      if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://') || fileUrl.startsWith('data:')) {
-         return null; 
-      }
-      if (fileUrl.match(/^[A-Za-z]:/)) {
-         return fileUrl; 
-      }
-      if (fileUrl.startsWith('/')) {
-         return path.join(/*turbopackIgnore: true*/ process.cwd(), 'public', fileUrl);
-      }
-      return path.join(/*turbopackIgnore: true*/ process.cwd(), fileUrl);
+      if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://') || fileUrl.startsWith('data:')) return null;
+
+      const relativePath = fileUrl.replace(/^[/\\]+/, '');
+      if (!relativePath || relativePath.split(/[\\/]+/).includes('..')) return null;
+
+      return path.join(/*turbopackIgnore: true*/ process.cwd(), 'public', relativePath);
     };
 
     // Helper for smart text truncation

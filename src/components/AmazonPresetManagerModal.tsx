@@ -374,7 +374,7 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
   const handleSaveEdit = () => {
     if (!editForm) return;
 
-    let newPresets = [...presets];
+    const newPresets = [...presets];
     if (isCreatingNew) {
       newPresets.push(editForm);
       setIsCreatingNew(false);

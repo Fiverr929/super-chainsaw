@@ -481,15 +481,15 @@ export async function POST(request: Request) {
     if (!parentSku && rowData.sku_template) {
       let baseSku = rowData.sku_template;
       baseSku = baseSku.replace(/{brand(?::(\d+))?}/gi, (match: string, p1: string) => {
-        let val = (rowData.brand || 'YVZ').replace(/\s+/g, '');
+        const val = (rowData.brand || 'YVZ').replace(/\s+/g, '');
         return (p1 && !isNaN(parseInt(p1))) ? val.substring(0, parseInt(p1)) : val;
       });
       baseSku = baseSku.replace(/{folder(?::(\d+))?}/gi, (match: string, p1: string) => {
-        let val = (rowData.folder || 'ITEM').replace(/\s+/g, '-');
+        const val = (rowData.folder || 'ITEM').replace(/\s+/g, '-');
         return (p1 && !isNaN(parseInt(p1))) ? val.substring(0, parseInt(p1)) : val;
       });
       baseSku = baseSku.replace(/{part_number(?::(\d+))?}/gi, (match: string, p1: string) => {
-        let val = (rowData.part_number || '').replace(/\s+/g, '');
+        const val = (rowData.part_number || '').replace(/\s+/g, '');
         return (p1 && !isNaN(parseInt(p1))) ? val.substring(0, parseInt(p1)) : val;
       });
       
@@ -613,15 +613,15 @@ export async function POST(request: Request) {
         if (rowData.sku_template) {
             let baseSku = rowData.sku_template;
             baseSku = baseSku.replace(/{brand(?::(\d+))?}/gi, (match: string, p1: string) => {
-              let val = (rowData.brand || 'YVZ').replace(/\s+/g, '');
+              const val = (rowData.brand || 'YVZ').replace(/\s+/g, '');
               return (p1 && !isNaN(parseInt(p1))) ? val.substring(0, parseInt(p1)) : val;
             });
             baseSku = baseSku.replace(/{folder(?::(\d+))?}/gi, (match: string, p1: string) => {
-              let val = (rowData.folder || 'ITEM').replace(/\s+/g, '-');
+              const val = (rowData.folder || 'ITEM').replace(/\s+/g, '-');
               return (p1 && !isNaN(parseInt(p1))) ? val.substring(0, parseInt(p1)) : val;
             });
             baseSku = baseSku.replace(/{part_number(?::(\d+))?}/gi, (match: string, p1: string) => {
-              let val = (rowData.part_number || '').replace(/\s+/g, '');
+              const val = (rowData.part_number || '').replace(/\s+/g, '');
               return (p1 && !isNaN(parseInt(p1))) ? val.substring(0, parseInt(p1)) : val;
             });
             
@@ -739,7 +739,7 @@ export async function POST(request: Request) {
       }
     }
 
-    const createdAsin = parentRes.data?.identifiers?.[0]?.asin || parentSku;
+    const createdAsin = parentRes.data?.identifiers?.[0]?.asin || null;
 
     if (childErrors.length > 0) {
       console.warn(`Amazon Push completed with some errors. Succeeded children: ${succeededChildrenCount}/${enabledCombs.length}`);
@@ -757,6 +757,7 @@ export async function POST(request: Request) {
 
       return NextResponse.json({
         success: true,
+        partial: true,
         asin: createdAsin,
         details: `Created parent but failed on ${childErrors.length} children. Errors logged to latest_error.json`
       });

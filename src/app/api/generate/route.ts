@@ -36,9 +36,11 @@ export async function POST(request: Request) {
     // Resolve and read local images
     const resolveFilePath = (fileUrl: string) => {
       if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://') || fileUrl.startsWith('data:')) return null;
-      if (fileUrl.match(/^[A-Za-z]:/)) return fileUrl;
-      if (fileUrl.startsWith('/')) return path.join(/*turbopackIgnore: true*/ process.cwd(), 'public', fileUrl);
-      return path.join(/*turbopackIgnore: true*/ process.cwd(), fileUrl);
+
+      const relativePath = fileUrl.replace(/^[/\\]+/, '');
+      if (!relativePath || relativePath.split(/[\\/]+/).includes('..')) return null;
+
+      return path.join(/*turbopackIgnore: true*/ process.cwd(), 'public', relativePath);
     };
 
     const imageParts: { inlineData: { mimeType: string; data: string } }[] = [];
@@ -211,6 +213,17 @@ Format example: { "title": "...", "primary_color": "...", "secondary_color": "..
       tags: content.tags,
       alt_texts: content.alt_texts,
       primary_color: content.primary_color,
+      secondary_color: content.secondary_color,
+      materials: content.materials,
+      sleeve_length: content.sleeve_length,
+      neckline: content.neckline,
+      clothing_style: content.clothing_style,
+      capacity: content.capacity,
+      dishwasher_safe: content.dishwasher_safe,
+      microwave_safe: content.microwave_safe,
+      orientation: content.orientation,
+      framing: content.framing,
+      aspect_ratio: content.aspect_ratio,
       occasion: content.occasion,
       celebration: content.celebration,
       subject: content.subject,

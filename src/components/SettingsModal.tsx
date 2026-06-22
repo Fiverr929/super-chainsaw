@@ -346,7 +346,7 @@ export default function SettingsModal({
                   className="w-full px-3 py-2 text-xs rounded-none border border-zinc-200 focus:outline-none focus:border-blue-500 bg-white text-zinc-900"
                 />
                 <span className="text-[10px] text-zinc-400 leading-normal">
-                  Required to allow Amazon's servers to fetch your local product images. Expose your port 3000 using ngrok or localtunnel before publishing.
+                  Required to allow Amazon&apos;s servers to fetch your local product images. Expose your port 3000 using ngrok or localtunnel before publishing.
                 </span>
               </div>
             </div>

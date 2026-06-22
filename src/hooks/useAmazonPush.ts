@@ -6,7 +6,7 @@ export function useAmazonPush(
   dataRef: React.MutableRefObject<RowData[]>,
   setData: React.Dispatch<React.SetStateAction<RowData[]>>
 ) {
-  const triggerAmazonPush = useCallback((row: number, actionType: string): Promise<void> => {
+  const triggerAmazonPush = useCallback((row: number): Promise<void> => {
     return new Promise((resolve) => {
       const newData = [...dataRef.current];
       newData[row] = { ...newData[row], status: "Pushing..." };
@@ -37,13 +37,20 @@ export function useAmazonPush(
       })
       .then(pushData => {
         const currentData = [...dataRef.current];
-        if (pushData.success) {
+        if (pushData.success && !pushData.partial) {
           currentData[row] = { 
             ...currentData[row], 
             status: "Published", 
             asin: pushData.asin || currentData[row].asin || "" 
           };
           toast.success("Successfully pushed listing to Amazon!");
+        } else if (pushData.success && pushData.partial) {
+          currentData[row] = {
+            ...currentData[row],
+            status: "Partial Error",
+            asin: pushData.asin || currentData[row].asin || ""
+          };
+          toast.error(pushData.details || "Amazon created the parent listing, but one or more variants failed.");
         } else {
           let errMsg = pushData.details?.error || pushData.details || pushData.error || "Unknown Error";
           if (typeof errMsg === 'object') {

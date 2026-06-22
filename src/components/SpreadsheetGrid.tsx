@@ -558,8 +558,8 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
             toast.error(`Row ${row + 1} is missing a Title or Description required for publishing.`);
             return;
          }
-         if (workstation === "amazon" && !rowData.sku) {
-            toast.error(`Row ${row + 1} is missing a Parent SKU required for publishing on Amazon.`);
+         if (workstation === "amazon" && !rowData.sku && !rowData.sku_template) {
+            toast.error(`Row ${row + 1} needs either a Parent SKU or SKU Template for publishing on Amazon.`);
             return;
          }
       }
@@ -604,7 +604,7 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
           await triggerAIGeneration(currentTask.row, ["title", "description", "tags", "primary_color", "secondary_color", "materials", "sleeve_length", "neckline", "clothing_style", "capacity", "dishwasher_safe", "microwave_safe", "orientation", "framing", "aspect_ratio", "occasion", "celebration", "subject", "graphic"]);
         } else if (currentTask.action === "publish") {
           if (workstation === "amazon") {
-            await triggerAmazonPush(currentTask.row, "all");
+            await triggerAmazonPush(currentTask.row);
           } else {
             await triggerEtsyPush(currentTask.row, "all");
           }
@@ -1388,7 +1388,12 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
       });
 
       // If pasting exactly one folder name, trigger the automation
-      if (values.length === 1 && values[0].length === 1 && columns[col]?.id === "folder") {
+      if (
+        workstation === "etsy" &&
+        values.length === 1 &&
+        values[0].length === 1 &&
+        columns[col]?.id === "folder"
+      ) {
          const pastedValue = values[0][0];
          if (pastedValue) {
             triggerFolderAutomation(row, pastedValue);
@@ -1397,7 +1402,7 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
 
       return true;
     },
-    [columns, triggerFolderAutomation, sheet, sections, shippingProfiles, processingProfiles]
+    [columns, triggerFolderAutomation, sheet, shippingProfiles, processingProfiles, workstation]
   );
 
   const onFillPattern = useCallback(
@@ -1629,32 +1634,28 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
     });
 
     const rowsToScan: { rowIndex: number, folderName: string }[] = [];
+    const newData = [...dataRef.current];
+    let insertedCount = 0;
 
-    setData(prev => {
-      const newData = [...prev];
-      let insertedCount = 0;
-      
-      for (let i = 0; i < newData.length && insertedCount < newRows.length; i++) {
-        const row = newData[i];
-        const isEmpty = !row.folder && !row.images && !row.title && !row.sku && !row.asin;
-        if (isEmpty) {
-          newData[i] = newRows[insertedCount];
-          rowsToScan.push({ rowIndex: i, folderName: newRows[insertedCount].folder || "" });
-          insertedCount++;
-        }
-      }
-      
-      while (insertedCount < newRows.length) {
-        const rowIndex = newData.length;
-        newData.push(newRows[insertedCount]);
-        rowsToScan.push({ rowIndex, folderName: newRows[insertedCount].folder || "" });
+    for (let i = 0; i < newData.length && insertedCount < newRows.length; i++) {
+      const row = newData[i];
+      const isEmpty = !row.folder && !row.images && !row.title && !row.sku && !row.asin;
+      if (isEmpty) {
+        newData[i] = newRows[insertedCount];
+        rowsToScan.push({ rowIndex: i, folderName: newRows[insertedCount].folder || "" });
         insertedCount++;
       }
-      
-      dataRef.current = newData;
-      return newData;
-    });
+    }
 
+    while (insertedCount < newRows.length) {
+      const rowIndex = newData.length;
+      newData.push(newRows[insertedCount]);
+      rowsToScan.push({ rowIndex, folderName: newRows[insertedCount].folder || "" });
+      insertedCount++;
+    }
+
+    dataRef.current = newData;
+    setData(newData);
     setIsAmazonImporterOpen(false);
 
     // Scan found images and map them to images column
@@ -2006,7 +2007,7 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
             Delete <Trash2 size={14} />
           </button>
           <button onClick={() => setGridSelection(undefined)} className="flex items-center justify-center w-8 h-8 hover:bg-blue-700 transition-colors ml-1">
-            âœ•
+            ×
           </button>
         </div>
       )}
@@ -2027,7 +2028,7 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
                   className="text-blue-300 hover:text-red-400 transition-colors"
                   title="Cancel remaining tasks"
                 >
-                  âœ•
+                  ×
                 </button>
               </div>
             </div>
@@ -2129,7 +2130,7 @@ function CustomImageEditor({ urls, altTexts, onCancel, onChange }: { urls: reado
                 onClick={() => removeItem(i)} 
                 className="absolute top-1 right-1 bg-white/90 backdrop-blur-sm text-gray-500 hover:text-red-600 hover:bg-white w-6 h-6 rounded-none flex items-center justify-center text-xs font-bold z-10 opacity-0 group-hover:opacity-100 transition-all duration-200 shadow-sm"
               >
-                âœ•
+                ×
               </button>
               <span className="absolute top-1 left-1 bg-[#2b52d6]/90 backdrop-blur-sm text-white w-5 h-5 rounded-sm flex items-center justify-center text-[10px] font-bold z-10 shadow-sm">
                 {i + 1}
@@ -2267,7 +2268,7 @@ function AttributesDrawer({ row, rowData, onClose, setData }: AttributesDrawerPr
             onClick={onClose}
             className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 font-bold"
           >
-            âœ•
+            ×
           </button>
         </div>
 
@@ -2782,7 +2783,7 @@ function VariationsDrawer({ row, rowData, onClose, setData }: VariationsDrawerPr
             onClick={onClose}
             className="text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-200 font-bold"
           >
-            âœ•
+            ×
           </button>
         </div>
 

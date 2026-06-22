@@ -103,7 +103,9 @@ export function useAIPipeline(
         dataRef.current = newData;
         setData(newData);
       } else {
-        const key = sheetType === 'digital' ? 'workstation_v2_grid_data' : 'workstation_v2_grid_data_physical';
+        const key = sheetType === 'digital'
+          ? 'workstation_v2_grid_data_etsy_digital'
+          : 'workstation_v2_grid_data_etsy_physical';
         const saved = localStorage.getItem(key);
         if (saved) {
            const parsed = JSON.parse(saved);
@@ -130,7 +132,9 @@ export function useAIPipeline(
         dataRef.current = newData;
         setData(newData);
       } else {
-        const key = sheetType === 'digital' ? 'workstation_v2_grid_data' : 'workstation_v2_grid_data_physical';
+        const key = sheetType === 'digital'
+          ? 'workstation_v2_grid_data_etsy_digital'
+          : 'workstation_v2_grid_data_etsy_physical';
         const saved = localStorage.getItem(key);
         if (saved) {
            const parsed = JSON.parse(saved);
