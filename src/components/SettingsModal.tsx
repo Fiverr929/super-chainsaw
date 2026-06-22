@@ -34,6 +34,16 @@ export default function SettingsModal({
   onAmazonStoresChange,
 }: SettingsModalProps) {
   const [isConnectingEtsy, setIsConnectingEtsy] = useState(false);
+  const [tunnelUrl, setTunnelUrl] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("workstation_v2_amazon_tunnel_url") || "";
+    }
+    return "";
+  });
+  const handleTunnelUrlChange = (val: string) => {
+    setTunnelUrl(val);
+    localStorage.setItem("workstation_v2_amazon_tunnel_url", val);
+  };
   const [isConnectingAmazon, setIsConnectingAmazon] = useState(false);
 
   // Accordion toggle states
@@ -322,6 +332,23 @@ export default function SettingsModal({
                   )}
                 </div>
               )}
+
+              {/* Public Tunnel URL for testing */}
+              <div className="mt-5 flex flex-col gap-1.5 border-t border-zinc-100 pt-5">
+                <label className="text-xs font-semibold text-zinc-800">
+                  Public Tunnel URL (for local image hosting)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. https://funny-bears-jump.localtunnel.me"
+                  value={tunnelUrl}
+                  onChange={(e) => handleTunnelUrlChange(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-none border border-zinc-200 focus:outline-none focus:border-blue-500 bg-white text-zinc-900"
+                />
+                <span className="text-[10px] text-zinc-400 leading-normal">
+                  Required to allow Amazon's servers to fetch your local product images. Expose your port 3000 using ngrok or localtunnel before publishing.
+                </span>
+              </div>
             </div>
 
           </div>
