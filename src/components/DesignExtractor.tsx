@@ -1,6 +1,7 @@
-﻿"use client";
+"use client";
 
 import React, { useState, useRef, useEffect } from 'react';
+import Image from 'next/image';
 import { UploadCloud, FileText, ImageIcon, RefreshCw, Settings2, Download, Loader2, Eraser } from 'lucide-react';
 import toast from 'react-hot-toast';
 import ImagePresetManagerModal, { ImagePreset, DEFAULT_IMAGE_PRESET } from './ImagePresetManagerModal';
@@ -38,8 +39,9 @@ export default function DesignExtractor() {
     const defaultId = localStorage.getItem("workstation_default_image_preset") || "default-graphic-extractor";
     if (savedPresetsStr) {
       try {
-        const parsed = JSON.parse(savedPresetsStr);
-        const active = parsed.find((p: any) => p.id === defaultId);
+        const parsed: unknown = JSON.parse(savedPresetsStr);
+        if (!Array.isArray(parsed)) return;
+        const active = (parsed as ImagePreset[]).find(p => p.id === defaultId);
         if (active) setDefaultPreset(active);
       } catch {}
     }
@@ -87,9 +89,9 @@ export default function DesignExtractor() {
       setExtractedImageUrl(data.image);
       toast.success('Graphic extracted successfully!');
 
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error(error);
-      toast.error(error.message || 'Failed to process image');
+      toast.error(error instanceof Error ? error.message : 'Failed to process image');
     } finally {
       setIsProcessing(false);
     }
@@ -266,7 +268,7 @@ export default function DesignExtractor() {
             </div>
             <div className="flex-1 min-h-0 p-6 lg:p-12 relative overflow-hidden">
               <div className="w-full h-full relative flex items-center justify-center">
-                <img src={originalImageUrl} alt="Original" className="absolute inset-0 w-full h-full object-contain bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm rounded-lg p-2" />
+                <Image src={originalImageUrl} alt="Original" fill unoptimized sizes="50vw" className="object-contain bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm rounded-lg p-2" />
               </div>
             </div>
           </div>
@@ -299,7 +301,7 @@ export default function DesignExtractor() {
             <div className="flex-1 min-h-0 p-6 lg:p-12 relative overflow-hidden">
               <div className="w-full h-full relative flex items-center justify-center">
                 {extractedImageUrl ? (
-                  <img src={extractedImageUrl} alt="Extracted" className="absolute inset-0 w-full h-full object-contain bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm rounded-lg p-2 animate-in zoom-in duration-300" />
+                  <Image src={extractedImageUrl} alt="Extracted" fill unoptimized sizes="50vw" className="object-contain bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm rounded-lg p-2 animate-in zoom-in duration-300" />
                 ) : (
                   <div className="w-full max-w-sm aspect-square mx-auto bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 shadow-sm rounded-lg flex flex-col items-center justify-center text-zinc-400 dark:text-zinc-600 gap-3 p-6 relative z-10">
                     {isProcessing ? (

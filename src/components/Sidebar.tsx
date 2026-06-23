@@ -6,10 +6,8 @@ import {
   ChevronRight, 
   ShoppingBag, 
   ShoppingCart,
-  Plus, 
   Check, 
   ChevronDown, 
-  Trash2, 
   LayoutGrid, 
   Image as ImageIcon,
   Settings

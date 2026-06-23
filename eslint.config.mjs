@@ -7,7 +7,6 @@ const eslintConfig = defineConfig([
   ...nextTs,
   {
     rules: {
-      "@typescript-eslint/no-explicit-any": "warn",
       "react-hooks/immutability": "off",
       "react-hooks/purity": "off",
       "react-hooks/set-state-in-effect": "off",

@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 import axios from 'axios';
 import fs from 'fs';
 import path from 'path';
+import { resolvePublicAssetPath } from '@/lib/serverPaths';
 import sharp from 'sharp';
 import { getEtsyRefreshToken, saveEtsyRefreshToken } from '@/lib/etsyTokenStore';
 
@@ -436,16 +437,6 @@ export async function POST(req: Request) {
       if (!listingId) throw new Error("Cannot update media without a valid listing ID");
     }
 
-    // Resolve browser-facing asset URLs only within the public directory.
-    const resolveFilePath = (fileUrl: string) => {
-      if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://') || fileUrl.startsWith('data:')) return null;
-
-      const relativePath = fileUrl.replace(/^[/\\]+/, '');
-      if (!relativePath || relativePath.split(/[\\/]+/).includes('..')) return null;
-
-      return path.join(/*turbopackIgnore: true*/ process.cwd(), 'public', relativePath);
-    };
-
     // Helper for smart text truncation
     const truncateText = (text: string, maxLen: number) => {
        if (!text || text.length <= maxLen) return text;
@@ -489,7 +480,7 @@ export async function POST(req: Request) {
         const imageUrls = data.images.split(",").map((s: string) => s.trim()).filter(Boolean);
         let rank = 1;
         for (const imgUrl of imageUrls) {
-          const absolutePath = resolveFilePath(imgUrl);
+          const absolutePath = resolvePublicAssetPath(imgUrl);
           if (absolutePath && fs.existsSync(absolutePath)) {
             let finalBuffer: Buffer = fs.readFileSync(absolutePath);
             let ext = path.extname(absolutePath).toLowerCase();
@@ -549,7 +540,7 @@ export async function POST(req: Request) {
     if (data.updateType === "all" || data.updateType === "video") {
       // 6. Upload Promo Video
       if (data.video) {
-        const absoluteVideoPath = resolveFilePath(data.video);
+        const absoluteVideoPath = resolvePublicAssetPath(data.video);
         if (absoluteVideoPath && fs.existsSync(absoluteVideoPath)) {
           // Delete existing video(s)
           try {
@@ -625,7 +616,7 @@ export async function POST(req: Request) {
 
         const files = data.digital_file.split(",").map((s: string) => s.trim()).filter(Boolean).slice(0, 5);
         for (const fileUrl of files) {
-          const absolutePath = resolveFilePath(fileUrl);
+          const absolutePath = resolvePublicAssetPath(fileUrl);
           if (absolutePath && fs.existsSync(absolutePath)) {
             const fileBuffer = fs.readFileSync(absolutePath);
             const ext = path.extname(absolutePath).toLowerCase();

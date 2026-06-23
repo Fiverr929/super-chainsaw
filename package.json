@@ -2,11 +2,13 @@
   "name": "workstation-v2",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev --webpack",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node --test tests/*.test.ts"
   },
   "dependencies": {
     "@glideapps/glide-data-grid": "^6.0.3",

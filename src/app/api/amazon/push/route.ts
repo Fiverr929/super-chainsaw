@@ -5,14 +5,65 @@ import fs from 'fs';
 import path from 'path';
 
 export const dynamic = 'force-dynamic';
+type AmazonStringField =
+  | 'age_range_description' | 'animal_theme' | 'apparel_fabric_stretch' | 'apparel_fabric_weight_class'
+  | 'brand' | 'bullet_points' | 'care_instructions' | 'closure_type' | 'collar_style' | 'department_name'
+  | 'description' | 'embellishment_feature' | 'fabric_stretchability' | 'fashion_decade' | 'folder'
+  | 'garment_size_country' | 'hemline_form' | 'hsn_code' | 'images' | 'is_customizable'
+  | 'is_green_purchasing_law_compliant' | 'item_package_quantity' | 'item_type_name' | 'item_weight'
+  | 'item_weight_unit' | 'keywords' | 'league_name' | 'lifestyle' | 'manufacturer_address'
+  | 'maximum_retail_price' | 'maximum_seller_allowed_price' | 'minimum_seller_allowed_price' | 'neck_style'
+  | 'number_of_items' | 'number_of_pockets' | 'outer_material' | 'packer_address' | 'part_number'
+  | 'pattern' | 'pocket_description' | 'price' | 'product_site_launch_date' | 'quantity' | 'seasons'
+  | 'shirt_form_type' | 'shoulder_hem_length' | 'shoulder_hem_unit' | 'sku' | 'sku_template' | 'sleeve_cuff'
+  | 'sleeve_length' | 'sleeve_type' | 'special_features' | 'sport_type' | 'subject_character'
+  | 'target_gender' | 'team_name' | 'theme' | 'title' | 'top_style' | 'tunnelUrl' | 'unit_count'
+  | 'unit_count_type';
 
-function getSignatureKey(key: string, dateStamp: string, regionName: string, serviceName: string): Buffer {
-  const kDate = crypto.createHmac('sha256', "AWS4" + key).update(dateStamp).digest();
-  const kRegion = crypto.createHmac('sha256', kDate).update(kDate).digest();
-  const kService = crypto.createHmac('sha256', kRegion).update(serviceName).digest();
-  const kSigning = crypto.createHmac('sha256', kService).update("aws4_request").digest();
-  return kSigning;
+type AmazonBooleanField =
+  | 'animal_theme_auto' | 'brand_auto' | 'embellishment_feature_auto' | 'fabric_stretchability_auto'
+  | 'item_type_name_auto' | 'keywords_auto' | 'league_name_auto' | 'lifestyle_auto' | 'number_of_pockets_auto'
+  | 'outer_material_auto' | 'part_number_auto' | 'pattern_auto' | 'pocket_description_auto' | 'seasons_auto'
+  | 'shoulder_hem_length_auto' | 'special_features_auto' | 'sport_type_auto' | 'subject_character_auto'
+  | 'team_name_auto' | 'theme_auto';
+
+type AmazonVariationCombination = {
+  id?: string;
+  values?: Record<string, string>;
+  isEnabled?: boolean;
+  price?: string;
+  quantity?: string;
+};
+
+type AmazonVariations = {
+  properties: Array<{ name: string; options: string[] }>;
+  combinations: AmazonVariationCombination[];
+};
+
+type AmazonListingRow = Partial<Record<AmazonStringField, string>>
+  & Partial<Record<AmazonBooleanField, boolean>>
+  & { variations?: AmazonVariations | string; [key: string]: unknown };
+
+type AmazonAttributes = Record<string, unknown>;
+type AmazonListingPayload = { productType: string; requirements: string; attributes: AmazonAttributes };
+type AmazonChildError = { sku?: string; combinationId?: string; error: unknown };
+type AmazonPutResult =
+  | { success: true; sku: string; data: { identifiers?: Array<{ asin?: string }> } }
+  | { success: false; sku: string; error: unknown };
+
+function getErrorDetails(error: unknown): { message: string; responseData?: unknown } {
+  if (axios.isAxiosError(error)) {
+    return { message: error.message, responseData: error.response?.data };
+  }
+  return { message: error instanceof Error ? error.message : String(error) };
 }
+
+function isAmazonVariations(value: unknown): value is AmazonVariations {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Partial<AmazonVariations>;
+  return Array.isArray(candidate.properties) && Array.isArray(candidate.combinations);
+}
+
 
 function getSignatureKeySigV4(key: string, dateStamp: string, regionName: string, serviceName: string): Buffer {
   const kDate = crypto.createHmac('sha256', "AWS4" + key).update(dateStamp).digest();
@@ -49,7 +100,7 @@ function buildImageAttributes(images: string[], tunnelUrl: string, marketplaceId
     return img; // fallback
   });
 
-  const attrs: Record<string, any> = {};
+  const attrs: AmazonAttributes = {};
   attrs.main_product_image_locator = [
     {
       media_location: imgUrls[0],
@@ -90,7 +141,7 @@ function buildImageAttributesForColor(images: string[], tunnelUrl: string, marke
 async function putListingItem(
   accessToken: string,
   sku: string,
-  payload: any,
+  payload: AmazonListingPayload,
   config: {
     sellerId: string;
     awsAccessKey: string;
@@ -98,7 +149,7 @@ async function putListingItem(
     region: string;
     marketplaceId: string;
   }
-) {
+): Promise<AmazonPutResult> {
   const host = `sellingpartnerapi-${config.region}.amazon.com`;
   const path = `/listings/2021-08-01/items/${config.sellerId}/${sku}`;
   const queryParams: Record<string, string> = { marketplaceIds: config.marketplaceId };
@@ -139,25 +190,24 @@ async function putListingItem(
   try {
     const res = await axios.put(url, payload, { headers });
     return { success: true, sku, data: res.data };
-  } catch (err: any) {
-    console.error(`SP-API PUT failed for ${sku}:`, err.response ? err.response.data : err.message);
+  } catch (error: unknown) {
+    const details = getErrorDetails(error);
+    console.error(`SP-API PUT failed for ${sku}:`, details.responseData ?? details.message);
     return {
       success: false,
       sku,
-      error: err.response ? err.response.data : err.message
+      error: details.responseData ?? details.message
     };
   }
 }
 
 function buildAttributes(
-  rowData: any,
+  rowData: AmazonListingRow,
   marketplaceId: string,
   isChild: boolean = false,
-  childSku?: string,
-  colorVal?: string,
-  sizeVal?: string
+  childSku?: string
 ) {
-  const attrs: Record<string, any> = {};
+  const attrs: AmazonAttributes = {};
 
   // Helpers to resolve preset rules
   const resolveDropdown = (val: string | undefined, defaultVal: string | null): string | null => {
@@ -235,7 +285,7 @@ function buildAttributes(
   const sleeveTypeVal = resolveDropdown(rowData.sleeve_type, 'Short Sleeve');
   const sleeveCuffVal = resolveDropdown(rowData.sleeve_cuff, null);
   if (sleeveLengthVal || sleeveTypeVal || sleeveCuffVal) {
-    const sleeveObj: any = { marketplace_id: marketplaceId };
+    const sleeveObj: Record<string, unknown> = { marketplace_id: marketplaceId };
     if (sleeveLengthVal) {
       let mappedLength = sleeveLengthVal;
       if (mappedLength === "3/4 Sleeve") mappedLength = "3_4_sleeve";
@@ -459,10 +509,13 @@ function buildAttributes(
 }
 
 export async function POST(request: Request) {
-  let requestBody: any = null;
+  let requestBody: unknown = null;
   try {
     requestBody = await request.json();
-    const rowData = requestBody;
+    if (!requestBody || typeof requestBody !== 'object') {
+      return NextResponse.json({ error: 'Invalid Amazon listing payload' }, { status: 400 });
+    }
+    const rowData = requestBody as AmazonListingRow;
 
     const clientID = process.env.SP_API_CLIENT_ID;
     const clientSecret = process.env.SP_API_CLIENT_SECRET;
@@ -511,7 +564,7 @@ export async function POST(request: Request) {
       : [];
 
     // Parse variations structure
-    let parsedVariations = rowData.variations;
+    let parsedVariations: unknown = rowData.variations;
     if (typeof parsedVariations === 'string' && parsedVariations.trim() !== '') {
       try {
         parsedVariations = JSON.parse(parsedVariations);
@@ -520,14 +573,9 @@ export async function POST(request: Request) {
       }
     }
 
-    const hasActiveVariations = parsedVariations && 
-                                Array.isArray(parsedVariations.properties) && 
-                                parsedVariations.properties.length > 0 &&
-                                Array.isArray(parsedVariations.combinations);
-
-    const enabledCombs = hasActiveVariations 
-      ? parsedVariations.combinations.filter((c: any) => c.isEnabled)
-      : [];
+    const variations = isAmazonVariations(parsedVariations) ? parsedVariations : null;
+    const hasActiveVariations = !!variations && variations.properties.length > 0;
+    const enabledCombs = hasActiveVariations ? variations.combinations.filter(c => c.isEnabled) : [];
 
     // 1. Authenticate with LWA
     const tokenRes = await axios.post('https://api.amazon.com/auth/o2/token', new URLSearchParams({
@@ -552,7 +600,7 @@ export async function POST(request: Request) {
       ? bpArray.map((bp: string) => ({ value: bp, marketplace_id: marketplaceId, language_tag: 'en_IN' }))
       : [ { value: rowData.title || "Premium Retro Graphic Baby Tee", marketplace_id: marketplaceId, language_tag: 'en_IN' } ];
 
-    const parentPayload: any = {
+    const parentPayload: AmazonListingPayload = {
       productType: 'SHIRT',
       requirements: 'LISTING',
       attributes: {
@@ -583,7 +631,7 @@ export async function POST(request: Request) {
     }
 
     // 3. Push Variation Children
-    const childErrors: any[] = [];
+    const childErrors: AmazonChildError[] = [];
     let succeededChildrenCount = 0;
 
     if (hasActiveVariations && enabledCombs.length > 0) {
@@ -768,15 +816,16 @@ export async function POST(request: Request) {
       asin: createdAsin
     });
 
-  } catch (error: any) {
-    console.error("Amazon push pipeline error:", error.message || error);
+  } catch (error: unknown) {
+    const details = getErrorDetails(error);
+    console.error("Amazon push pipeline error:", details.responseData ?? details.message);
     
     // Save to file for debugging
     try {
       fs.writeFileSync(path.join(process.cwd(), 'latest_error.json'), JSON.stringify({
         timestamp: new Date().toISOString(),
         requestBody,
-        error: error.message || error
+        error: details.responseData ?? details.message
       }, null, 2));
     } catch (e) {
       console.error("Failed to write error log", e);
@@ -784,7 +833,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ 
       success: false, 
-      error: error.message || 'Failed to push to Amazon'
+      error: details.message || 'Failed to push to Amazon'
     }, { status: 500 });
   }
 }

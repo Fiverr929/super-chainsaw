@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import fs from 'fs';
-import path from 'path';
 import sharp from 'sharp';
 import { categorySupportsOccasion, categorySupportsCelebration, categorySupportsSubject, categorySupportsGraphic } from '@/lib/etsyConstants';
+import { buildGeneratedMetadataResponse } from '@/lib/listingWorkflow';
+import { resolvePublicAssetPath } from '@/lib/serverPaths';
 
 export async function POST(request: Request) {
   try {
@@ -34,18 +35,9 @@ export async function POST(request: Request) {
     }
 
     // Resolve and read local images
-    const resolveFilePath = (fileUrl: string) => {
-      if (fileUrl.startsWith('http://') || fileUrl.startsWith('https://') || fileUrl.startsWith('data:')) return null;
-
-      const relativePath = fileUrl.replace(/^[/\\]+/, '');
-      if (!relativePath || relativePath.split(/[\\/]+/).includes('..')) return null;
-
-      return path.join(/*turbopackIgnore: true*/ process.cwd(), 'public', relativePath);
-    };
-
     const imageParts: { inlineData: { mimeType: string; data: string } }[] = [];
     for (const fileUrl of imagePaths) {
-       const absolutePath = resolveFilePath(fileUrl);
+       const absolutePath = resolvePublicAssetPath(fileUrl);
        if (absolutePath && fs.existsSync(absolutePath)) {
           const fileBuffer = fs.readFileSync(absolutePath);
           
@@ -207,28 +199,7 @@ Format example: { "title": "...", "primary_color": "...", "secondary_color": "..
       }
     }
 
-    return NextResponse.json({
-      title: content.title,
-      description: content.description,
-      tags: content.tags,
-      alt_texts: content.alt_texts,
-      primary_color: content.primary_color,
-      secondary_color: content.secondary_color,
-      materials: content.materials,
-      sleeve_length: content.sleeve_length,
-      neckline: content.neckline,
-      clothing_style: content.clothing_style,
-      capacity: content.capacity,
-      dishwasher_safe: content.dishwasher_safe,
-      microwave_safe: content.microwave_safe,
-      orientation: content.orientation,
-      framing: content.framing,
-      aspect_ratio: content.aspect_ratio,
-      occasion: content.occasion,
-      celebration: content.celebration,
-      subject: content.subject,
-      graphic: content.graphic
-    });
+    return NextResponse.json(buildGeneratedMetadataResponse(content));
 
   } catch (error) {
     console.error('Error generating AI metadata:', error);

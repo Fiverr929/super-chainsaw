@@ -1,44 +1,46 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { X, Folder, CheckSquare, Square, RefreshCw, Upload } from 'lucide-react';
-import { Preset, DEFAULT_PRESET, DEFAULT_PHYSICAL_PRESET } from './PresetManagerModal';
-import { AmazonPreset, DEFAULT_AMAZON_PRESET } from './AmazonPresetManagerModal';
+import { type Preset, DEFAULT_PRESET, DEFAULT_PHYSICAL_PRESET } from './PresetManagerModal';
+import { type AmazonPreset, DEFAULT_AMAZON_PRESET } from './AmazonPresetManagerModal';
+
+type ListingPreset = Preset | AmazonPreset;
 
 interface FolderImporterModalProps {
   sheetType: 'digital' | 'physical' | 'amazon';
   onClose: () => void;
-  onImport: (selectedFolders: string[], preset: any) => void;
+  onImport: (selectedFolders: string[], preset: ListingPreset | null) => void;
 }
 
 export default function FolderImporterModal({ sheetType, onClose, onImport }: FolderImporterModalProps) {
   const [folders, setFolders] = useState<string[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [presets, setPresets] = useState<any[]>([]);
+  const [presets, setPresets] = useState<ListingPreset[]>([]);
   const [selectedPresetId, setSelectedPresetId] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
 
-  const scanFolders = async () => {
+  const scanFolders = useCallback(async () => {
     setIsLoading(true);
     try {
       const res = await fetch(`/api/local/scan?type=${sheetType}`);
       if (res.ok) {
-        const data = await res.json();
-        setFolders(data.folders || []);
-        // Automatically select all by default
-        setSelected(new Set(data.folders || []));
+        const data: { folders?: string[] } = await res.json();
+        const scannedFolders = data.folders || [];
+        setFolders(scannedFolders);
+        setSelected(new Set(scannedFolders));
       }
     } catch (error) {
       console.error("Failed to scan folders:", error);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [sheetType]);
 
   useEffect(() => {
     // Load presets based on sheet type
     let key = '';
-    let defaultPreset: any = null;
+    let defaultPreset: ListingPreset = DEFAULT_PRESET;
     if (sheetType === 'digital') {
       key = 'workstation_v2_presets';
       defaultPreset = DEFAULT_PRESET;
@@ -53,10 +55,12 @@ export default function FolderImporterModal({ sheetType, onClose, onImport }: Fo
     const saved = localStorage.getItem(key);
     if (saved) {
       try {
-        const parsed = JSON.parse(saved);
-        setPresets(parsed);
-        if (parsed.length > 0) {
-          setSelectedPresetId(parsed[0].id);
+        const parsed: unknown = JSON.parse(saved);
+        if (!Array.isArray(parsed)) throw new Error("Invalid preset list");
+        const parsedPresets = parsed as ListingPreset[];
+        setPresets(parsedPresets);
+        if (parsedPresets.length > 0) {
+          setSelectedPresetId(parsedPresets[0].id);
         }
       } catch (e) {
         console.error("Failed to parse presets", e);
@@ -68,7 +72,7 @@ export default function FolderImporterModal({ sheetType, onClose, onImport }: Fo
     
     // Scan folders immediately on open
     scanFolders();
-  }, [sheetType]);
+  }, [scanFolders, sheetType]);
 
   const toggleFolder = (folder: string) => {
     const newSelected = new Set(selected);

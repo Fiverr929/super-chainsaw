@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { X, Plus, Trash2, Save, ChevronDown, Copy } from "lucide-react";
 import toast from "react-hot-toast";
-import { ETSY_COLORS, ETSY_DIGITAL_CATEGORIES, ETSY_PHYSICAL_CATEGORIES, ETSY_WHEN_MADE, ETSY_SUBJECTS, ETSY_OCCASIONS, ETSY_CELEBRATIONS, categorySupportsOccasion, categorySupportsCelebration, categorySupportsSubject, ETSY_ORIENTATION, ETSY_FRAMING, ETSY_ASPECT_RATIO, ETSY_ROOM, ETSY_HOME_STYLE, ETSY_CAN_BE_PERSONALIZED, ETSY_SLEEVE_LENGTH, ETSY_NECKLINE, ETSY_CLOTHING_STYLE, ETSY_MUG_CAPACITY, categorySupportsGraphic, ETSY_GRAPHICS, ETSY_VARIATION_PROPERTY_DEFS } from "@/lib/etsyConstants";
+import { ETSY_COLORS, ETSY_DIGITAL_CATEGORIES, ETSY_PHYSICAL_CATEGORIES, ETSY_WHEN_MADE, ETSY_SUBJECTS, ETSY_OCCASIONS, ETSY_CELEBRATIONS, categorySupportsOccasion, categorySupportsCelebration, categorySupportsSubject, ETSY_ORIENTATION, ETSY_FRAMING, ETSY_ASPECT_RATIO, ETSY_SLEEVE_LENGTH, ETSY_NECKLINE, ETSY_CLOTHING_STYLE, ETSY_MUG_CAPACITY, categorySupportsGraphic, ETSY_GRAPHICS, ETSY_VARIATION_PROPERTY_DEFS } from "@/lib/etsyConstants";
 
 export type VariationCombination = {
   id: string;
@@ -253,8 +253,6 @@ export default function PresetManagerModal({ onClose, sheetType }: PresetManager
       if (existing) {
         return { ...existing, id };
       }
-
-      const skuSuffix = optionValues.map((v: string) => v.toUpperCase().replace(/\s+/g, '')).join("-");
       return {
         id,
         values,

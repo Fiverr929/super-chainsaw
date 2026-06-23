@@ -3,6 +3,9 @@ import axios from 'axios';
 import crypto from 'crypto';
 
 export const dynamic = 'force-dynamic';
+type MarketplaceParticipation = {
+  marketplace?: { name?: string };
+};
 
 function getSignatureKey(key: string, dateStamp: string, regionName: string, serviceName: string): Buffer {
   const kDate = crypto.createHmac('sha256', "AWS4" + key).update(dateStamp).digest();
@@ -103,11 +106,11 @@ export async function GET() {
       }
     });
 
-    const participations = sellersRes.data.payload || [];
+    const participations: MarketplaceParticipation[] = sellersRes.data.payload || [];
     let shopName = `Amazon Store (${sellerId})`;
 
     if (participations.length > 0) {
-      const activePart = participations.find((p: any) => p.marketplace?.name) || participations[0];
+      const activePart = participations.find(p => p.marketplace?.name) || participations[0];
       if (activePart?.marketplace?.name) {
         shopName = `Amazon Store (${activePart.marketplace.name})`;
       }

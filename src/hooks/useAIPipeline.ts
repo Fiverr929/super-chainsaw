@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import type { RowData } from '@/components/SpreadsheetGrid';
 import toast from 'react-hot-toast';
+import { getEtsyGridStorageKey } from '@/lib/listingWorkflow';
 
 export function useAIPipeline(
   dataRef: React.MutableRefObject<RowData[]>,
@@ -103,9 +104,7 @@ export function useAIPipeline(
         dataRef.current = newData;
         setData(newData);
       } else {
-        const key = sheetType === 'digital'
-          ? 'workstation_v2_grid_data_etsy_digital'
-          : 'workstation_v2_grid_data_etsy_physical';
+        const key = getEtsyGridStorageKey(sheetType);
         const saved = localStorage.getItem(key);
         if (saved) {
            const parsed = JSON.parse(saved);
@@ -132,9 +131,7 @@ export function useAIPipeline(
         dataRef.current = newData;
         setData(newData);
       } else {
-        const key = sheetType === 'digital'
-          ? 'workstation_v2_grid_data_etsy_digital'
-          : 'workstation_v2_grid_data_etsy_physical';
+        const key = getEtsyGridStorageKey(sheetType);
         const saved = localStorage.getItem(key);
         if (saved) {
            const parsed = JSON.parse(saved);
@@ -185,7 +182,7 @@ export function useAIPipeline(
          console.error("Asset scan failed:", err);
          toast.error("Network error while trying to scan folder.");
       });
-  }, [dataRef, setData, triggerAIGeneration, sheetType, sheetRef]);
+  }, [dataRef, setData, triggerAIGeneration, sheetType]);
 
   return { triggerAIGeneration, triggerFolderAutomation };
 }

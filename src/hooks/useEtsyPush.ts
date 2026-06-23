@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import type { RowData } from '@/components/SpreadsheetGrid';
 import toast from 'react-hot-toast';
+import { getEtsyGridStorageKey } from '@/lib/listingWorkflow';
 
 export function useEtsyPush(
   dataRef: React.MutableRefObject<RowData[]>,
@@ -54,9 +55,7 @@ export function useEtsyPush(
             dataRef.current = newData;
             setData(newData);
         } else {
-            const key = sheetType === 'digital'
-              ? 'workstation_v2_grid_data_etsy_digital'
-              : 'workstation_v2_grid_data_etsy_physical';
+            const key = getEtsyGridStorageKey(sheetType);
             const saved = localStorage.getItem(key);
             if (saved) {
                const parsed = JSON.parse(saved);
@@ -92,9 +91,7 @@ export function useEtsyPush(
             dataRef.current = newData;
             setData(newData);
         } else {
-            const key = sheetType === 'digital'
-              ? 'workstation_v2_grid_data_etsy_digital'
-              : 'workstation_v2_grid_data_etsy_physical';
+            const key = getEtsyGridStorageKey(sheetType);
             const saved = localStorage.getItem(key);
             if (saved) {
                const parsed = JSON.parse(saved);
@@ -105,7 +102,7 @@ export function useEtsyPush(
         resolve();
       });
     });
-  }, [dataRef, setData, sheetType]);
+  }, [dataRef, setData, sheetType, sheetRef]);
 
   return { triggerEtsyPush };
 }

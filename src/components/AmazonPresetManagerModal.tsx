@@ -27,6 +27,7 @@ export type AmazonPreset = {
   
   // Apparel Specs
   neck_style: string;
+  collar_style?: string;
   sleeve_type: string;
   sleeve_length: string;
   sleeve_cuff: string;
@@ -94,9 +95,11 @@ export type AmazonPreset = {
   product_site_launch_date: string;
   
   variations?: PresetVariations;
-  [key: string]: any;
 };
 
+type AmazonTextField = {
+  [K in keyof AmazonPreset]-?: Exclude<AmazonPreset[K], undefined> extends string ? K : never
+}[keyof AmazonPreset];
 export const DEFAULT_AMAZON_PRESET: AmazonPreset = {
   id: "default-amazon",
   name: "Amazon T-Shirt Default",
@@ -254,9 +257,6 @@ const AMAZON_GARMENT_SIZE_COUNTRIES = [
   "IN", "US", "GB", "EU", "JP", "FR", "DE", "IT", "CA", "AU"
 ];
 
-const AMAZON_HEMLINE_FORMS = [
-  "straight_hemline", "high_low_hemline", "asymmetric_hemline", "curved_hemline", "shirttail_hemline"
-];
 
 const AMAZON_TOP_STYLES = [
   "Blouson", "Camisole", "Kaftan", "Tunic", "Kimono", "Corset"
@@ -535,10 +535,10 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
     onClose();
   };
 
-  const renderAutoTextField = (label: string, field: keyof AmazonPreset, placeholder = "") => {
+  const renderAutoTextField = (label: string, field: AmazonTextField, placeholder = "") => {
     if (!editForm) return null;
     const autoField = `${String(field)}_auto`;
-    const isAuto = !!editForm[autoField];
+    const isAuto = !!(editForm as unknown as Record<string, unknown>)[autoField];
     return (
       <div className="flex flex-col gap-1">
         <div className="flex justify-between items-center">
@@ -555,7 +555,7 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
         </div>
         <input
           type="text"
-          value={isAuto ? "Auto (AI Deduces dynamically)" : (editForm[field] || "")}
+          value={isAuto ? "Auto (AI Deduces dynamically)" : String(editForm[field] ?? "")}
           disabled={isAuto}
           onChange={(e) => setEditForm({ ...editForm, [field]: e.target.value })}
           className={`w-full px-3 py-2 text-sm rounded-none border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 ${
@@ -567,13 +567,13 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
     );
   };
 
-  const renderDropdownField = (label: string, field: keyof AmazonPreset, options: string[]) => {
+  const renderDropdownField = (label: string, field: AmazonTextField, options: string[]) => {
     if (!editForm) return null;
     return (
       <div className="flex flex-col gap-1">
         <label className="text-xs font-semibold text-zinc-650 dark:text-zinc-400">{label}</label>
         <select
-          value={editForm[field] || "Auto"}
+          value={String(editForm[field] ?? "Auto")}
           onChange={(e) => setEditForm({ ...editForm, [field]: e.target.value })}
           className="w-full px-3 py-2 text-sm rounded-none border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
         >
@@ -587,14 +587,14 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
     );
   };
 
-  const renderStaticField = (label: string, field: keyof AmazonPreset, placeholder = "") => {
+  const renderStaticField = (label: string, field: AmazonTextField, placeholder = "") => {
     if (!editForm) return null;
     return (
       <div className="flex flex-col gap-1">
         <label className="text-xs font-semibold text-zinc-655 dark:text-zinc-400">{label}</label>
         <input
           type="text"
-          value={editForm[field] || ""}
+          value={String(editForm[field] ?? "")}
           onChange={(e) => setEditForm({ ...editForm, [field]: e.target.value })}
           className="w-full px-3 py-2 text-sm rounded-none border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
           placeholder={placeholder}
@@ -603,13 +603,13 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
     );
   };
 
-  const renderYesNoField = (label: string, field: keyof AmazonPreset) => {
+  const renderYesNoField = (label: string, field: AmazonTextField) => {
     if (!editForm) return null;
     return (
       <div className="flex flex-col gap-1">
         <label className="text-xs font-semibold text-zinc-655 dark:text-zinc-400">{label}</label>
         <select
-          value={editForm[field] || "No"}
+          value={String(editForm[field] ?? "No")}
           onChange={(e) => setEditForm({ ...editForm, [field]: e.target.value })}
           className="w-full px-3 py-2 text-sm rounded-none border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
         >

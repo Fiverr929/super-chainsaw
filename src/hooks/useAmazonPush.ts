@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import type { RowData } from '@/components/SpreadsheetGrid';
 import toast from 'react-hot-toast';
+import { getAmazonPushResult, type AmazonPushResponse } from '@/lib/listingWorkflow';
 
 export function useAmazonPush(
   dataRef: React.MutableRefObject<RowData[]>,
@@ -37,27 +38,16 @@ export function useAmazonPush(
       })
       .then(pushData => {
         const currentData = [...dataRef.current];
-        if (pushData.success && !pushData.partial) {
-          currentData[row] = { 
-            ...currentData[row], 
-            status: "Published", 
-            asin: pushData.asin || currentData[row].asin || "" 
-          };
-          toast.success("Successfully pushed listing to Amazon!");
-        } else if (pushData.success && pushData.partial) {
-          currentData[row] = {
-            ...currentData[row],
-            status: "Partial Error",
-            asin: pushData.asin || currentData[row].asin || ""
-          };
-          toast.error(pushData.details || "Amazon created the parent listing, but one or more variants failed.");
+        const result = getAmazonPushResult(pushData as AmazonPushResponse, currentData[row].asin || "");
+        currentData[row] = {
+          ...currentData[row],
+          status: result.status,
+          asin: result.asin
+        };
+        if (result.isError) {
+          toast.error(`Amazon API Error:\n${result.message}`);
         } else {
-          let errMsg = pushData.details?.error || pushData.details || pushData.error || "Unknown Error";
-          if (typeof errMsg === 'object') {
-            errMsg = JSON.stringify(errMsg, null, 2);
-          }
-          toast.error(`Amazon API Error:\n${errMsg}`);
-          currentData[row] = { ...currentData[row], status: "Error" };
+          toast.success(result.message);
         }
         dataRef.current = currentData;
         setData(currentData);

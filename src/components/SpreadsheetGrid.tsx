@@ -43,8 +43,9 @@ import {
 import { useAIPipeline } from "@/hooks/useAIPipeline";
 import { useEtsyPush } from "@/hooks/useEtsyPush";
 import { useAmazonPush } from "@/hooks/useAmazonPush";
+import { getAmazonPublishValidationError, planFolderImport } from "@/lib/listingWorkflow";
 import FolderImporterModal from "./FolderImporterModal";
-import PresetManagerModal, { PresetVariations, VariationCombination } from "./PresetManagerModal";
+import PresetManagerModal, { type Preset, PresetVariations, VariationCombination } from "./PresetManagerModal";
 import AmazonPresetManagerModal, { AmazonPreset } from "./AmazonPresetManagerModal";
 import { FolderPlus, Layers, ChevronDown, Trash2 } from "lucide-react";
 import { AMAZON_COLUMNS } from "@/lib/amazonConstants";
@@ -135,7 +136,18 @@ export type RowData = {
   can_be_personalized?: string;
   variations?: PresetVariations;
   attributes?: string;
-  [key: string]: any;
+  category?: string;
+  asin?: string;
+  sku?: string;
+  sku_template?: string;
+  brand?: string;
+  maximum_retail_price?: string;
+  minimum_seller_allowed_price?: string;
+  maximum_seller_allowed_price?: string;
+  outer_material?: string;
+  bullet_points?: string;
+  keywords?: string;
+  [key: string]: unknown;
 };
 
 const emptyRowAmazon: RowData = {
@@ -554,12 +566,13 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
         return;
       }
       if (action === 'publish') {
-         if (!rowData.title || !rowData.description) {
-            toast.error(`Row ${row + 1} is missing a Title or Description required for publishing.`);
-            return;
-         }
-         if (workstation === "amazon" && !rowData.sku && !rowData.sku_template) {
-            toast.error(`Row ${row + 1} needs either a Parent SKU or SKU Template for publishing on Amazon.`);
+         const validationError = workstation === "amazon"
+            ? getAmazonPublishValidationError(rowData, row + 1)
+            : (!rowData.title || !rowData.description
+              ? `Row ${row + 1} is missing a Title or Description required for publishing.`
+              : null);
+         if (validationError) {
+            toast.error(validationError);
             return;
          }
       }
@@ -683,7 +696,7 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
       }
 
       const hasActiveVariations = (sheet === "physical" || workstation === "amazon") && dataRow.variations && dataRow.variations.properties && dataRow.variations.properties.length > 0;
-      const enabledCombs = hasActiveVariations ? (dataRow.variations?.combinations || []).filter((c: any) => c.isEnabled) : [];
+      const enabledCombs = hasActiveVariations ? (dataRow.variations?.combinations || []).filter(c => c.isEnabled) : [];
 
       if (columnId === "variations") {
         if (sheet !== "physical" && workstation !== "amazon") {
@@ -1122,7 +1135,7 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
         displayData: value,
       } as TextCell;
     },
-    [columns, sections, sheet, shippingProfiles, processingProfiles]
+    [columns, sections, sheet, shippingProfiles, processingProfiles, workstation]
   );
 
   const getCellsForSelection = useCallback(
@@ -1310,7 +1323,7 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
 
 
     },
-    [columns, sheet, setData]
+    [columns, sheet, setData, workstation]
   );
 
   const onCellActivated = useCallback(
@@ -1329,7 +1342,7 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
         }
       }
     },
-    [columns, sheet]
+    [columns, sheet, workstation]
   );
 
   const onColumnResize = useCallback((column: GridColumn, newSize: number) => {
@@ -1452,7 +1465,7 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
       });
       return event;
     },
-    [columns]
+    [columns, sheet]
   );
 
   const onDelete = useCallback(
@@ -1593,13 +1606,14 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
       selectedRowsList.forEach(rowIndex => {
         if (rowIndex < newData.length) {
           const row: RowData = { ...newData[rowIndex] };
+          const presetRecord = preset as unknown as Record<string, unknown>;
           Object.keys(preset).forEach(key => {
             if (key === 'id' || key === 'name') return;
-            if (preset[key] !== undefined && preset[key] !== "") {
+            if (presetRecord[key] !== undefined && presetRecord[key] !== "") {
               if (key === 'variations') {
-                row[key] = JSON.parse(JSON.stringify(preset[key]));
+                (row as unknown as Record<string, unknown>)[key] = JSON.parse(JSON.stringify(presetRecord[key]));
               } else {
-                row[key] = preset[key];
+                (row as unknown as Record<string, unknown>)[key] = presetRecord[key];
               }
             }
           });
@@ -1619,13 +1633,14 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
         folder: folderName,
       };
       if (preset) {
+        const presetRecord = preset as unknown as Record<string, unknown>;
         Object.keys(preset).forEach(key => {
           if (key === 'id' || key === 'name') return;
-          if (preset[key] !== undefined && preset[key] !== "") {
+          if (presetRecord[key] !== undefined && presetRecord[key] !== "") {
             if (key === 'variations') {
-              row[key] = JSON.parse(JSON.stringify(preset[key]));
+              (row as unknown as Record<string, unknown>)[key] = JSON.parse(JSON.stringify(presetRecord[key]));
             } else {
-              row[key] = preset[key];
+              (row as unknown as Record<string, unknown>)[key] = presetRecord[key];
             }
           }
         });
@@ -1633,30 +1648,9 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
       return row;
     });
 
-    const rowsToScan: { rowIndex: number, folderName: string }[] = [];
-    const newData = [...dataRef.current];
-    let insertedCount = 0;
-
-    for (let i = 0; i < newData.length && insertedCount < newRows.length; i++) {
-      const row = newData[i];
-      const isEmpty = !row.folder && !row.images && !row.title && !row.sku && !row.asin;
-      if (isEmpty) {
-        newData[i] = newRows[insertedCount];
-        rowsToScan.push({ rowIndex: i, folderName: newRows[insertedCount].folder || "" });
-        insertedCount++;
-      }
-    }
-
-    while (insertedCount < newRows.length) {
-      const rowIndex = newData.length;
-      newData.push(newRows[insertedCount]);
-      rowsToScan.push({ rowIndex, folderName: newRows[insertedCount].folder || "" });
-      insertedCount++;
-    }
-
+    const { rows: newData, scanTargets: rowsToScan } = planFolderImport(dataRef.current, newRows);
     dataRef.current = newData;
-    setData(newData);
-    setIsAmazonImporterOpen(false);
+    setData(newData);    setIsAmazonImporterOpen(false);
 
     // Scan found images and map them to images column
     rowsToScan.forEach(({ rowIndex, folderName }) => {
@@ -1859,7 +1853,8 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
         <FolderImporterModal 
           sheetType={sheet}
           onClose={() => setIsImporterOpen(false)}
-          onImport={(selectedFolders, preset) => {
+          onImport={(selectedFolders, selectedPreset) => {
+            const preset = selectedPreset as Preset | null;
             const newRows = selectedFolders.map(folderName => {
               const row: RowData = { ...(sheet === "digital" ? emptyRowDigital : emptyRowPhysical), folder: folderName };
               if (preset) {
@@ -2069,7 +2064,7 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
         <FolderImporterModal 
           sheetType="amazon"
           onClose={() => setIsAmazonImporterOpen(false)}
-          onImport={handleAmazonImport}
+          onImport={(folders, preset) => handleAmazonImport(folders, preset as AmazonPreset | null)}
         />
       )}
     </div>

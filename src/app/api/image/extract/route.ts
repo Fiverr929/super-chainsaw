@@ -1,5 +1,14 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
+type GeminiPart = {
+  text?: string;
+  inlineData?: { data?: string; mimeType?: string };
+};
+
+type GeminiImageResponse = {
+  candidates?: Array<{ content?: { parts?: GeminiPart[] } }>;
+  predictions?: Array<{ bytesBase64Encoded?: string }>;
+};
 
 export async function POST(request: Request) {
   try {
@@ -30,7 +39,7 @@ export async function POST(request: Request) {
       thinkingLevel = 'Minimal';
     }
 
-    let data;
+    let data: GeminiImageResponse;
     try {
       const payload = {
           contents: [
@@ -74,8 +83,10 @@ export async function POST(request: Request) {
         }
       );
       data = response.data;
-    } catch (axiosError: any) {
-      const errorText = axiosError.response?.data ? JSON.stringify(axiosError.response.data) : axiosError.message;
+    } catch (error: unknown) {
+      const errorText = axios.isAxiosError(error)
+        ? (error.response?.data ? JSON.stringify(error.response.data) : error.message)
+        : (error instanceof Error ? error.message : String(error));
       console.error("Gemini API Error:", errorText);
       return NextResponse.json({ error: `Failed to analyze image: ${errorText}` }, { status: 500 });
     }
@@ -87,17 +98,20 @@ export async function POST(request: Request) {
     const parts = data.candidates?.[0]?.content?.parts || [];
     
     // Find the part that contains inlineData (the image)
-    const imagePart = parts.find((p: any) => p.inlineData && p.inlineData.data);
-    const textPart = parts.find((p: any) => p.text);
+    const imagePart = parts.find(p => p.inlineData?.data);
+    const textPart = parts.find(p => p.text);
 
-    if (imagePart) {
-        extractedBase64 = imagePart.inlineData.data;
-        extractedMimeType = imagePart.inlineData.mimeType || "image/png";
+    const imageData = imagePart?.inlineData;
+    const textData = textPart?.text;
+
+    if (imageData?.data) {
+        extractedBase64 = imageData.data;
+        extractedMimeType = imageData.mimeType || "image/png";
     } else if (data.predictions?.[0]?.bytesBase64Encoded) {
         extractedBase64 = data.predictions[0].bytesBase64Encoded;
-    } else if (textPart && (textPart.text.startsWith("iVBOR") || textPart.text.length > 1000)) {
+    } else if (textData && (textData.startsWith("iVBOR") || textData.length > 1000)) {
         // Fallback if it returned text representing base64
-        extractedBase64 = textPart.text;
+        extractedBase64 = textData;
     }
 
     if (!extractedBase64) {
