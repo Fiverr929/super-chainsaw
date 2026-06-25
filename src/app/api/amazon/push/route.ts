@@ -539,16 +539,7 @@ function buildAttributes(
     attrs.shoulder_to_bottom_hem_length = [ { value: Number(shoulderHemVal), unit: shoulderHemUnitVal, marketplace_id: marketplaceId } ];
   }
 
-  // 17. Sizing unit count
-  const unitCountVal = resolveNumber(rowData.unit_count, 1);
-  const unitCountTypeVal = rowData.unit_count_type || 'Count';
-  if (unitCountVal !== null) {
-    let mappedType = unitCountTypeVal.toLowerCase();
-    if (mappedType === 'grams') mappedType = 'gram';
-    if (mappedType === 'ounces') mappedType = 'ounce';
-    if (mappedType === 'fl oz') mappedType = 'fluid_ounce';
-    attrs.unit_count = [ { value: unitCountVal, type: mappedType, marketplace_id: marketplaceId } ];
-  }
+  // 17. Sizing unit count (Removed: Not applicable for Apparel, causes validation errors)
 
   // 18. Physical Dimensions
   const numItemsVal = resolveNumber(rowData.number_of_items, 1);
