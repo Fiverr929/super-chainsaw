@@ -18,7 +18,9 @@ type AmazonStringField =
   | 'shirt_form_type' | 'shoulder_hem_length' | 'shoulder_hem_unit' | 'sku' | 'sku_template' | 'sleeve_cuff'
   | 'sleeve_length' | 'sleeve_type' | 'special_features' | 'sport_type' | 'subject_character'
   | 'target_gender' | 'team_name' | 'theme' | 'title' | 'top_style' | 'tunnelUrl' | 'unit_count'
-  | 'unit_count_type';
+  | 'unit_count_type' | 'recommended_browse_node' | 'product_id_exemption' | 'variation_theme' | 'size_system'
+  | 'fit_type' | 'style_name' | 'item_length_description' | 'model_name' | 'model_number'
+  | 'item_dimension_length' | 'item_dimension_width' | 'item_dimension_height' | 'item_dimension_unit';
 
 type AmazonBooleanField =
   | 'animal_theme_auto' | 'brand_auto' | 'embellishment_feature_auto' | 'fabric_stretchability_auto'
@@ -48,7 +50,7 @@ type AmazonAttributes = Record<string, unknown>;
 type AmazonListingPayload = { productType: string; requirements: string; attributes: AmazonAttributes };
 type AmazonChildError = { sku?: string; combinationId?: string; error: unknown };
 type AmazonPutResult =
-  | { success: true; sku: string; data: { identifiers?: Array<{ asin?: string }> } }
+  | { success: true; sku: string; data: { identifiers?: Array<{ asin?: string }>; issues?: Array<{ code?: string; message?: string; severity?: string; attributeNames?: string[] }> } }
   | { success: false; sku: string; error: unknown };
 
 function getErrorDetails(error: unknown): { message: string; responseData?: unknown } {
@@ -138,6 +140,54 @@ function buildImageAttributesForColor(images: string[], tunnelUrl: string, marke
   return buildImageAttributes(filteredImages, tunnelUrl, marketplaceId);
 }
 
+function buildOfferAttributes(rowData: AmazonListingRow, marketplaceId: string, price: string, quantity: string): AmazonAttributes {
+  const parsedPrice = Number(price);
+  const parsedQuantity = Number.parseInt(quantity, 10);
+  if (!Number.isFinite(parsedPrice) || parsedPrice <= 0 || !Number.isInteger(parsedQuantity) || parsedQuantity < 0) return {};
+
+  const offer: Record<string, unknown> = {
+    marketplace_id: marketplaceId,
+    currency: 'INR',
+    our_price: [{ schedule: [{ value_with_tax: parsedPrice }] }]
+  };
+  const mrp = Number(rowData.maximum_retail_price);
+  if (Number.isFinite(mrp) && mrp >= parsedPrice) offer.maximum_retail_price = [{ schedule: [{ value_with_tax: mrp }] }];
+  const minimum = Number(rowData.minimum_seller_allowed_price);
+  if (Number.isFinite(minimum) && minimum > 0) offer.minimum_seller_allowed_price = [{ schedule: [{ value_with_tax: minimum }] }];
+  const maximum = Number(rowData.maximum_seller_allowed_price);
+  if (Number.isFinite(maximum) && maximum >= parsedPrice) offer.maximum_seller_allowed_price = [{ schedule: [{ value_with_tax: maximum }] }];
+
+  return {
+    purchasable_offer: [offer],
+    fulfillment_availability: [{ fulfillment_channel_code: 'DEFAULT', quantity: parsedQuantity }]
+  };
+}
+
+function buildOptionalListingAttributes(rowData: AmazonListingRow, marketplaceId: string, includeRequiredProductDetails: boolean, parentSku?: string): AmazonAttributes {
+  const attrs: AmazonAttributes = {};
+  if (rowData.recommended_browse_node) {
+    const match = rowData.recommended_browse_node.match(/\((\d+)\)/);
+    const nodeValue = match ? match[1] : rowData.recommended_browse_node.replace(/\D/g, '');
+    if (nodeValue) attrs.recommended_browse_nodes = [{ value: nodeValue, marketplace_id: marketplaceId }];
+  }
+  if (rowData.fit_type) attrs.fit_type = [{ value: rowData.fit_type, marketplace_id: marketplaceId, language_tag: 'en_IN' }];
+  if (rowData.item_length_description) attrs.item_length_description = [{ value: rowData.item_length_description, marketplace_id: marketplaceId }];
+  if (rowData.model_name) attrs.model_name = [{ value: rowData.model_name, marketplace_id: marketplaceId }];
+  const modelNum = rowData.model_number || parentSku;
+  if (modelNum) attrs.model_number = [{ value: modelNum, marketplace_id: marketplaceId }];
+  if (includeRequiredProductDetails) {
+    if (rowData.style_name) attrs.style = [{ value: rowData.style_name, marketplace_id: marketplaceId, language_tag: 'en_IN' }];
+    const length = Number(rowData.item_dimension_length);
+    const width = Number(rowData.item_dimension_width);
+    const height = Number(rowData.item_dimension_height);
+    const unit = rowData.item_dimension_unit || 'centimeters';
+    if ([length, width, height].every(value => Number.isFinite(value) && value >= 0)) {
+      attrs.item_dimensions = [{ length: { value: length, unit }, width: { value: width, unit }, height: { value: height, unit }, marketplace_id: marketplaceId }];
+    }
+  }
+  return attrs;
+}
+
 async function putListingItem(
   accessToken: string,
   sku: string,
@@ -148,11 +198,13 @@ async function putListingItem(
     awsSecretKey: string;
     region: string;
     marketplaceId: string;
-  }
+  },
+  mode?: 'VALIDATION_PREVIEW'
 ): Promise<AmazonPutResult> {
   const host = `sellingpartnerapi-${config.region}.amazon.com`;
   const path = `/listings/2021-08-01/items/${config.sellerId}/${sku}`;
   const queryParams: Record<string, string> = { marketplaceIds: config.marketplaceId };
+  if (mode) queryParams.mode = mode;
 
   const bodyString = JSON.stringify(payload);
   const now = new Date();
@@ -201,6 +253,69 @@ async function putListingItem(
   }
 }
 
+function describeValidationIssues(result: AmazonPutResult): string | null {
+  if (!result.success) return JSON.stringify(result.error);
+  const errors = (result.data.issues || []).filter(issue => issue.severity === 'ERROR');
+  if (errors.length === 0) return null;
+  return errors.map(issue => {
+    const fields = issue.attributeNames?.length ? ' [' + issue.attributeNames.join(', ') + ']' : '';
+    return (issue.code || 'VALIDATION_ERROR') + fields + ': ' + (issue.message || 'Amazon rejected an attribute.');
+  }).join('\n');
+}
+
+async function validateAndPutListingItem(
+  accessToken: string, sku: string, payload: AmazonListingPayload,
+  config: { sellerId: string; awsAccessKey: string; awsSecretKey: string; region: string; marketplaceId: string }
+): Promise<AmazonPutResult> {
+  const preview = await putListingItem(accessToken, sku, payload, config, 'VALIDATION_PREVIEW');
+  const validationError = describeValidationIssues(preview);
+  if (validationError) return { success: false, sku, error: { message: 'Amazon validation preview failed', issues: validationError } };
+  return putListingItem(accessToken, sku, payload, config);
+}
+
+type AmazonListingStatus = { asin: string | null; errors: string[] };
+
+async function getListingStatus(
+  accessToken: string, sku: string,
+  config: { sellerId: string; awsAccessKey: string; awsSecretKey: string; region: string; marketplaceId: string }
+): Promise<AmazonListingStatus> {
+  const host = `sellingpartnerapi-${config.region}.amazon.com`;
+  const requestPath = `/listings/2021-08-01/items/${config.sellerId}/${encodeURIComponent(sku)}`;
+  const queryParams = { marketplaceIds: config.marketplaceId, includedData: 'summaries,issues' };
+  const sortedQuery = Object.keys(queryParams).sort().map(key => `${encodeURIComponent(key)}=${encodeURIComponent(queryParams[key as keyof typeof queryParams])}`).join('&');
+  const now = new Date();
+  const amzDate = now.toISOString().replace(/[:-]/g, '').split('.')[0] + 'Z';
+  const dateStamp = amzDate.substring(0, 8);
+  const canonicalHeaders = `host:${host}\nx-amz-date:${amzDate}\n`;
+  const signedHeaders = 'host;x-amz-date';
+  const payloadHash = crypto.createHash('sha256').update('').digest('hex');
+  const canonicalRequest = ['GET', requestPath, sortedQuery, canonicalHeaders, signedHeaders, payloadHash].join('\n');
+  const credentialScope = `${dateStamp}/${config.region}/execute-api/aws4_request`;
+  const stringToSign = ['AWS4-HMAC-SHA256', amzDate, credentialScope, crypto.createHash('sha256').update(canonicalRequest).digest('hex')].join('\n');
+  const signingKey = getSignatureKeySigV4(config.awsSecretKey, dateStamp, config.region, 'execute-api');
+  const signature = crypto.createHmac('sha256', signingKey).update(stringToSign).digest('hex');
+  const authorization = `AWS4-HMAC-SHA256 Credential=${config.awsAccessKey}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+  const response = await axios.get(`https://${host}${requestPath}?${sortedQuery}`, { headers: { 'x-amz-access-token': accessToken, 'x-amz-date': amzDate, Authorization: authorization } });
+  const issues = Array.isArray(response.data?.issues) ? response.data.issues : [];
+  const errors = issues.filter((issue: { severity?: string }) => issue.severity === 'ERROR').map((issue: { code?: string; message?: string }) => `${issue.code || 'LISTING_ERROR'}: ${issue.message || 'Amazon reported a listing issue.'}`);
+  const asin = response.data?.summaries?.[0]?.asin || null;
+  return { asin, errors };
+}
+
+async function pollListingStatus(accessToken: string, sku: string, config: { sellerId: string; awsAccessKey: string; awsSecretKey: string; region: string; marketplaceId: string }): Promise<AmazonListingStatus> {
+  let latest: AmazonListingStatus = { asin: null, errors: [] };
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await new Promise(resolve => setTimeout(resolve, 2000));
+    try {
+      latest = await getListingStatus(accessToken, sku, config);
+      if (latest.asin || latest.errors.length > 0) return latest;
+    } catch (error) {
+      if (attempt === 2) console.warn('Unable to read Amazon listing status:', getErrorDetails(error).responseData ?? getErrorDetails(error).message);
+    }
+  }
+  return latest;
+}
+
 function buildAttributes(
   rowData: AmazonListingRow,
   marketplaceId: string,
@@ -217,8 +332,10 @@ function buildAttributes(
   };
 
   const resolveToggleText = (val: string | undefined, isAuto: boolean | undefined, defaultVal: string | null): string | null => {
+    if (val === 'None') return null;
+    if (val && val !== 'Auto') return val;
     if (isAuto || val === 'Auto' || (!val && isAuto === undefined)) return defaultVal;
-    return val || null;
+    return null;
   };
 
   const resolveNumber = (val: string | undefined, defaultVal: number | null): number | null => {
@@ -249,21 +366,13 @@ function buildAttributes(
   if (keywordsVal) {
     const kArray = keywordsVal.split(/[,\n|;]/).map(k => k.trim()).filter(Boolean);
     if (kArray.length > 0) {
-      attrs.generic_keyword = kArray.map(k => ({ value: k, marketplace_id: marketplaceId, language_tag: 'en_IN' }));
+      attrs.generic_keyword = [{ value: kArray.join(' '), marketplace_id: marketplaceId, language_tag: 'en_IN' }];
     }
   }
 
   // 4. HSN Code
-  const hsnVal = rowData.hsn_code || '61091000';
-  if (hsnVal) {
-    attrs.external_product_information = [
-      {
-        entity: 'HSN Code',
-        value: hsnVal,
-        marketplace_id: marketplaceId
-      }
-    ];
-  }
+  const hsnVal = rowData.hsn_code;
+  if (hsnVal) attrs.external_product_information = [{ entity: 'HSN Code', value: hsnVal, marketplace_id: marketplaceId }];
 
   // 5. Neck Style
   const neckStyleVal = resolveDropdown(rowData.neck_style, 'Crew Neck');
@@ -434,7 +543,11 @@ function buildAttributes(
   const unitCountVal = resolveNumber(rowData.unit_count, 1);
   const unitCountTypeVal = rowData.unit_count_type || 'Count';
   if (unitCountVal !== null) {
-    attrs.unit_count = [ { value: unitCountVal, type: unitCountTypeVal, marketplace_id: marketplaceId } ];
+    let mappedType = unitCountTypeVal.toLowerCase();
+    if (mappedType === 'grams') mappedType = 'gram';
+    if (mappedType === 'ounces') mappedType = 'ounce';
+    if (mappedType === 'fl oz') mappedType = 'fluid_ounce';
+    attrs.unit_count = [ { value: unitCountVal, type: mappedType, marketplace_id: marketplaceId } ];
   }
 
   // 18. Physical Dimensions
@@ -490,7 +603,7 @@ function buildAttributes(
   // 20. Sports, League, Team, Lifestyle
   const sportTypeVal = resolveToggleText(rowData.sport_type, rowData.sport_type_auto, null);
   if (sportTypeVal) {
-    attrs.sport_type = [ { value: sportTypeVal, marketplace_id: marketplaceId, language_tag: 'en_IN' } ];
+    attrs.sport_type = sportTypeVal.split(',').map(value => value.trim()).filter(Boolean).slice(0, 2).map(value => ({ value, marketplace_id: marketplaceId, language_tag: 'en_IN' }));
   }
   const leagueNameVal = resolveToggleText(rowData.league_name, rowData.league_name_auto, null);
   if (leagueNameVal) {
@@ -595,7 +708,7 @@ export async function POST(request: Request) {
     
     // Parse Bullet Points
     const bpStr = rowData.bullet_points || "";
-    const bpArray = bpStr.split(/[,\n|;]/).map((s: string) => s.trim()).filter(Boolean);
+    const bpArray = bpStr.split(/[\n|]/).map((s: string) => s.trim()).filter(Boolean);
     const bulletPointsPayload = bpArray.length > 0
       ? bpArray.map((bp: string) => ({ value: bp, marketplace_id: marketplaceId, language_tag: 'en_IN' }))
       : [ { value: rowData.title || "Premium Retro Graphic Baby Tee", marketplace_id: marketplaceId, language_tag: 'en_IN' } ];
@@ -608,23 +721,38 @@ export async function POST(request: Request) {
         country_of_origin: [ { value: 'IN', marketplace_id: marketplaceId } ],
         product_description: [ { value: rowData.description || rowData.title, marketplace_id: marketplaceId, language_tag: 'en_IN' } ],
         bullet_point: bulletPointsPayload,
-        recommended_browse_nodes: [ { value: '1968545031', marketplace_id: marketplaceId } ],
-        fit_type: [ { value: 'regular', marketplace_id: marketplaceId, language_tag: 'en_IN' } ],
         model_name: [ { value: rowData.title, marketplace_id: marketplaceId, language_tag: 'en_IN' } ],
-        model_year: [ { value: 2026, marketplace_id: marketplaceId } ],
-        item_length_description: [ { value: 'crop', marketplace_id: marketplaceId } ],
+        ...buildOptionalListingAttributes(rowData, marketplaceId, false, parentSku),
         ...buildAttributes(rowData, marketplaceId, false, parentSku),
         ...parentImageAttrs
       }
     };
 
-    if (hasActiveVariations && enabledCombs.length > 0) {
+    if (hasActiveVariations) {
+      if (enabledCombs.length === 0) throw new Error('At least one Amazon variation combination must be enabled.');
+      const seenCombinations = new Set<string>();
+      for (const comb of enabledCombs) {
+        const color = Object.entries(comb.values || {}).find(([key]) => key.toLowerCase() === 'color')?.[1]?.trim();
+        const size = Object.entries(comb.values || {}).find(([key]) => key.toLowerCase() === 'size')?.[1]?.trim();
+        if (!color || !size) throw new Error('Every enabled Amazon variation must contain both Color and Size.');
+        const combinationKey = color.toLowerCase() + '|' + size.toLowerCase();
+        if (seenCombinations.has(combinationKey)) throw new Error('Duplicate Amazon variation: ' + color + ' / ' + size);
+        seenCombinations.add(combinationKey);
+        const price = Number(comb.price || rowData.price);
+        const quantity = Number.parseInt(comb.quantity || rowData.quantity || '', 10);
+        if (!Number.isFinite(price) || price <= 0) throw new Error('Every enabled Amazon variation needs a valid positive price.');
+        if (!Number.isInteger(quantity) || quantity < 0) throw new Error('Every enabled Amazon variation needs a valid non-negative quantity.');
+      }
       parentPayload.attributes.parentage_level = [ { value: 'parent', marketplace_id: marketplaceId } ];
-      parentPayload.attributes.variation_theme = [ { name: 'SIZE_NAME/COLOR_NAME', marketplace_id: marketplaceId } ];
+      parentPayload.attributes.variation_theme = [ { name: rowData.variation_theme || 'SIZE_NAME/COLOR_NAME', marketplace_id: marketplaceId } ];
+    } else {
+      Object.assign(parentPayload.attributes, buildOfferAttributes(rowData, marketplaceId, rowData.price || '', rowData.quantity || ''));
+      Object.assign(parentPayload.attributes, buildOptionalListingAttributes(rowData, marketplaceId, true, parentSku));
+      if (rowData.product_id_exemption === 'Yes') parentPayload.attributes.supplier_declared_has_product_identifier_exemption = [{ value: true, marketplace_id: marketplaceId }];
     }
 
     console.log(`Pushing parent listing SKU: ${parentSku}...`);
-    const parentRes = await putListingItem(accessToken, parentSku, parentPayload, apiConfig);
+    const parentRes = await validateAndPutListingItem(accessToken, parentSku, parentPayload, apiConfig);
 
     if (!parentRes.success) {
       throw new Error(`Failed to create parent listing: ${JSON.stringify(parentRes.error)}`);
@@ -699,11 +827,11 @@ export async function POST(request: Request) {
             product_description: [ { value: rowData.description || rowData.title, marketplace_id: marketplaceId, language_tag: 'en_IN' } ],
             bullet_point: bulletPointsPayload,
             parentage_level: [ { value: 'child', marketplace_id: marketplaceId } ],
-            variation_theme: [ { name: 'SIZE_NAME/COLOR_NAME', marketplace_id: marketplaceId } ],
+            variation_theme: [ { name: rowData.variation_theme || 'SIZE_NAME/COLOR_NAME', marketplace_id: marketplaceId } ],
             child_parent_sku_relationship: [ { child_parent_sku_relationship_name: 'VARIATION', parent_sku: parentSku, marketplace_id: marketplaceId } ],
             color: [ { value: colorVal, standardized_values: [colorVal], language_tag: 'en_IN', marketplace_id: marketplaceId } ],
-            shirt_size: [ { size_system: 'as5', size_class: 'alpha', size: mapSizeToAmazonKey(sizeVal), marketplace_id: marketplaceId } ],
-            supplier_declared_has_product_identifier_exemption: [ { value: true, marketplace_id: marketplaceId } ],
+            shirt_size: [ { size_system: rowData.size_system || 'as5', size_class: 'alpha', size: mapSizeToAmazonKey(sizeVal), marketplace_id: marketplaceId } ],
+            ...(rowData.product_id_exemption === 'Yes' ? { supplier_declared_has_product_identifier_exemption: [{ value: true, marketplace_id: marketplaceId }] } : {}),
             purchasable_offer: [
               {
                 marketplace_id: marketplaceId,
@@ -752,33 +880,14 @@ export async function POST(request: Request) {
                 quantity: parseInt(quantityVal, 10)
               }
             ],
-            recommended_browse_nodes: [ { value: '1968545031', marketplace_id: marketplaceId } ],
-            fit_type: [ { value: 'regular', marketplace_id: marketplaceId } ],
             model_name: [ { value: rowData.title, marketplace_id: marketplaceId } ],
-            model_year: [ { value: 2026, marketplace_id: marketplaceId } ],
-            item_length_description: [ { value: 'crop', marketplace_id: marketplaceId } ],
-            item_dimensions: [
-              {
-                height: { value: 1.0, unit: 'centimeters' },
-                length: { value: 20.0, unit: 'centimeters' },
-                width: { value: 15.0, unit: 'centimeters' },
-                marketplace_id: marketplaceId
-              }
-            ],
-            item_package_dimensions: [
-              {
-                height: { value: 2.0, unit: 'centimeters' },
-                length: { value: 20.0, unit: 'centimeters' },
-                width: { value: 15.0, unit: 'centimeters' },
-                marketplace_id: marketplaceId
-              }
-            ],
+            ...buildOptionalListingAttributes(rowData, marketplaceId, true, parentSku),
             ...buildAttributes(rowData, marketplaceId, true, childSku),
             ...childImageAttrs
           }
         };
 
-        const childRes = await putListingItem(accessToken, childSku, childPayload, apiConfig);
+        const childRes = await validateAndPutListingItem(accessToken, childSku, childPayload, apiConfig);
         if (childRes.success) {
           succeededChildrenCount++;
         } else {
@@ -787,7 +896,9 @@ export async function POST(request: Request) {
       }
     }
 
-    const createdAsin = parentRes.data?.identifiers?.[0]?.asin || null;
+    const listingStatus = await pollListingStatus(accessToken, parentSku, apiConfig);
+    const createdAsin = listingStatus.asin || parentRes.data?.identifiers?.[0]?.asin || null;
+    for (const error of listingStatus.errors) childErrors.push({ sku: parentSku, error });
 
     if (childErrors.length > 0) {
       console.warn(`Amazon Push completed with some errors. Succeeded children: ${succeededChildrenCount}/${enabledCombs.length}`);
@@ -813,7 +924,8 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      asin: createdAsin
+      asin: createdAsin,
+      pending: !createdAsin
     });
 
   } catch (error: unknown) {

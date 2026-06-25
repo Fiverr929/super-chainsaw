@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2, Save } from 'lucide-react';
+import { X, Plus, Trash2, Save, ChevronDown, Copy } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { PresetVariations, VariationCombination } from './PresetManagerModal';
 
@@ -24,6 +24,19 @@ export type AmazonPreset = {
   keywords: string;
   keywords_auto?: boolean;
   hsn_code: string;
+  recommended_browse_node: string;
+  product_id_exemption: string;
+  variation_theme: string;
+  size_system: string;
+  fit_type: string;
+  style_name: string;
+  item_length_description: string;
+  item_dimension_length: string;
+  item_dimension_width: string;
+  item_dimension_height: string;
+  item_dimension_unit: string;
+  model_name: string;
+  model_number: string;
   
   // Apparel Specs
   neck_style: string;
@@ -93,6 +106,14 @@ export type AmazonPreset = {
   is_customizable: string;
   is_green_purchasing_law_compliant: string;
   product_site_launch_date: string;
+
+  // Shared guidance for Amazon AI-generated listing content
+  context: string;
+  ai_title_rules: string;
+  ai_desc_rules: string;
+  ai_bullet_rules: string;
+  ai_keyword_rules: string;
+  ai_attribute_rules: string;
   
   variations?: PresetVariations;
 };
@@ -109,7 +130,7 @@ export const DEFAULT_AMAZON_PRESET: AmazonPreset = {
   quantity: "100",
   maximum_retail_price: "1999",
   minimum_seller_allowed_price: "499",
-  maximum_seller_allowed_price: "2499",
+  maximum_seller_allowed_price: "1999",
   outer_material: "Cotton",
   outer_material_auto: false,
   bullet_points: "100% Cotton, Comfort fit, Perfect for daily wear",
@@ -117,6 +138,19 @@ export const DEFAULT_AMAZON_PRESET: AmazonPreset = {
   keywords: "graphic tee, crop top, y2k style",
   keywords_auto: true,
   hsn_code: "61091000",
+  recommended_browse_node: "",
+  product_id_exemption: "No",
+  variation_theme: "SIZE_NAME/COLOR_NAME",
+  size_system: "as5",
+  fit_type: "Regular",
+  style_name: "Classic",
+  item_length_description: "",
+  item_dimension_length: "20",
+  item_dimension_width: "15",
+  item_dimension_height: "1",
+  item_dimension_unit: "centimeters",
+  model_name: "",
+  model_number: "",
   
   neck_style: "Auto",
   sleeve_type: "Auto",
@@ -130,28 +164,28 @@ export const DEFAULT_AMAZON_PRESET: AmazonPreset = {
   item_type_name_auto: false,
   apparel_fabric_stretch: "None",
   apparel_fabric_weight_class: "None",
-  fabric_stretchability: "",
-  fabric_stretchability_auto: true,
+  fabric_stretchability: "None",
+  fabric_stretchability_auto: false,
   
-  special_features: "",
-  special_features_auto: true,
-  pattern: "",
-  pattern_auto: true,
-  theme: "",
-  theme_auto: true,
-  subject_character: "",
-  subject_character_auto: true,
-  animal_theme: "",
-  animal_theme_auto: true,
-  pocket_description: "",
-  pocket_description_auto: true,
-  number_of_pockets: "",
-  number_of_pockets_auto: true,
+  special_features: "Auto",
+  special_features_auto: false,
+  pattern: "Auto",
+  pattern_auto: false,
+  theme: "Auto",
+  theme_auto: false,
+  subject_character: "Auto",
+  subject_character_auto: false,
+  animal_theme: "Auto",
+  animal_theme_auto: false,
+  pocket_description: "None",
+  pocket_description_auto: false,
+  number_of_pockets: "None",
+  number_of_pockets_auto: false,
   fashion_decade: "None",
-  seasons: "",
-  seasons_auto: true,
-  embellishment_feature: "",
-  embellishment_feature_auto: true,
+  seasons: "Auto",
+  seasons_auto: false,
+  embellishment_feature: "Auto",
+  embellishment_feature_auto: false,
   
   manufacturer_address: "Yivez, Somanur Road, Karumathampatti, Coimbatore, Tamil Nadu - 641659, India",
   packer_address: "Yivez, Somanur Road, Karumathampatti, Coimbatore, Tamil Nadu - 641659, India",
@@ -171,17 +205,24 @@ export const DEFAULT_AMAZON_PRESET: AmazonPreset = {
   shoulder_hem_unit: "inches",
   unit_count: "1",
   unit_count_type: "Count",
-  sport_type: "",
-  sport_type_auto: true,
-  league_name: "",
-  league_name_auto: true,
-  team_name: "",
-  team_name_auto: true,
-  lifestyle: "",
-  lifestyle_auto: true,
+  sport_type: "None",
+  sport_type_auto: false,
+  league_name: "None",
+  league_name_auto: false,
+  team_name: "None",
+  team_name_auto: false,
+  lifestyle: "Casual",
+  lifestyle_auto: false,
   is_customizable: "No",
   is_green_purchasing_law_compliant: "No",
   product_site_launch_date: "2026-06-21",
+
+  context: "This is an Amazon India physical T-shirt listing. Use the fixed preset garment facts exactly and infer only design-specific details visible in the imported images.",
+  ai_title_rules: "Write a concise Amazon India T-shirt title using the visible design subject, T-shirt type, audience, and style. Do not invent fabric, fit, brand, or licensed ownership.",
+  ai_desc_rules: "Describe the visible design and combine it with the fixed garment facts from the preset. Avoid unsupported quality, performance, trademark, and licensing claims.",
+  ai_bullet_rules: "Generate 5 concise factual bullet points. Cover the visible design, fixed fabric/fit/care facts, intended use, and sizing guidance without repeating the title.",
+  ai_keyword_rules: "Generate relevant Amazon India search phrases separated by commas. Avoid competitor brands, duplicate phrases, and unsupported attributes.",
+  ai_attribute_rules: "Infer only visually supported design attributes. Select only from the allowed values supplied for each field. Return None when no option is clearly supported.",
   
   variations: {
     properties: [
@@ -189,9 +230,9 @@ export const DEFAULT_AMAZON_PRESET: AmazonPreset = {
       { name: "Size", propertyId: 2, options: ["S", "M", "L"] }
     ],
     combinations: [
-      { id: "White-S", values: { Color: "White", Size: "S" }, isEnabled: true, price: "750", quantity: "100" },
-      { id: "White-M", values: { Color: "White", Size: "M" }, isEnabled: true, price: "750", quantity: "100" },
-      { id: "White-L", values: { Color: "White", Size: "L" }, isEnabled: true, price: "750", quantity: "100" }
+      { id: "White-S", values: { Color: "White", Size: "S" }, isEnabled: true, price: "1200", quantity: "100" },
+      { id: "White-M", values: { Color: "White", Size: "M" }, isEnabled: true, price: "1200", quantity: "100" },
+      { id: "White-L", values: { Color: "White", Size: "L" }, isEnabled: true, price: "1200", quantity: "100" }
     ],
     priceOnProperty: [],
     quantityOnProperty: [],
@@ -245,6 +286,10 @@ const AMAZON_FABRIC_STRETCHES = [
   "high_stretch", "low_stretch", "medium_stretch", "no_stretch"
 ];
 
+const AMAZON_ITEM_LENGTH_DESCRIPTIONS = [
+  "Extra Long Length", "Extra Short Length", "Long Length", "Short Length", "Standard Length"
+];
+
 const AMAZON_WEIGHT_CLASSES = [
   "heavyweight", "lightweight", "medium_weight"
 ];
@@ -253,13 +298,23 @@ const AMAZON_FASHION_DECADES = [
   "1900s", "1910s", "1920s", "1930s", "1940s", "1950s", "1960s", "1970s", "1980s", "1990s", "2000s", "2010s"
 ];
 
+const AMAZON_RECOMMENDED_BROWSE_NODES = [
+  "Men's T-Shirts & Polos (1968120031)",
+  "Women's T-Shirts (1968255031)",
+  "Men's Casual Shirts (1968093031)",
+  "Men's Sweatshirts & Hoodies (1968123031)",
+  "Women's Shirts & Tops (1968253031)"
+];
+
 const AMAZON_GARMENT_SIZE_COUNTRIES = [
   "IN", "US", "GB", "EU", "JP", "FR", "DE", "IT", "CA", "AU"
 ];
 
 
 const AMAZON_TOP_STYLES = [
-  "Blouson", "Camisole", "Kaftan", "Tunic", "Kimono", "Corset"
+  "A-Line", "Asymmetric", "Blouson", "Boxy", "Bralette", "Bustier", 
+  "Camisole", "Cape", "Hooded", "Kaftan", "Layered", "Peplum", 
+  "Poncho", "Pullover", "Tube", "Wrap"
 ];
 
 const AMAZON_SHIRT_FORM_TYPES = [
@@ -275,8 +330,12 @@ const AMAZON_ITEM_TYPE_NAMES = [
 ];
 
 const AMAZON_FABRIC_STRETCHABILITIES = [
-  "stretchable", "non_stretchable", "slightly_stretchable"
+  "stretchable", "non_stretchable"
 ];
+
+const AMAZON_FIT_TYPES = ["Athletic", "Boxy", "Fitted", "Flowy", "Oversized", "Regular", "Relaxed", "Skinny", "Slim", "Snug", "Straight", "Tailored"];
+const AMAZON_STYLE_NAMES = ["Bohemian", "Classic", "Glam", "Guayabera", "Hawaiian", "Military", "Minimalist", "Modern", "Preppy", "Punk", "Retro", "Streetwear", "Vintage", "Western"];
+const AMAZON_DIMENSION_UNITS = ["centimeters", "feet", "inches", "meters", "millimeters", "yards"];
 
 const AMAZON_SPECIAL_FEATURES = [
   "Moisture Wicking", "Lightweight", "Breathable", "Water Resistant", "Quick Dry"
@@ -326,7 +385,18 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
   const [activePresetId, setActivePresetId] = useState<string>('');
   const [editForm, setEditForm] = useState<AmazonPreset | null>(null);
   const [isCreatingNew, setIsCreatingNew] = useState(false);
-  const [activeTab, setActiveTab] = useState<'core' | 'specs' | 'design' | 'compliance' | 'variations'>('core');
+  const [activeTab, setActiveTab] = useState<'core' | 'specs' | 'design' | 'compliance' | 'variations' | 'ai'>('core');
+  const [isSportTypeOpen, setIsSportTypeOpen] = useState(false);
+  const [amazonOptions, setAmazonOptions] = useState({ sport_type: [] as string[], lifestyle: [] as string[], league_name: [] as string[], team_name: [] as string[] });
+
+  useEffect(() => {
+    fetch('/api/amazon/attribute-options')
+      .then(response => response.json())
+      .then(data => {
+        if (!data.error) setAmazonOptions({ sport_type: data.sport_type || [], lifestyle: data.lifestyle || [], league_name: data.league_name || [], team_name: data.team_name || [] });
+      })
+      .catch(error => console.error('Failed to load Amazon attribute options:', error));
+  }, []);
 
   useEffect(() => {
     const saved = localStorage.getItem('workstation_v2_presets_amazon');
@@ -389,6 +459,21 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
     setActivePresetId(editForm.id);
     localStorage.setItem('workstation_v2_presets_amazon', JSON.stringify(newPresets));
     toast.success("Preset saved successfully!");
+  };
+
+  const handleDuplicatePreset = (preset: AmazonPreset, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const duplicate: AmazonPreset = JSON.parse(JSON.stringify(preset));
+    duplicate.id = 'preset-amazon-' + Date.now();
+    duplicate.name = preset.name + ' (Copy)';
+    const newPresets = [duplicate, ...presets];
+    setPresets(newPresets);
+    setActivePresetId(duplicate.id);
+    setEditForm(duplicate);
+    setIsCreatingNew(false);
+    setActiveTab('core');
+    localStorage.setItem('workstation_v2_presets_amazon', JSON.stringify(newPresets));
+    toast.success('Preset duplicated.');
   };
 
   const handleDeletePreset = (id: string, e: React.MouseEvent) => {
@@ -535,14 +620,16 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
     onClose();
   };
 
-  const renderAutoTextField = (label: string, field: AmazonTextField, placeholder = "") => {
+  const requiredMark = (required: boolean) => required ? <span className="text-red-500"> *</span> : null;
+
+  const renderAutoTextField = (label: string, field: AmazonTextField, placeholder = "", required = false) => {
     if (!editForm) return null;
     const autoField = `${String(field)}_auto`;
     const isAuto = !!(editForm as unknown as Record<string, unknown>)[autoField];
     return (
       <div className="flex flex-col gap-1">
         <div className="flex justify-between items-center">
-          <label className="text-xs font-semibold text-zinc-650 dark:text-zinc-400">{label}</label>
+          <label className="text-xs font-semibold text-zinc-650 dark:text-zinc-400">{label}{requiredMark(required)}</label>
           <label className="flex items-center gap-1 text-[11px] text-zinc-500 cursor-pointer select-none">
             <input
               type="checkbox"
@@ -567,36 +654,42 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
     );
   };
 
-  const renderDropdownField = (label: string, field: AmazonTextField, options: string[]) => {
+  const renderDropdownField = (label: string, field: AmazonTextField, options: string[], required = false) => {
     if (!editForm) return null;
+    
+    const formatOptionLabel = (val: string) => {
+      if (!val.includes('_')) return val;
+      return val.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+    };
+
     return (
       <div className="flex flex-col gap-1">
-        <label className="text-xs font-semibold text-zinc-650 dark:text-zinc-400">{label}</label>
+        <label className="text-xs font-semibold text-zinc-650 dark:text-zinc-400">{label}{requiredMark(required)}</label>
         <select
           value={String(editForm[field] ?? "Auto")}
           onChange={(e) => setEditForm({ ...editForm, [field]: e.target.value })}
           className="w-full px-3 py-2 text-sm rounded-none border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
         >
           <option value="Auto" className="bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 font-semibold">Auto (AI Deduces)</option>
-          <option value="None" className="text-zinc-500 italic">None (Omit)</option>
+          {!required && <option value="None" className="text-zinc-500 italic">None (Omit)</option>}
           {options.map(opt => (
-            <option key={opt} value={opt}>{opt}</option>
+            <option key={opt} value={opt}>{formatOptionLabel(opt)}</option>
           ))}
         </select>
       </div>
     );
   };
 
-  const renderStaticField = (label: string, field: AmazonTextField, placeholder = "") => {
+  const renderStaticField = (label: string, field: AmazonTextField, placeholder = "", required = false) => {
     if (!editForm) return null;
     return (
       <div className="flex flex-col gap-1">
-        <label className="text-xs font-semibold text-zinc-655 dark:text-zinc-400">{label}</label>
+        <label className="text-xs font-semibold text-zinc-655 dark:text-zinc-400">{label}{requiredMark(required)}</label>
         <input
           type="text"
           value={String(editForm[field] ?? "")}
           onChange={(e) => setEditForm({ ...editForm, [field]: e.target.value })}
-          className="w-full px-3 py-2 text-sm rounded-none border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+          className="w-full px-3 py-2 text-sm font-medium rounded-none border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white placeholder:text-zinc-400 dark:placeholder:text-zinc-600 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
           placeholder={placeholder}
         />
       </div>
@@ -651,7 +744,7 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
                 <div
                   key={p.id}
                   onClick={() => handleSelectPreset(p.id)}
-                  className={`group flex items-center justify-between p-3 border-b border-zinc-250 dark:border-zinc-800 cursor-pointer ${
+                  className={`group flex items-center justify-between p-3 border-b border-zinc-200 dark:border-zinc-800 cursor-pointer ${
                     activePresetId === p.id && !isCreatingNew
                       ? 'bg-blue-50 dark:bg-blue-900/10 border-l-2 border-l-blue-500'
                       : 'hover:bg-zinc-100 dark:hover:bg-zinc-850'
@@ -662,17 +755,25 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
                       {p.name}
                     </h4>
                     <p className="text-[10px] text-zinc-500 truncate mt-0.5">
-                      Brand: {p.brand} ? Rs {p.price}
+                      Brand: {p.brand} | Rs {p.price}
                     </p>
                   </div>
-                  {!isCreatingNew && presets.length > 1 && (
+                  <div className={`flex items-center gap-1 pl-2 ${activePresetId === p.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                    <button
+                      onClick={(e) => handleDuplicatePreset(p, e)}
+                      className="p-1 text-zinc-400 hover:text-blue-500 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                      title="Duplicate Preset"
+                    >
+                      <Copy size={14} />
+                    </button>
                     <button
                       onClick={(e) => handleDeletePreset(p.id, e)}
-                      className="opacity-0 group-hover:opacity-100 p-1 text-zinc-400 hover:text-red-500 transition-opacity"
+                      className="p-1 text-zinc-400 hover:text-red-500 hover:bg-zinc-200 dark:hover:bg-zinc-700"
+                      title="Delete Preset"
                     >
-                      <Trash2 size={13} />
+                      <Trash2 size={14} />
                     </button>
-                  )}
+                  </div>
                 </div>
               ))}
             </div>
@@ -696,7 +797,7 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
 
                 {/* Tab Switcher */}
                 <div className="flex border-b border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 shrink-0 select-none overflow-x-auto">
-                  {(['core', 'specs', 'design', 'compliance', 'variations'] as const).map((tab) => (
+                  {(['core', 'specs', 'design', 'compliance', 'variations', 'ai'] as const).map((tab) => (
                     <button
                       key={tab}
                       onClick={() => setActiveTab(tab)}
@@ -711,6 +812,7 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
                       {tab === 'design' && 'Design & Theme'}
                       {tab === 'compliance' && 'Compliance & Sizing'}
                       {tab === 'variations' && 'Variations'}
+                      {tab === 'ai' && 'AI Rules'}
                     </button>
                   ))}
                 </div>
@@ -720,32 +822,61 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
                   
                   {activeTab === 'core' && (
                     <div className="space-y-4">
+                      <p className="text-[11px] text-zinc-500"><span className="text-red-500">*</span> Required by the current Amazon India SHIRT schema. Title and description are also required and are generated per worksheet row.</p>
                       <div className="grid grid-cols-2 gap-4">
-                        {renderStaticField("Brand Name", "brand", "Yivez")}
-                        {renderAutoTextField("Outer Material / Fabric Type", "outer_material", "Cotton")}
+                        {renderStaticField("Brand Name", "brand", "Example: Northstar Apparel", true)}
+                        {renderStaticField("Outer Material / Fabric Type", "outer_material", "Example: 95% Cotton, 5% Elastane", true)}
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
-                        {renderStaticField("Custom SKU Template", "sku_template", "YIVEZ-{folder:4}-{color}-{size}")}
-                        {renderStaticField("HSN Code", "hsn_code", "61091000")}
+                        {renderStaticField("Custom SKU Template", "sku_template", "Example: TEE-{folder:8}-{color}-{size}", true)}
+                        {renderStaticField("HSN Code", "hsn_code", "Example: 61099090", true)}
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
-                        {renderStaticField("Default Price (Rs)", "price", "1200")}
-                        {renderStaticField("Maximum Retail Price (MRP)", "maximum_retail_price", "1999")}
+                        {renderStaticField("Your Price (INR)", "price", "Example: 899", true)}
+                        {renderStaticField("Maximum Retail Price", "maximum_retail_price", "Example: 1499")}
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
-                        {renderStaticField("Minimum Seller Allowed Price", "minimum_seller_allowed_price", "499")}
-                        {renderStaticField("Maximum Seller Allowed Price", "maximum_seller_allowed_price", "2499")}
+                        {renderStaticField("Minimum Seller Allowed Price", "minimum_seller_allowed_price", "Example: 699")}
+                        {renderStaticField("Maximum Seller Allowed Price", "maximum_seller_allowed_price", "Example: 1499")}
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
-                        {renderStaticField("Default Quantity", "quantity", "100")}
-                        {renderAutoTextField("Generic Keywords / Search Terms", "keywords", "graphic tee, crop top")}
+                        {renderStaticField("Quantity", "quantity", "Example: 25", true)}
+                        {renderAutoTextField("Generic Keywords / Search Terms", "keywords", "Example: retro astronomy tee, celestial shirt")}
                       </div>
 
-                      {renderAutoTextField("Bullet Points", "bullet_points", "Comfort fit, 100% Cotton")}
+                      {renderAutoTextField("Bullet Points", "bullet_points", "Example: Soft cotton fabric | Regular fit | Machine washable", true)}
+                      <div className="grid grid-cols-2 gap-4">
+                        {renderDropdownField("Recommended Browse Node", "recommended_browse_node", AMAZON_RECOMMENDED_BROWSE_NODES)}
+                        {renderYesNoField("Product ID Exemption Approved?", "product_id_exemption")}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        {renderStaticField("Variation Theme", "variation_theme", "Example: SIZE_NAME/COLOR_NAME", true)}
+                        {renderStaticField("Amazon Size System", "size_system", "Example: as5", true)}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        {renderDropdownField("Fit Type", "fit_type", AMAZON_FIT_TYPES, true)}
+                        {renderDropdownField("Style Name", "style_name", AMAZON_STYLE_NAMES, true)}
+                      </div>
+
+                      <div className="grid grid-cols-3 gap-4">
+                        {renderDropdownField("Garment Length", "item_length_description", AMAZON_ITEM_LENGTH_DESCRIPTIONS)}
+                        {renderStaticField("Model Name", "model_name", "Example: Core Basics")}
+                        {renderStaticField("Model Number", "model_number", "Example: CN-01")}
+                      </div>
+
+                      <div className="grid grid-cols-4 gap-4">
+                        {renderStaticField("Item Length", "item_dimension_length", "Example: 28", true)}
+                        {renderStaticField("Item Width", "item_dimension_width", "Example: 20", true)}
+                        {renderStaticField("Item Height", "item_dimension_height", "Example: 1", true)}
+                        {renderDropdownField("Dimension Unit", "item_dimension_unit", AMAZON_DIMENSION_UNITS, true)}
+                      </div>
+
                     </div>
                   )}
 
@@ -754,8 +885,8 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
                       {renderDropdownField("Neck Style", "neck_style", AMAZON_NECK_STYLES)}
                       {renderDropdownField("Collar Style", "collar_style", AMAZON_COLLAR_STYLES)}
                       
-                      {renderDropdownField("Sleeve Type", "sleeve_type", AMAZON_SLEEVE_TYPES)}
-                      {renderDropdownField("Sleeve Length Description", "sleeve_length", AMAZON_SLEEVE_LENGTHS)}
+                      {renderDropdownField("Sleeve Type", "sleeve_type", AMAZON_SLEEVE_TYPES, true)}
+                      {renderDropdownField("Sleeve Length Description", "sleeve_length", AMAZON_SLEEVE_LENGTHS, true)}
                       
                       {renderDropdownField("Sleeve Cuff Style", "sleeve_cuff", AMAZON_SLEEVE_CUFFS)}
                       {renderDropdownField("Top Style", "top_style", AMAZON_TOP_STYLES)}
@@ -766,7 +897,7 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
                       {renderDropdownField("Apparel Fabric Stretch", "apparel_fabric_stretch", AMAZON_FABRIC_STRETCHES)}
                       {renderDropdownField("Apparel Fabric Weight Class", "apparel_fabric_weight_class", AMAZON_WEIGHT_CLASSES)}
                       
-                      {renderDropdownField("Item Type Name", "item_type_name", AMAZON_ITEM_TYPE_NAMES)}
+                      {renderDropdownField("Item Type Name", "item_type_name", AMAZON_ITEM_TYPE_NAMES, true)}
                       {renderDropdownField("Fabric Stretchability", "fabric_stretchability", AMAZON_FABRIC_STRETCHABILITIES)}
                     </div>
                   )}
@@ -793,40 +924,40 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
                   {activeTab === 'compliance' && (
                     <div className="space-y-4">
                       <div className="grid grid-cols-2 gap-4">
-                        {renderDropdownField("Target Gender", "target_gender", AMAZON_TARGET_GENDERS)}
-                        {renderDropdownField("Age Range Description", "age_range_description", AMAZON_AGE_RANGES)}
+                        {renderDropdownField("Target Gender", "target_gender", AMAZON_TARGET_GENDERS, true)}
+                        {renderDropdownField("Age Range Description", "age_range_description", AMAZON_AGE_RANGES, true)}
                       </div>
                       
                       <div className="grid grid-cols-2 gap-4">
-                        {renderDropdownField("Department Name", "department_name", AMAZON_DEPARTMENTS)}
-                        {renderDropdownField("Care Instructions", "care_instructions", AMAZON_CARE_INSTRUCTIONS)}
+                        {renderDropdownField("Department Name", "department_name", AMAZON_DEPARTMENTS, true)}
+                        {renderDropdownField("Care Instructions", "care_instructions", AMAZON_CARE_INSTRUCTIONS, true)}
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
-                        {renderAutoTextField("Part Number", "part_number", "SKU123")}
+                        {renderStaticField("Part Number", "part_number", "Example: NST-TEE-001", true)}
                         {renderDropdownField("Garment Size Country", "garment_size_country", AMAZON_GARMENT_SIZE_COUNTRIES)}
                       </div>
 
                       <div className="grid grid-cols-3 gap-4">
-                        {renderStaticField("Number of Items", "number_of_items", "1")}
-                        {renderStaticField("Item Package Quantity", "item_package_quantity", "1")}
-                        {renderStaticField("Product Site Launch Date (YYYY-MM-DD)", "product_site_launch_date", "2026-06-21")}
+                        {renderStaticField("Number of Items", "number_of_items", "Example: 1", true)}
+                        {renderStaticField("Item Package Quantity", "item_package_quantity", "Example: 1")}
+                        {renderStaticField("Product Site Launch Date (YYYY-MM-DD)", "product_site_launch_date", "Example: 2025-08-15")}
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
                         <div className="grid grid-cols-2 gap-2">
-                          {renderStaticField("Item Weight", "item_weight", "150.0")}
-                          {renderDropdownField("Item Weight Unit", "item_weight_unit", ["grams", "ounces", "pounds", "kilograms"])}
+                          {renderStaticField("Item Weight", "item_weight", "Example: 180", true)}
+                          {renderDropdownField("Item Weight Unit", "item_weight_unit", ["grams", "ounces", "pounds", "kilograms"], true)}
                         </div>
                         <div className="grid grid-cols-2 gap-2 font-semibold">
-                          {renderAutoTextField("Shoulder to Hem Length", "shoulder_hem_length", "20.0")}
+                          {renderStaticField("Shoulder to Hem Length", "shoulder_hem_length", "Example: 27")}
                           {renderDropdownField("Shoulder to Hem Unit", "shoulder_hem_unit", ["inches", "centimeters", "yards"])}
                         </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
                         <div className="grid grid-cols-2 gap-2">
-                          {renderStaticField("Unit Count", "unit_count", "1")}
+                          {renderStaticField("Unit Count", "unit_count", "Example: 1")}
                           {renderDropdownField("Unit Count Type", "unit_count_type", ["Count", "Grams", "Ounces", "Fl Oz"])}
                         </div>
                         <div className="grid grid-cols-2 gap-2">
@@ -836,17 +967,61 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
-                        {renderAutoTextField("Sport Type", "sport_type", "Athletic")}
-                        {renderAutoTextField("Lifestyle", "lifestyle", "Athletic")}
+                        <div className="relative flex flex-col gap-1">
+                          <label className="text-xs font-semibold text-zinc-650 dark:text-zinc-400">Sport Type (up to 2)</label>
+                          <button type="button" onClick={() => setIsSportTypeOpen(!isSportTypeOpen)} className="w-full px-3 py-2 text-sm border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white flex justify-between items-center min-h-[38px]">
+                            <span className="truncate">{editForm.sport_type || "None"}</span><ChevronDown size={14} className="text-zinc-500" />
+                          </button>
+                          {isSportTypeOpen && (<>
+                            <div className="fixed inset-0 z-10" onClick={() => setIsSportTypeOpen(false)} />
+                            <div className="absolute top-full left-0 mt-1 w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 shadow-lg z-20 max-h-60 overflow-y-auto p-2 space-y-1">
+                              {["Auto", "None", ...amazonOptions.sport_type].map(option => {
+                                const selected = editForm.sport_type === option || editForm.sport_type.split(",").map(value => value.trim()).includes(option);
+                                return <label key={option} className="flex items-center gap-2 px-2 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer text-sm">
+                                  <input type="checkbox" checked={selected} onChange={() => {
+                                    if (option === "Auto" || option === "None") { setEditForm({ ...editForm, sport_type: option }); return; }
+                                    const current = editForm.sport_type === "Auto" || editForm.sport_type === "None" ? [] : editForm.sport_type.split(",").map(value => value.trim()).filter(Boolean);
+                                    const next = current.includes(option) ? current.filter(value => value !== option) : current.length < 2 ? [...current, option] : current;
+                                    if (!current.includes(option) && current.length >= 2) { toast.error("Amazon allows up to 2 Sport Type values."); return; }
+                                    setEditForm({ ...editForm, sport_type: next.length ? next.join(", ") : "None" });
+                                  }} className="rounded border-zinc-300 dark:border-zinc-700 text-blue-600 focus:ring-blue-500" />
+                                  {option}
+                                </label>;
+                              })}
+                            </div>
+                          </>)}
+                        </div>
+                        {renderDropdownField("Lifestyle", "lifestyle", amazonOptions.lifestyle)}
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
-                        {renderAutoTextField("League Name", "league_name", "NBA")}
-                        {renderAutoTextField("Team Name", "team_name", "Seattle Seahawks")}
+                        {renderDropdownField("League Name", "league_name", amazonOptions.league_name)}
+                        {renderDropdownField("Team Name", "team_name", amazonOptions.team_name)}
                       </div>
 
-                      {renderStaticField("Manufacturer Contact Info", "manufacturer_address", "Street Address...")}
-                      {renderStaticField("Packer Contact Info", "packer_address", "Street Address...")}
+                      {renderStaticField("Manufacturer Contact Info", "manufacturer_address", "Example: Northstar Apparel, Industrial Estate, Pune 411001, India", true)}
+                      {renderStaticField("Packer Contact Info", "packer_address", "Example: Blue River Packaging, Sector 5, Jaipur 302001, India", true)}
+                    </div>
+                  )}
+
+                  {activeTab === 'ai' && (
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">AI Context</label>
+                        <textarea value={editForm.context} onChange={(e) => setEditForm({ ...editForm, context: e.target.value })} className="w-full min-h-24 px-3 py-2 text-xs border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                      </div>
+                      {([
+                        ['Title Rules', 'ai_title_rules'],
+                        ['Description Rules', 'ai_desc_rules'],
+                        ['Bullet Point Rules', 'ai_bullet_rules'],
+                        ['Keyword Rules', 'ai_keyword_rules'],
+                        ['Auto Attribute Rules', 'ai_attribute_rules']
+                      ] as const).map(([label, field]) => (
+                        <div key={field}>
+                          <label className="block text-xs font-semibold text-zinc-700 dark:text-zinc-300 mb-1">{label}</label>
+                          <textarea value={editForm[field]} onChange={(e) => setEditForm({ ...editForm, [field]: e.target.value })} className="w-full min-h-20 px-3 py-2 text-xs border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500" />
+                        </div>
+                      ))}
                     </div>
                   )}
 
@@ -854,7 +1029,7 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
                     <div className="space-y-4">
                       <div className="border border-zinc-200 dark:border-zinc-800 p-3 bg-zinc-50 dark:bg-zinc-900 rounded-none space-y-4">
                         <div className="flex items-center justify-between border-b border-zinc-200 dark:border-zinc-800 pb-2">
-                          <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Variation Properties</h4>
+                          <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">Variation Properties <span className="text-red-500">*</span></h4>
                           {(!editForm.variations?.properties || editForm.variations.properties.length < 2) && (
                             <select
                               className="text-xs px-2 py-1 rounded-none border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 focus:outline-none"
@@ -876,6 +1051,7 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
                           )}
                         </div>
 
+                        <p className="text-[11px] text-zinc-500">Amazon India SHIRT child listings require both Color and Size values.</p>
                         <div className="space-y-3">
                           {(editForm.variations?.properties || []).map((prop, propIdx) => (
                             <div key={prop.name} className="p-3 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 space-y-2 relative">
