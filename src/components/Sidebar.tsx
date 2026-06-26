@@ -95,6 +95,30 @@ export default function Sidebar({
         }
       } catch {}
     }
+    
+    // Check if we just completed Etsy OAuth
+    if (window.location.search.includes("etsy_connected=true")) {
+      fetch("/api/etsy/shop")
+        .then(res => res.json())
+        .then(data => {
+          if (data.shop_name) {
+            const newStore = { id: String(Date.now()), name: data.shop_name };
+            
+            // We need the current parsed stores
+            const currentParsed = savedStores ? JSON.parse(savedStores) : [];
+            if (!currentParsed.some((s: Store) => s.name === data.shop_name)) {
+              const updatedStores = [...currentParsed, newStore];
+              setStores(updatedStores);
+              setActiveStoreId(newStore.id);
+              localStorage.setItem("workstation_etsy_stores", JSON.stringify(updatedStores));
+              localStorage.setItem("workstation_etsy_active_store_id", newStore.id);
+            }
+          }
+          // Clean up URL
+          window.history.replaceState({}, document.title, window.location.pathname);
+        })
+        .catch(console.error);
+    }
   }, []);
 
   const saveStores = (newStores: Store[], newActiveId: string | null) => {
@@ -314,7 +338,7 @@ export default function Sidebar({
                 <p className="text-xs font-medium text-zinc-600 mb-1">No Etsy store connected</p>
                 <p className="text-[11px] text-zinc-400 mb-3 leading-tight">Connect your store to enable automated publishing</p>
                 <button
-                  onClick={() => setShowSettingsModal(true)}
+                  onClick={() => window.location.href = '/api/etsy/auth'}
                   className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs bg-blue-600 text-white rounded-none hover:bg-blue-700 font-medium transition-colors"
                 >
                   Connect Etsy

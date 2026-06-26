@@ -55,26 +55,10 @@ export default function SettingsModal({
   const handleConnectEtsy = async () => {
     setIsConnectingEtsy(true);
     try {
-      const res = await fetch("/api/etsy/shop");
-      const data = await res.json();
-
-      if (data.shop_name) {
-        if (etsyStores.some((s) => s.name === data.shop_name)) {
-          toast.error("Store is already connected");
-          return;
-        }
-
-        const newStore: Store = { id: String(Date.now()), name: data.shop_name };
-        const newStores = [...etsyStores, newStore];
-        onEtsyStoresChange(newStores, newStore.id);
-        setEtsyOpen(true);
-        toast.success(`Successfully connected Etsy store: ${data.shop_name}`);
-      } else {
-        toast.error("Failed to connect to Etsy store");
-      }
+      // Redirect to the new Etsy OAuth flow
+      window.location.href = '/api/etsy/auth';
     } catch {
       toast.error("Error connecting to Etsy");
-    } finally {
       setIsConnectingEtsy(false);
     }
   };
