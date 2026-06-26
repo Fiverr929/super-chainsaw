@@ -35,6 +35,9 @@ type AmazonVariationCombination = {
   isEnabled?: boolean;
   price?: string;
   quantity?: string;
+  maximum_retail_price?: string;
+  minimum_seller_allowed_price?: string;
+  maximum_seller_allowed_price?: string;
 };
 
 type AmazonVariations = {
@@ -699,10 +702,40 @@ export async function POST(request: Request) {
     
     // Parse Bullet Points
     const bpStr = rowData.bullet_points || "";
-    const bpArray = bpStr.split(/[\n|]/).map((s: string) => s.trim()).filter(Boolean);
-    const bulletPointsPayload = bpArray.length > 0
-      ? bpArray.map((bp: string) => ({ value: bp, marketplace_id: marketplaceId, language_tag: 'en_IN' }))
-      : [ { value: rowData.title || "Premium Retro Graphic Baby Tee", marketplace_id: marketplaceId, language_tag: 'en_IN' } ];
+    let bpArray = bpStr.split(/[\n|]/).map((s: string) => s.trim()).filter(Boolean);
+    
+    if (bpArray.length === 0) {
+      const apiKey = process.env.GOOGLE_API_KEY;
+      if (apiKey) {
+        const prompt = `You create metadata for an Amazon India physical T-shirt listing.
+Write exactly 5 concise factual bullet points for the following product.
+Title: ${rowData.title || ""}
+Description: ${rowData.description || ""}
+Tags: ${rowData.search_terms || ""}
+Separate each bullet point by a newline. Do not include bullet characters like '- ' or '* ' at the start of the line.`;
+        try {
+          const aiRes = await fetch('https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-2.5-flash:generateContent?key=' + apiKey, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0.7 } })
+          });
+          if (aiRes.ok) {
+            const data = await aiRes.json();
+            const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            if (typeof rawText === 'string') {
+              bpArray = rawText.split('\n').map((s: string) => s.replace(/^[-*•]\s*/, '').trim()).filter(Boolean).slice(0, 5);
+            }
+          }
+        } catch (e) {
+          console.error("Failed to generate AI bullet points for Amazon", e);
+        }
+      }
+    }
+
+    if (bpArray.length === 0) {
+      bpArray = [rowData.title || "Premium Retro Graphic Baby Tee"];
+    }
+
+    const bulletPointsPayload = bpArray.map((bp: string) => ({ value: bp, marketplace_id: marketplaceId, language_tag: 'en_IN' }));
 
     const parentPayload: AmazonListingPayload = {
       productType: 'SHIRT',
@@ -840,25 +873,25 @@ export async function POST(request: Request) {
                   {
                     schedule: [
                       {
-                        value_with_tax: parseFloat(rowData.maximum_retail_price || Math.round(parseFloat(priceVal) * 1.86).toString())
+                        value_with_tax: parseFloat(comb.maximum_retail_price || rowData.maximum_retail_price || Math.round(parseFloat(priceVal) * 1.86).toString())
                       }
                     ]
                   }
                 ],
-                minimum_seller_allowed_price: rowData.minimum_seller_allowed_price ? [
+                minimum_seller_allowed_price: (comb.minimum_seller_allowed_price || rowData.minimum_seller_allowed_price) ? [
                   {
                     schedule: [
                       {
-                        value_with_tax: parseFloat(rowData.minimum_seller_allowed_price)
+                        value_with_tax: parseFloat(comb.minimum_seller_allowed_price || rowData.minimum_seller_allowed_price || "")
                       }
                     ]
                   }
                 ] : undefined,
-                maximum_seller_allowed_price: rowData.maximum_seller_allowed_price ? [
+                maximum_seller_allowed_price: (comb.maximum_seller_allowed_price || rowData.maximum_seller_allowed_price) ? [
                   {
                     schedule: [
                       {
-                        value_with_tax: parseFloat(rowData.maximum_seller_allowed_price)
+                        value_with_tax: parseFloat(comb.maximum_seller_allowed_price || rowData.maximum_seller_allowed_price || "")
                       }
                     ]
                   }

@@ -13,6 +13,9 @@ export type VariationCombination = {
   skuTemplate?: string;
   imageSlot?: number;
   isEnabled: boolean;
+  maximum_retail_price?: string;
+  minimum_seller_allowed_price?: string;
+  maximum_seller_allowed_price?: string;
 };
 
 export type VariationProperty = {
@@ -20,6 +23,7 @@ export type VariationProperty = {
   propertyId: number;
   options: string[];
 };
+
 
 export type PresetVariations = {
   properties: VariationProperty[];
@@ -63,7 +67,28 @@ export type Preset = {
   framing?: string;
   aspect_ratio?: string;
   graphic?: string;
+  enable_pod?: boolean;
+  pod_blueprint_id?: number;
+  pod_print_provider_id?: number;
+  pod_position?: string;
 };
+
+export const PREDEFINED_BLUEPRINTS = [
+  { id: 12, name: "Unisex Heavy Cotton Tee (Gildan 5000)" },
+  { id: 10, name: "Unisex Heavy Blend Crewneck Sweatshirt (Gildan 18000)" },
+  { id: 144, name: "Unisex Heavy Blend Hooded Sweatshirt (Gildan 18500)" },
+  { id: 9, name: "Unisex Jersey Short Sleeve Tee (Bella+Canvas 3001)" }
+];
+
+export const PRINT_PROVIDERS = [
+  { id: 99, name: "Monster Digital" },
+  { id: 16, name: "SwiftPOD" },
+  { id: 29, name: "Printify Choice" },
+  { id: 26, name: "Awkward Styles" },
+  { id: 3, name: "Dimona Tee" },
+  { id: 39, name: "MyLocker" },
+  { id: 10, name: "Print Geek" }
+];
 
 export const DEFAULT_PRESET: Preset = {
   id: "default-store-graphics",
@@ -124,6 +149,7 @@ export const DEFAULT_PHYSICAL_PRESET: Preset = {
   ai_title_rules: "MUST be exactly 140 characters or less including spaces",
   ai_desc_rules: "Under 100 words total. One short punchy intro sentence, followed entirely by a scannable bullet-point list of the essential features/specs. NO FLUFF. No conclusion paragraphs.",
   ai_tag_rules: "EXACTLY 13 Etsy Tags as a comma-separated string. Each individual tag MUST be 20 characters or less.",
+  enable_pod: false,
 };
 
 interface PresetManagerModalProps {
@@ -154,7 +180,7 @@ export default function PresetManagerModal({ onClose, sheetType }: PresetManager
   const [processingProfiles, setProcessingProfiles] = useState<string[]>([""]);
   const [isMaterialsOpen, setIsMaterialsOpen] = useState(false);
   const [isSubjectOpen, setIsSubjectOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'core' | 'options' | 'attributes' | 'variations' | 'ai'>('core');
+  const [activeTab, setActiveTab] = useState<'core' | 'options' | 'attributes' | 'variations' | 'ai' | 'pod'>('core');
 
   const addVariationProperty = (name: string, propertyId: number) => {
     if (!editForm) return;
@@ -535,68 +561,77 @@ const handleDelete = (id: string) => {
             {editingId && editForm ? (
               <div className="flex flex-col h-full min-h-0">
                                 {/* Header/Tabs */}
-                <div className="p-6 pb-0 shrink-0">
-                  <div className="flex items-end justify-between border-b border-zinc-200 dark:border-zinc-800 pb-0">
-                    <div className="flex flex-1 min-w-0 text-xs font-semibold uppercase tracking-wider text-zinc-500 overflow-x-auto select-none gap-2 pr-4 custom-scrollbar -mb-px">
+                <div className="flex border-b border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900 shrink-0 select-none overflow-x-auto">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('core')}
+                    className={`px-4 py-2 border-r border-zinc-300 dark:border-zinc-750 text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                      activeTab === 'core'
+                        ? 'bg-white dark:bg-zinc-950 text-blue-600 dark:text-blue-400 border-b-2 border-b-blue-500 font-bold'
+                        : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                    }`}
+                  >
+                    Core Details
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('options')}
+                    className={`px-4 py-2 border-r border-zinc-300 dark:border-zinc-750 text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                      activeTab === 'options'
+                        ? 'bg-white dark:bg-zinc-950 text-blue-600 dark:text-blue-400 border-b-2 border-b-blue-500 font-bold'
+                        : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                    }`}
+                  >
+                    Etsy Options
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('attributes')}
+                    className={`px-4 py-2 border-r border-zinc-300 dark:border-zinc-750 text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                      activeTab === 'attributes'
+                        ? 'bg-white dark:bg-zinc-950 text-blue-600 dark:text-blue-400 border-b-2 border-b-blue-500 font-bold'
+                        : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                    }`}
+                  >
+                    Attributes
+                  </button>
+                  {sheetType === "physical" && (
                     <button
                       type="button"
-                      onClick={() => setActiveTab('core')}
-                      className={`whitespace-nowrap shrink-0 pb-2 px-3 border-b-2 transition-all duration-155 ${
-                        activeTab === 'core'
-                          ? 'border-blue-600 text-blue-600 dark:text-blue-400 font-bold'
-                          : 'border-transparent hover:text-zinc-700 dark:hover:text-zinc-300'
+                      onClick={() => setActiveTab('variations')}
+                      className={`px-4 py-2 border-r border-zinc-300 dark:border-zinc-750 text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                        activeTab === 'variations'
+                          ? 'bg-white dark:bg-zinc-950 text-blue-600 dark:text-blue-400 border-b-2 border-b-blue-500 font-bold'
+                          : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'
                       }`}
                     >
-                      Core Details
+                      Variations Matrix
                     </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('ai')}
+                    className={`px-4 py-2 border-r border-zinc-300 dark:border-zinc-750 text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                      activeTab === 'ai'
+                        ? 'bg-white dark:bg-zinc-950 text-blue-600 dark:text-blue-400 border-b-2 border-b-blue-500 font-bold'
+                        : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'
+                    }`}
+                  >
+                    AI Rules
+                  </button>
+                  {sheetType === "physical" && (
                     <button
                       type="button"
-                      onClick={() => setActiveTab('options')}
-                      className={`whitespace-nowrap shrink-0 pb-2 px-3 border-b-2 transition-all duration-155 ${
-                        activeTab === 'options'
-                          ? 'border-blue-600 text-blue-600 dark:text-blue-400 font-bold'
-                          : 'border-transparent hover:text-zinc-700 dark:hover:text-zinc-300'
+                      onClick={() => setActiveTab('pod')}
+                      className={`px-4 py-2 border-r border-zinc-300 dark:border-zinc-750 text-[10px] font-bold uppercase tracking-wider transition-colors ${
+                        activeTab === 'pod'
+                          ? 'bg-white dark:bg-zinc-950 text-blue-600 dark:text-blue-400 border-b-2 border-b-blue-500 font-bold'
+                          : 'text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800'
                       }`}
                     >
-                      Etsy Options
+                      Printify POD
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('attributes')}
-                      className={`whitespace-nowrap shrink-0 pb-2 px-3 border-b-2 transition-all duration-155 ${
-                        activeTab === 'attributes'
-                          ? 'border-blue-600 text-blue-600 dark:text-blue-400 font-bold'
-                          : 'border-transparent hover:text-zinc-700 dark:hover:text-zinc-300'
-                      }`}
-                    >
-                      Attributes
-                    </button>
-                    {sheetType === "physical" && (
-                      <button
-                        type="button"
-                        onClick={() => setActiveTab('variations')}
-                        className={`whitespace-nowrap shrink-0 pb-2 px-3 border-b-2 transition-all duration-155 ${
-                          activeTab === 'variations'
-                            ? 'border-blue-600 text-blue-600 dark:text-blue-400 font-bold'
-                            : 'border-transparent hover:text-zinc-700 dark:hover:text-zinc-300'
-                        }`}
-                      >
-                        Variations Matrix
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab('ai')}
-                      className={`whitespace-nowrap shrink-0 pb-2 px-3 border-b-2 transition-all duration-155 ${
-                        activeTab === 'ai'
-                          ? 'border-blue-600 text-blue-600 dark:text-blue-400 font-bold'
-                          : 'border-transparent hover:text-zinc-700 dark:hover:text-zinc-300'
-                      }`}
-                    >
-                      AI Rules
-                    </button>
-                    </div>
-                  </div>
+                  )}
                 </div>
                 
                 {/* Scrollable Content */}
@@ -1470,21 +1505,116 @@ const handleDelete = (id: string) => {
                     </details>
                   </div>
                 )}
+                {activeTab === 'pod' && sheetType === "physical" && (
+                  <div className="p-6 space-y-6">
+                    <div className="bg-blue-50/50 dark:bg-blue-900/10 border border-blue-100 dark:border-blue-900 p-4 rounded-sm">
+                      <label className="flex items-start gap-3 cursor-pointer">
+                        <div className="flex items-center h-5 mt-0.5">
+                          <input
+                            type="checkbox"
+                            checked={editForm.enable_pod || false}
+                            onChange={(e) => setEditForm({ ...editForm, enable_pod: e.target.checked })}
+                            className="w-4 h-4 text-blue-600 bg-white border-zinc-300 rounded focus:ring-blue-500"
+                          />
+                        </div>
+                        <div>
+                          <div className="text-sm font-medium text-zinc-900 dark:text-white">
+                            Enable Printify Automation
+                          </div>
+                          <p className="text-xs text-zinc-500 dark:text-zinc-400 mt-0.5">
+                            When enabled, listings pushed with this preset will automatically upload their design to Printify, create a draft product, and map the SKUs back to Etsy variations.
+                          </p>
+                        </div>
+                      </label>
+                    </div>
+
+                    {editForm.enable_pod && (
+                      <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+                              Printify Blueprint
+                            </label>
+                            <div className="relative">
+                              <select
+                                value={editForm.pod_blueprint_id || 12}
+                                onChange={(e) => setEditForm({ ...editForm, pod_blueprint_id: Number(e.target.value) })}
+                                className="w-full appearance-none px-3 py-2 text-sm border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 rounded-sm"
+                              >
+                                {PREDEFINED_BLUEPRINTS.map(b => (
+                                  <option key={b.id} value={b.id}>{b.name}</option>
+                                ))}
+                              </select>
+                              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+                              Print Provider
+                            </label>
+                            <div className="relative">
+                              <select
+                                value={editForm.pod_print_provider_id || 99}
+                                onChange={(e) => setEditForm({ ...editForm, pod_print_provider_id: Number(e.target.value) })}
+                                className="w-full appearance-none px-3 py-2 text-sm border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-blue-500 rounded-sm"
+                              >
+                                {PRINT_PROVIDERS.map(p => (
+                                  <option key={p.id} value={p.id}>{p.name}</option>
+                                ))}
+                              </select>
+                              <ChevronDown size={14} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 pointer-events-none" />
+                            </div>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-xs font-medium text-zinc-700 dark:text-zinc-300 mb-1">
+                            Print Position
+                          </label>
+                          <div className="flex bg-zinc-100 dark:bg-zinc-800 p-1 rounded-sm border border-zinc-200 dark:border-zinc-700">
+                            {['top', 'center', 'bottom'].map((pos) => (
+                              <button
+                                key={pos}
+                                type="button"
+                                onClick={() => setEditForm({ ...editForm, pod_position: pos })}
+                                className={`flex-1 py-1.5 text-xs font-medium capitalize rounded-sm transition-colors ${
+                                  (editForm.pod_position || 'top') === pos
+                                    ? 'bg-white dark:bg-zinc-700 shadow-sm text-blue-600 dark:text-blue-400'
+                                    : 'text-zinc-500 dark:text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-300'
+                                }`}
+                              >
+                                {pos}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
                 </div>
                 {/* Sticky Footer */}
-                <div className="shrink-0 p-4 px-6 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 flex justify-end">
-                  <button 
-                    onClick={handleSaveEdit}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium border border-blue-700 transition-colors shadow-sm rounded-sm"
-                  >
-                    <Save size={14} /> {isCreatingNew ? 'Create Preset' : 'Save Changes'}
-                  </button>
+                <div className="shrink-0 p-4 px-6 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900/50 flex justify-between items-center">
+                  <div>
+                    <span className="text-xs text-zinc-500 font-semibold select-none">Select rows in the grid to apply this preset</span>
+                  </div>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={handleSaveEdit}
+                      className="flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold border border-blue-700 transition-colors shadow-sm rounded-none uppercase tracking-wider"
+                    >
+                      <Save size={13} /> {isCreatingNew ? 'Create Preset' : 'Save Preset'}
+                    </button>
+                  </div>
                 </div>
               </div>
             ) : (
-              <div className="h-full flex flex-col items-center justify-center text-zinc-400 dark:text-zinc-600">
-                <h3 className="text-base font-medium text-zinc-700 dark:text-zinc-300 mb-1">No Preset Selected</h3>
-                <p className="text-sm text-center max-w-[250px]">Select a preset from the sidebar to edit its default values, or create a new one.</p>
+
+
+
+              <div className="flex-grow flex items-center justify-center text-zinc-400 dark:text-zinc-600 p-8 text-xs font-bold uppercase tracking-wider select-none">
+                No Preset Selected. Create or select a preset to edit.
               </div>
             )}
           </div>
@@ -1493,5 +1623,3 @@ const handleDelete = (id: string) => {
     </div>
   );
 }
-
-

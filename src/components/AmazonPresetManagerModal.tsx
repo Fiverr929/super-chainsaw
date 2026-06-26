@@ -598,7 +598,10 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
         values,
         isEnabled: true,
         price: editForm.price || "1200",
-        quantity: editForm.quantity || "100"
+        quantity: editForm.quantity || "100",
+        maximum_retail_price: editForm.maximum_retail_price || "",
+        minimum_seller_allowed_price: editForm.minimum_seller_allowed_price || "",
+        maximum_seller_allowed_price: editForm.maximum_seller_allowed_price || ""
       } as VariationCombination;
     });
 
@@ -622,7 +625,7 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
 
   const requiredMark = (required: boolean) => required ? <span className="text-red-500"> *</span> : null;
 
-  const renderAutoTextField = (label: string, field: AmazonTextField, placeholder = "", required = false) => {
+  const renderAutoTextField = (label: string, field: AmazonTextField, placeholder = "", required = false, autoPlaceholder = "Auto (AI Deduces dynamically)") => {
     if (!editForm) return null;
     const autoField = `${String(field)}_auto`;
     const isAuto = !!(editForm as unknown as Record<string, unknown>)[autoField];
@@ -642,7 +645,7 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
         </div>
         <input
           type="text"
-          value={isAuto ? "Auto (AI Deduces dynamically)" : String(editForm[field] ?? "")}
+          value={isAuto ? autoPlaceholder : String(editForm[field] ?? "")}
           disabled={isAuto}
           onChange={(e) => setEditForm({ ...editForm, [field]: e.target.value })}
           className={`w-full px-3 py-2 text-sm rounded-none border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 ${
@@ -729,7 +732,7 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
         <div className="flex flex-1 overflow-hidden min-h-0">
           
           {/* Left Side: Preset List */}
-          <div className="w-1/4 border-r border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50 flex flex-col overflow-hidden">
+          <div className="w-1/3 border-r border-zinc-300 dark:border-zinc-700 bg-zinc-50 dark:bg-zinc-900/50 flex flex-col overflow-hidden">
             <div className="p-3 border-b border-zinc-300 dark:border-zinc-700 shrink-0">
               <button 
                 onClick={handleCreateNew}
@@ -780,7 +783,7 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
           </div>
 
           {/* Right Side: Preset Editor */}
-          <div className="flex-1 flex flex-col overflow-hidden bg-white dark:bg-zinc-950">
+          <div className="w-2/3 flex flex-col overflow-hidden bg-white dark:bg-zinc-950">
             {editForm ? (
               <>
                 <div className="p-3 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50/50 dark:bg-zinc-900/10 shrink-0">
@@ -934,7 +937,7 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
                       </div>
 
                       <div className="grid grid-cols-2 gap-4">
-                        {renderStaticField("Part Number", "part_number", "Example: NST-TEE-001", true)}
+                        {renderAutoTextField("Part Number", "part_number", "Example: NST-TEE-001", true, "Auto (Uses SKU)")}
                         {renderDropdownField("Garment Size Country", "garment_size_country", AMAZON_GARMENT_SIZE_COUNTRIES)}
                       </div>
 
@@ -1143,6 +1146,9 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
                                   <th className="p-2 w-10 text-center">On</th>
                                   <th className="p-2 font-semibold">Variant Options</th>
                                   <th className="p-2 font-semibold w-24">Price (Rs)</th>
+                                  <th className="p-2 font-semibold w-24">MRP (Rs)</th>
+                                  <th className="p-2 font-semibold w-24">Min (Rs)</th>
+                                  <th className="p-2 font-semibold w-24">Max (Rs)</th>
                                   <th className="p-2 font-semibold w-20">Quantity</th>
                                 </tr>
                               </thead>
@@ -1193,6 +1199,57 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
                                                 quantityOnProperty: editForm.variations.quantityOnProperty,
                                                 skuOnProperty: editForm.variations.skuOnProperty
                                               }
+                                            });
+                                          }}
+                                          className="w-full px-1.5 py-0.5 border border-zinc-305 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-white focus:outline-none"
+                                        />
+                                      </td>
+                                      <td className="p-2">
+                                        <input
+                                          type="text"
+                                          value={comb.maximum_retail_price || ""}
+                                          disabled={!comb.isEnabled}
+                                          onChange={(e) => {
+                                            if (!editForm || !editForm.variations) return;
+                                            const combs = [...editForm.variations.combinations];
+                                            combs[combIdx] = { ...comb, maximum_retail_price: e.target.value };
+                                            setEditForm({
+                                              ...editForm,
+                                              variations: { ...editForm.variations, combinations: combs }
+                                            });
+                                          }}
+                                          className="w-full px-1.5 py-0.5 border border-zinc-305 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-white focus:outline-none"
+                                        />
+                                      </td>
+                                      <td className="p-2">
+                                        <input
+                                          type="text"
+                                          value={comb.minimum_seller_allowed_price || ""}
+                                          disabled={!comb.isEnabled}
+                                          onChange={(e) => {
+                                            if (!editForm || !editForm.variations) return;
+                                            const combs = [...editForm.variations.combinations];
+                                            combs[combIdx] = { ...comb, minimum_seller_allowed_price: e.target.value };
+                                            setEditForm({
+                                              ...editForm,
+                                              variations: { ...editForm.variations, combinations: combs }
+                                            });
+                                          }}
+                                          className="w-full px-1.5 py-0.5 border border-zinc-305 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-white focus:outline-none"
+                                        />
+                                      </td>
+                                      <td className="p-2">
+                                        <input
+                                          type="text"
+                                          value={comb.maximum_seller_allowed_price || ""}
+                                          disabled={!comb.isEnabled}
+                                          onChange={(e) => {
+                                            if (!editForm || !editForm.variations) return;
+                                            const combs = [...editForm.variations.combinations];
+                                            combs[combIdx] = { ...comb, maximum_seller_allowed_price: e.target.value };
+                                            setEditForm({
+                                              ...editForm,
+                                              variations: { ...editForm.variations, combinations: combs }
                                             });
                                           }}
                                           className="w-full px-1.5 py-0.5 border border-zinc-305 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-xs text-zinc-900 dark:text-white focus:outline-none"

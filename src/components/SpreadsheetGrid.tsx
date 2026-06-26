@@ -49,7 +49,7 @@ import FolderImporterModal from "./FolderImporterModal";
 import PresetManagerModal, { type Preset, PresetVariations, VariationCombination } from "./PresetManagerModal";
 import AmazonPresetManagerModal, { AmazonPreset } from "./AmazonPresetManagerModal";
 import AmazonDrawer, { AmazonDrawerType } from "./AmazonDrawer";
-import { FolderPlus, Layers, ChevronDown, Trash2 } from "lucide-react";
+import { FolderPlus, Layers, ChevronDown, Trash2, Shirt } from "lucide-react";
 import { AMAZON_COLUMNS } from "@/lib/amazonConstants";
 
 const imageCache: Record<string, { absoluteUrlArray: string[], thumbnailUrls: string[] }> = {};
@@ -121,6 +121,10 @@ export type RowData = {
   ai_tag_rules?: string;
   shipping_profile?: string;
   readiness_state_id?: string;
+  enable_pod?: boolean;
+  pod_blueprint_id?: number;
+  pod_print_provider_id?: number;
+  pod_position?: string;
   secondary_color?: string;
   graphic?: string;
   materials?: string;
@@ -149,7 +153,6 @@ export type RowData = {
   outer_material?: string;
   bullet_points?: string;
   keywords?: string;
-  // Amazon Specific Additional Fields
   target_gender?: string;
   department_name?: string;
   item_type_name?: string;
@@ -360,7 +363,6 @@ const getAttributesSummary = (row: RowData) => {
   if (row.celebration && categorySupportsCelebration(row.category || "")) parts.push(`Celebration: ${row.celebration}`);
   if (row.subject && categorySupportsSubject(row.category || "")) parts.push(`Subject: ${row.subject}`);
   
-  // Clothing details
   const isClothing = ["T-Shirts", "Sweatshirts & Hoodies"].includes(row.category || "");
   if (isClothing) {
     if (row.sleeve_length) parts.push(`Sleeve: ${row.sleeve_length}`);
@@ -368,7 +370,6 @@ const getAttributesSummary = (row: RowData) => {
     if (row.clothing_style) parts.push(`Style: ${row.clothing_style}`);
   }
   
-  // Mug details
   const isMug = (row.category || "") === "Mugs & Drinkware";
   if (isMug) {
     if (row.capacity) parts.push(`Capacity: ${row.capacity}`);
@@ -376,7 +377,6 @@ const getAttributesSummary = (row: RowData) => {
     if (row.microwave_safe === "true") parts.push(`Microwave Safe`);
   }
   
-  // Art details
   const isArt = ["Posters & Prints", "Digital Prints", "Wall Art"].includes(row.category || "");
   if (isArt) {
     if (row.orientation) parts.push(`Orientation: ${row.orientation}`);
@@ -397,9 +397,8 @@ const ATTRIBUTE_KEYS = [
 const parseAttributesSummary = (summaryText: string): Partial<RowData> => {
   const result: Partial<RowData> = {};
 
-  const cleanText = summaryText ? summaryText.replace("âš™ï¸", "").replace("Configure...", "").trim() : "";
+  const cleanText = summaryText ? summaryText.replace("âš™ï¸ ", "").replace("Configure...", "").trim() : "";
   if (!cleanText) {
-    // Clear all attributes
     for (const key of ATTRIBUTE_KEYS) {
       result[key] = "";
     }
@@ -410,7 +409,6 @@ const parseAttributesSummary = (summaryText: string): Partial<RowData> => {
 
   const parts = cleanText.split("|").map(p => p.trim());
   
-  // If the summary is for Mugs, we can default dishwasher/microwave safe to false unless explicitly seen
   const isMugSummary = cleanText.toLowerCase().includes("capacity:");
   if (isMugSummary) {
     result.dishwasher_safe = "false";
@@ -578,7 +576,6 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
     });
   }, []);
 
-  // Update columns when sheet changes
   React.useEffect(() => {
     if (workstation === "amazon") {
       setColumns(AMAZON_COLUMNS);
@@ -587,7 +584,6 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
     }
   }, [sheet, workstation]);
 
-  // Initialize with empty rows (avoids Next.js hydration mismatch)
   const [data, setData] = useState<RowData[]>(() => {
     if (workstation === "amazon") {
       return Array.from({ length: 50 }).map(() => ({ ...emptyRowAmazon } as RowData));
@@ -595,7 +591,6 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
     return Array.from({ length: 50 }).map(() => ({ ...(sheet === "digital" ? emptyRowDigital : emptyRowPhysical) }));
   });
 
-  // Load from local storage AFTER initial render and when sheet changes
   const getStorageKey = (ws: "etsy" | "amazon", sType: "digital" | "physical") => {
     if (ws === "amazon") {
       return "workstation_v2_grid_data_amazon";
@@ -606,7 +601,6 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
   React.useEffect(() => {
     setIsDataLoaded(false);
     
-    // Migrate old keys
     if (typeof window !== "undefined") {
       const oldDigital = localStorage.getItem("workstation_v2_grid_data");
       const oldPhysical = localStorage.getItem("workstation_v2_grid_data_physical");
@@ -649,7 +643,6 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
   }, [sheet, workstation]);
 
   const dataRef = React.useRef(data);
-  // Keep the ref strictly synchronized with the state
   React.useEffect(() => {
     dataRef.current = data;
   }, [data]);
@@ -665,7 +658,6 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
     rows = rows.filter(row => dataRef.current[row]?.folder || dataRef.current[row]?.title || dataRef.current[row]?.context);
     if (rows.length === 0) return;
     
-    // Validation
     for (const row of rows) {
       const rowData = dataRef.current[row];
       if (action.startsWith('update_') && !rowData.listing_id) {
@@ -750,7 +742,6 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
       } finally {
         setTaskQueue(prev => prev.filter(t => t.id !== currentTask.id));
         
-        // Delay to avoid hitting API rate limits if there are more tasks
         if (taskQueue.length > 1) {
           await new Promise(resolve => setTimeout(resolve, 1000));
         }
@@ -761,7 +752,6 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
     processNext();
   }, [taskQueue, triggerAIGeneration, triggerAmazonAIGeneration, triggerEtsyPush, triggerAmazonPush, sheet, workstation]);
 
-  // Persist to local storage with a 500ms debounce (ONLY after initial load)
   React.useEffect(() => {
     if (!isDataLoaded) return;
     
@@ -772,7 +762,6 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
     return () => clearTimeout(handler);
   }, [data, isDataLoaded, sheet, workstation]);
 
-  // Ensure data isn't lost if the tab is closed before the 500ms debounce fires
   React.useEffect(() => {
     const handleBeforeUnload = () => {
       const key = getStorageKey(workstation, sheetRef.current);
@@ -785,8 +774,19 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
   const getCellContent = useCallback(
     (cell: Item): GridCell => {
       const [col, row] = cell;
+      const columnDef = columns[col];
+      
+      if (!columnDef) {
+          return {
+              kind: GridCellKind.Text,
+              allowOverlay: false,
+              displayData: "",
+              data: "",
+          } as TextCell;
+      }
+      
       const dataRow = dataRef.current[row];
-      const columnId = columns[col].id as keyof typeof dataRow;
+      const columnId = columnDef.id as keyof typeof dataRow;
 
       if (!dataRow) {
           return {
@@ -856,7 +856,7 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
             allowOverlay: false,
             readonly: true,
             data: `${enabledCombs.length} variants`,
-            displayData: workstation === "amazon" ? `${enabledCombs.length} Variants (${priceStr})` : `âš™ï¸ ${enabledCombs.length} Variants (${priceStr})`,
+            displayData: workstation === "amazon" ? `${enabledCombs.length} Variants (${priceStr})` : `âš™ï¸  ${enabledCombs.length} Variants (${priceStr})`,
             themeOverride: {
               baseFontStyle: "bold 12px Inter, sans-serif",
               textDark: "#2b52d6",
@@ -870,7 +870,7 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
             allowOverlay: false,
             readonly: true,
             data: isEmptyRow ? "" : "Configure",
-            displayData: isEmptyRow ? "" : workstation === "amazon" ? "Configure..." : "âš™ï¸ Configure...",
+            displayData: isEmptyRow ? "" : workstation === "amazon" ? "Configure..." : "âš™ï¸  Configure...",
             themeOverride: isEmptyRow ? undefined : {
               textDark: "#64748b",
               bgCell: "#f8fafc"
@@ -879,7 +879,6 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
         }
       }
 
-      // Special rendering for Price column under variations
       if (columnId === "price") {
          if (hasActiveVariations && enabledCombs.length > 0) {
             const prices = enabledCombs.map((c: VariationCombination) => parseFloat(c.price || "0") || parseFloat(dataRow.price || "0") || 0.0);
@@ -899,7 +898,6 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
          }
       }
 
-      // Special rendering for Quantity column under variations
       if (columnId === "quantity") {
          if (hasActiveVariations && enabledCombs.length > 0) {
             const totalQty = enabledCombs.reduce((sum: number, c: VariationCombination) => sum + (parseInt(c.quantity || "0") || parseInt(dataRow.quantity || "0") || 0), 0);
@@ -921,7 +919,6 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
         const cacheKey = urlArray.join(",");
         
         if (!imageCache[cacheKey]) {
-           // LRU-lite limit to prevent memory leak
            const keys = Object.keys(imageCache);
            if (keys.length > 200) delete imageCache[keys[0]];
 
@@ -953,7 +950,6 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
         } as GridCell;
       }
 
-      // Clean visual structure for Video and Digital File columns
       if (columnId === "video" || columnId === "digital_file") {
         if (!value) {
            return {
@@ -998,9 +994,7 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
         } as GridCell;
       }
 
-      // Visual State Machine for the AI Pipeline
       if (columnId === "status") {
-         // Don't show status pills on completely blank rows
          if (!value && !dataRow.folder && !dataRow.context) {
              return { kind: GridCellKind.Text, data: "", allowOverlay: true, displayData: "" } as GridCell;
          }
@@ -1009,33 +1003,33 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
          const isLoading = state === "Generating..." || state === "Pushing...";
 
          if (isLoading) {
-            const textColor = "#b45309"; // amber-700
+            const textColor = "#b45309";
             return {
                kind: GridCellKind.Text,
                allowOverlay: false,
                readonly: true,
                data: state,
-               displayData: workstation === "amazon" ? state : `â³ ${state}`,
+               displayData: workstation === "amazon" ? state : `â ³ ${state}`,
                themeOverride: {
                   textDark: textColor,
                   textLight: textColor,
                   baseFontStyle: "bold 12px Inter, sans-serif",
-                  bgCell: "#fef3c7" // amber shading
+                  bgCell: "#fef3c7"
                }
             } as GridCell;
          }
 
-         let textColor = "#4b5563"; // gray-600
-         let bgCell = "#f3f4f6"; // gray-100
+         let textColor = "#4b5563";
+         let bgCell = "#f3f4f6";
          if (state === "Review") {
-            textColor = "#047857"; // emerald-700
-            bgCell = "#ecfdf5"; // emerald-50
+            textColor = "#047857";
+            bgCell = "#ecfdf5";
          } else if (state === "Published") {
-            textColor = "#15803d"; // green-700
-            bgCell = "#dcfce7"; // green-50
+            textColor = "#15803d";
+            bgCell = "#dcfce7";
          } else if (state === "Error") {
-            textColor = "#b91c1c"; // red-700
-            bgCell = "#fee2e2"; // red-50
+            textColor = "#b91c1c";
+            bgCell = "#fee2e2";
          }
 
          return {
@@ -1255,7 +1249,7 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
             allowOverlay: false,
             readonly: true,
             data: "",
-            displayData: isEmptyRow ? "" : "âš™ï¸ Configure...",
+            displayData: isEmptyRow ? "" : "âš™ï¸  Configure...",
             themeOverride: isEmptyRow ? undefined : {
               textDark: "#64748b",
               bgCell: "#f8fafc"
@@ -1420,9 +1414,7 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
       if (newValue.kind === GridCellKind.Text) {
         newStringValue = newValue.data;
       } else if (newValue.kind === GridCellKind.Image) {
-        // We receive the reordered array from our custom editor
         newStringValue = newValue.data.map(url => {
-           // Strip the origin back off so it stores cleanly in the DB as relative
            const origin = window.location.origin;
            return url.startsWith(origin) ? url.substring(origin.length) : url;
         }).join(",");
@@ -1441,10 +1433,8 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
         }
       }
 
-      // Mutate the ref immediately for any synchronous callbacks (like the status fetch below)
       const newDataArray = [...dataRef.current];
       
-      // Expand grid if editing outside current bounds
       while (row >= newDataArray.length) {
         newDataArray.push({ ...(sheet === "digital" ? emptyRowDigital : emptyRowPhysical) });
       }
@@ -1455,9 +1445,6 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
       };
       dataRef.current = newDataArray;
       setData(newDataArray);
-
-
-
     },
     [columns, sheet, setData, workstation]
   );
@@ -1541,7 +1528,6 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
         return newData;
       });
 
-      // If pasting exactly one folder name, trigger the automation
       if (
         workstation === "etsy" &&
         values.length === 1 &&
@@ -1625,7 +1611,6 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
       setData((prev) => {
         const newData = [...prev];
 
-        // 1. Delete all selected regions
         if (selection.current) {
           const ranges = selection.current.rangeStack && selection.current.rangeStack.length > 0
             ? selection.current.rangeStack
@@ -1658,12 +1643,11 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
           }
         }
 
-        // 2. Clear full rows (instead of splicing them out entirely)
         if (selection.rows) {
           const selectedRows = typeof selection.rows.toArray === "function" ? selection.rows.toArray() : Array.from(selection.rows);
           for (const r of selectedRows) {
             if (typeof r !== "number" || r >= newData.length) continue;
-            newData[r] = { ...(workstation === "amazon" ? emptyRowAmazon : emptyRow) } as RowData;
+            newData[r] = { ...(workstation === "amazon" ? emptyRowAmazon : (sheet === "digital" ? emptyRowDigital : emptyRowPhysical)) } as RowData;
             didDelete = true;
             for (let c = 0; c < columns.length; c++) {
               cellsToUpdate.push({ cell: [c, r] });
@@ -1671,7 +1655,6 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
           }
         }
 
-        // 3. Delete full columns
         if (selection.columns) {
           const selectedCols = typeof selection.columns.toArray === "function" ? selection.columns.toArray() : Array.from(selection.columns);
           for (let r = 0; r < newData.length; r++) {
@@ -1716,7 +1699,6 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
     }
   }, []);
 
-  // Sync zoom changes manually at the document level to prevent native page zoom
   React.useEffect(() => {
     const handleNativeWheel = (e: WheelEvent) => {
       if (e.ctrlKey || e.metaKey) {
@@ -1794,7 +1776,6 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
     dataRef.current = newData;
     setData(newData);    setIsAmazonImporterOpen(false);
 
-    // Scan found images and map them to images column
     rowsToScan.forEach(({ rowIndex, folderName }) => {
       if (!folderName) return;
       fetch(`/api/assets?folder=${encodeURIComponent(folderName.trim())}&type=amazon`)
@@ -1923,7 +1904,6 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
           />
         )}
       </div>
-      {/* Bottom Sheet Tabs Bar */}
       {workstation === "etsy" && (
         <div className="flex-none h-10 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 flex items-center justify-between px-3 select-none">
         <div className="flex items-start gap-1 h-full -mt-[1px]">
@@ -1957,7 +1937,6 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
       </div>
       )}
 
-      {/* Render the independent Custom Image Editor completely outside the grid */}
       {globalImageEditor && (
         <CustomImageEditor 
           urls={globalImageEditor.urls}
@@ -1979,7 +1958,6 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
         />
       )}
 
-      {/* Render the independent Attributes Drawer completely outside the grid */}
       {globalAttributesEditor !== null && (
         <AttributesDrawer 
           row={globalAttributesEditor.row}
@@ -1999,9 +1977,6 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
         />
       )}
 
-
-
-      {/* Folder Importer Modal */}
       {isImporterOpen && (
         <FolderImporterModal 
           sheetType={sheet}
@@ -2041,6 +2016,10 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
                 row.framing = preset.framing || "";
                 row.aspect_ratio = preset.aspect_ratio || "";
                 row.graphic = preset.graphic || "";
+                row.enable_pod = preset.enable_pod || false;
+                row.pod_blueprint_id = preset.pod_blueprint_id;
+                row.pod_print_provider_id = preset.pod_print_provider_id;
+                row.pod_position = preset.pod_position;
                 row.variations = preset.variations;
               }
               return row;
@@ -2082,7 +2061,6 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
         />
       )}
 
-      {/* Bulk Action Toolbar */}
       {(showGenerateMenu || showUpdateMenu) && (
         <div className="fixed inset-0 z-[998]" onClick={() => { setShowGenerateMenu(false); setShowUpdateMenu(false); }} />
       )}
@@ -2166,8 +2144,7 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
           <div className="w-px h-5 bg-blue-500 mx-1"></div>
           
           <button onClick={() => {
-             const fakeSelection = { rows: { toArray: () => selectedRowsList } };
-             // @ts-expect-error - bypassing generic type
+             const fakeSelection = { rows: { toArray: () => selectedRowsList } } as any;
              onDelete(fakeSelection);
              setGridSelection(undefined);
           }} className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium hover:bg-red-600 transition-colors" title="Delete Selected Rows">
@@ -2179,7 +2156,6 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
         </div>
       )}
 
-      {/* Task Queue Status */}
       {taskQueue.length > 0 && (
         <div className="fixed bottom-6 right-6 bg-[#2b52d6] border border-blue-500 text-white shadow-2xl flex items-center p-3 px-5 z-[999] animate-in slide-in-from-bottom-10 fade-in duration-300 gap-4 min-w-[300px]">
           <div className="flex-1 flex flex-col gap-1.5">
@@ -2209,7 +2185,6 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
         </div>
       )}
 
-      {/* Variations Editor Side Drawer */}
       {globalVariationsEditor !== null && (
          <VariationsDrawer 
             row={globalVariationsEditor.row} 
@@ -2219,10 +2194,8 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
          />
       )}
 
-      {/* Preset Manager Modal */}
       {showPresets && <PresetManagerModal onClose={() => setShowPresets(false)} sheetType={sheet} />}
 
-      {/* Amazon Preset Manager Modal */}
       {showAmazonPresets && (
         <AmazonPresetManagerModal 
           onClose={() => setShowAmazonPresets(false)} 
@@ -2352,34 +2325,34 @@ function AttributesDrawer({ row, rowData, onClose, setData }: AttributesDrawerPr
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onClose]);
 
-  if (!rowData) return null;
-
   const [formData, setFormData] = useState({
-    primary_color: rowData.primary_color || "",
-    secondary_color: rowData.secondary_color || "",
-    materials: rowData.materials || "",
-    occasion: rowData.occasion || "",
-    celebration: rowData.celebration || "",
-    sleeve_length: rowData.sleeve_length || "",
-    neckline: rowData.neckline || "",
-    clothing_style: rowData.clothing_style || "",
-    capacity: rowData.capacity || "",
-    dishwasher_safe: rowData.dishwasher_safe || "false",
-    microwave_safe: rowData.microwave_safe || "false",
-    orientation: rowData.orientation || "",
-    framing: rowData.framing || "",
-    aspect_ratio: rowData.aspect_ratio || "",
-    graphic: rowData.graphic || "",
-    room: rowData.room || "",
-    home_style: rowData.home_style || "",
-    can_be_personalized: rowData.can_be_personalized || "",
+    primary_color: rowData?.primary_color || "",
+    secondary_color: rowData?.secondary_color || "",
+    materials: rowData?.materials || "",
+    occasion: rowData?.occasion || "",
+    celebration: rowData?.celebration || "",
+    sleeve_length: rowData?.sleeve_length || "",
+    neckline: rowData?.neckline || "",
+    clothing_style: rowData?.clothing_style || "",
+    capacity: rowData?.capacity || "",
+    dishwasher_safe: rowData?.dishwasher_safe || "false",
+    microwave_safe: rowData?.microwave_safe || "false",
+    orientation: rowData?.orientation || "",
+    framing: rowData?.framing || "",
+    aspect_ratio: rowData?.aspect_ratio || "",
+    graphic: rowData?.graphic || "",
+    room: rowData?.room || "",
+    home_style: rowData?.home_style || "",
+    can_be_personalized: rowData?.can_be_personalized || "",
   });
 
   const [isMaterialsOpen, setIsMaterialsOpen] = useState(false);
 
   const [selectedSubjects, setSelectedSubjects] = useState<string[]>(() =>
-    (rowData.subject || "").split(",").map(s => s.trim()).filter(Boolean)
+    (rowData?.subject || "").split(",").map((s: string) => s.trim()).filter(Boolean)
   );
+
+  if (!rowData) return null;
 
   const toggleSubject = (sub: string) => {
     if (selectedSubjects.includes(sub)) {

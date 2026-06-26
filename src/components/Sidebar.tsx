@@ -8,6 +8,7 @@ import {
   ShoppingCart,
   Check, 
   ChevronDown, 
+  ChevronUp,
   LayoutGrid, 
   Image as ImageIcon,
   Settings
@@ -191,41 +192,15 @@ export default function Sidebar({
       <div className="w-64 h-full border-r border-zinc-200 bg-white flex flex-col transition-all duration-300 relative z-10">
         
         {/* Workstation Selection Header */}
-        <div className="flex items-center justify-between p-3 border-b border-zinc-200">
-          <div className="relative flex-1">
+        <div className="relative flex items-center justify-between p-3 border-b border-zinc-200">
+          <div className="flex-1">
             <button
               onClick={() => setWorkstationDropdownOpen((o) => !o)}
-              className="flex items-center gap-1 text-sm font-semibold text-zinc-800 hover:text-blue-500 transition-colors"
+              className="flex items-center gap-1.5 text-[15px] font-bold text-zinc-900 hover:text-blue-600 transition-colors tracking-tight outline-none"
             >
               <span>{workstation === "etsy" ? "Etsy Workstation" : "Amazon Workstation"}</span>
-              <ChevronDown size={14} className="opacity-60" />
+              <ChevronDown size={14} className={`transition-transform duration-200 ${workstationDropdownOpen ? 'rotate-180' : ''}`} />
             </button>
-            
-            {workstationDropdownOpen && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setWorkstationDropdownOpen(false)} />
-                <div className="absolute left-0 top-full mt-1.5 z-50 bg-white border border-zinc-200 rounded-none shadow-lg py-1 w-48">
-                  <button
-                    onClick={() => {
-                      setWorkstation?.("etsy");
-                      setWorkstationDropdownOpen(false);
-                    }}
-                    className={`w-full text-left px-3 py-2 text-xs hover:bg-blue-50 ${workstation === "etsy" ? "text-blue-600 font-semibold" : "text-zinc-700"}`}
-                  >
-                    Etsy Workstation
-                  </button>
-                  <button
-                    onClick={() => {
-                      setWorkstation?.("amazon");
-                      setWorkstationDropdownOpen(false);
-                    }}
-                    className={`w-full text-left px-3 py-2 text-xs hover:bg-blue-50 ${workstation === "amazon" ? "text-blue-600 font-semibold" : "text-zinc-700"}`}
-                  >
-                    Amazon Workstation
-                  </button>
-                </div>
-              </>
-            )}
           </div>
           <button 
             onClick={() => handleSetIsOpen(false)}
@@ -233,6 +208,32 @@ export default function Sidebar({
           >
             <ChevronLeft size={16} />
           </button>
+          
+          {workstationDropdownOpen && (
+            <>
+              <div className="fixed inset-0 z-40" onClick={() => setWorkstationDropdownOpen(false)} />
+              <div className="absolute left-0 right-0 top-full z-50 bg-white border-b border-zinc-200 py-1 w-full animate-in fade-in slide-in-from-top-1 duration-200 rounded-none">
+                <button
+                  onClick={() => {
+                    setWorkstation?.("etsy");
+                    setWorkstationDropdownOpen(false);
+                  }}
+                  className={`w-full text-left px-3 py-2 text-sm transition-colors ${workstation === "etsy" ? "bg-blue-50/50 text-blue-700 font-medium" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"}`}
+                >
+                  Etsy Workstation
+                </button>
+                <button
+                  onClick={() => {
+                    setWorkstation?.("amazon");
+                    setWorkstationDropdownOpen(false);
+                  }}
+                  className={`w-full text-left px-3 py-2 text-sm transition-colors ${workstation === "amazon" ? "bg-blue-50/50 text-blue-700 font-medium" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"}`}
+                >
+                  Amazon Workstation
+                </button>
+              </div>
+            </>
+          )}
         </div>
 
         {/* View selection tabs */}
@@ -256,10 +257,10 @@ export default function Sidebar({
         </div>
         
         {/* Stores Panel */}
-        <div className="flex-1 overflow-y-auto p-3">
+        <div className="flex-1 overflow-y-auto p-3 flex flex-col justify-end">
           {workstation === "etsy" ? (
             hasStores && activeStore ? (
-              <div className="mb-3">
+              <div className="mb-1">
                 <div className="relative mb-1">
                   <button
                     onClick={() => setStoreDropdownOpen((o) => !o)}
@@ -274,13 +275,13 @@ export default function Sidebar({
                       {activeStore.name}
                     </span>
                     <div className="w-1.5 h-1.5 bg-green-500 shrink-0" />
-                    <ChevronDown size={11} className={`text-zinc-400 shrink-0 transition-transform ${storeDropdownOpen ? "rotate-180" : ""}`} />
+                    <ChevronUp size={11} className={`text-zinc-400 shrink-0 transition-transform ${storeDropdownOpen ? "rotate-180" : ""}`} />
                   </button>
 
                   {storeDropdownOpen && (
                     <>
                       <div className="fixed inset-0 z-40" onClick={() => setStoreDropdownOpen(false)} />
-                      <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-white border border-zinc-200 rounded-none py-1 overflow-hidden">
+                      <div className="absolute left-0 right-0 bottom-full mb-1 z-50 bg-white border border-zinc-200 rounded-none py-1 overflow-hidden">
                         {stores.map((store) => (
                           <div
                             key={store.id}
@@ -308,7 +309,7 @@ export default function Sidebar({
                 </div>
               </div>
             ) : (
-              <div className="mb-3 rounded-none border border-dashed border-zinc-200 p-4 text-center">
+              <div className="mb-1 rounded-none border border-dashed border-zinc-200 p-4 text-center">
                 <ShoppingBag size={20} className="text-zinc-300 mx-auto mb-2" />
                 <p className="text-xs font-medium text-zinc-600 mb-1">No Etsy store connected</p>
                 <p className="text-[11px] text-zinc-400 mb-3 leading-tight">Connect your store to enable automated publishing</p>
@@ -323,7 +324,7 @@ export default function Sidebar({
           ) : (
             // Amazon Workstation store selection
             hasAmazonStores && activeAmazonStore ? (
-              <div className="mb-3">
+              <div className="mb-1">
                 <div className="relative mb-1">
                   <button
                     onClick={() => setStoreDropdownOpen((o) => !o)}
@@ -338,13 +339,13 @@ export default function Sidebar({
                       {activeAmazonStore.name}
                     </span>
                     <div className="w-1.5 h-1.5 bg-green-500 shrink-0" />
-                    <ChevronDown size={11} className={`text-zinc-400 shrink-0 transition-transform ${storeDropdownOpen ? "rotate-180" : ""}`} />
+                    <ChevronUp size={11} className={`text-zinc-400 shrink-0 transition-transform ${storeDropdownOpen ? "rotate-180" : ""}`} />
                   </button>
 
                   {storeDropdownOpen && (
                     <>
                       <div className="fixed inset-0 z-40" onClick={() => setStoreDropdownOpen(false)} />
-                      <div className="absolute left-0 right-0 top-full mt-1 z-50 bg-white border border-zinc-200 rounded-none py-1 overflow-hidden">
+                      <div className="absolute left-0 right-0 bottom-full mb-1 z-50 bg-white border border-zinc-200 rounded-none py-1 overflow-hidden">
                         {amazonStores.map((store) => (
                           <div
                             key={store.id}
@@ -372,7 +373,7 @@ export default function Sidebar({
                 </div>
               </div>
             ) : (
-              <div className="mb-3 rounded-none border border-dashed border-zinc-200 p-4 text-center">
+              <div className="mb-1 rounded-none border border-dashed border-zinc-200 p-4 text-center">
                 <ShoppingCart size={20} className="text-zinc-300 mx-auto mb-2" />
                 <p className="text-xs font-medium text-zinc-600 mb-1">No Amazon store connected</p>
                 <p className="text-[11px] text-zinc-400 mb-3 leading-tight">Connect your store to map product category presets</p>
