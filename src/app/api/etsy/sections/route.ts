@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
-import { getEtsyRefreshToken, saveEtsyRefreshToken } from '@/lib/etsyTokenStore';
+import { getEtsyRefreshToken, saveEtsyRefreshToken, getEtsyShopId } from '@/lib/etsyTokenStore';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,7 +9,7 @@ export async function GET() {
     const apiKey = process.env.ETSY_API_KEY;
     const sharedSecret = process.env.ETSY_SHARED_SECRET;
     const refreshToken = getEtsyRefreshToken();
-    const shopId = process.env.ETSY_SHOP_ID;
+    const shopId = getEtsyShopId() || process.env.ETSY_SHOP_ID;
 
     if (!apiKey || !sharedSecret || !refreshToken || !shopId) {
       return NextResponse.json({ error: 'Missing Etsy API credentials in .env.local' }, { status: 400 });

@@ -50,9 +50,34 @@ export async function GET(request: Request) {
     });
 
     const newRefreshToken = tokenRes.data.refresh_token;
+    const accessToken = tokenRes.data.access_token;
+    
+    let shopId: string | undefined = undefined;
+
+    // Dynamically fetch the shop ID from the authorized access token
+    if (accessToken) {
+      try {
+        // Etsy access tokens are in the format {user_id}.{base64}
+        const userId = accessToken.split('.')[0];
+        
+        // Fetch the user's shops to get the shop ID
+        const shopRes = await axios.get(`https://api.etsy.com/v3/application/users/${userId}/shops`, {
+          headers: {
+            'x-api-key': apiKey,
+            'Authorization': `Bearer ${accessToken}`
+          }
+        });
+        
+        if (shopRes.data && shopRes.data.shop_id) {
+          shopId = shopRes.data.shop_id.toString();
+        }
+      } catch (err) {
+        console.error("Failed to dynamically fetch Etsy shop ID during OAuth callback:", err);
+      }
+    }
 
     if (newRefreshToken) {
-      saveEtsyRefreshToken(newRefreshToken);
+      saveEtsyRefreshToken(newRefreshToken, shopId);
     }
 
     // Redirect the user back to the main app dashboard with a success flag

@@ -5,6 +5,7 @@ const TOKENS_FILE = path.join(process.cwd(), 'tokens.json');
 
 export interface EtsyTokens {
   refreshToken: string;
+  shopId?: string;
 }
 
 export function getEtsyRefreshToken(): string {
@@ -22,9 +23,36 @@ export function getEtsyRefreshToken(): string {
   return process.env.ETSY_REFRESH_TOKEN || '';
 }
 
-export function saveEtsyRefreshToken(refreshToken: string): void {
+export function getEtsyShopId(): string | null {
   try {
-    fs.writeFileSync(TOKENS_FILE, JSON.stringify({ refreshToken }, null, 2), 'utf-8');
+    if (fs.existsSync(TOKENS_FILE)) {
+      const fileContent = fs.readFileSync(TOKENS_FILE, 'utf-8');
+      const data = JSON.parse(fileContent);
+      if (data.shopId) {
+        return data.shopId;
+      }
+    }
+  } catch (err) {
+    console.warn("Failed to read shopId from tokens.json:", err);
+  }
+  return null;
+}
+
+export function saveEtsyRefreshToken(refreshToken: string, shopId?: string): void {
+  try {
+    let existingData = {};
+    if (fs.existsSync(TOKENS_FILE)) {
+      try {
+        existingData = JSON.parse(fs.readFileSync(TOKENS_FILE, 'utf-8'));
+      } catch {}
+    }
+    
+    const newData: any = { ...existingData, refreshToken };
+    if (shopId) {
+      newData.shopId = shopId;
+    }
+    
+    fs.writeFileSync(TOKENS_FILE, JSON.stringify(newData, null, 2), 'utf-8');
   } catch (err) {
     console.error("Failed to save tokens.json:", err);
   }

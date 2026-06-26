@@ -5,7 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { resolvePublicAssetPath } from '@/lib/serverPaths';
 import sharp from 'sharp';
-import { getEtsyRefreshToken, saveEtsyRefreshToken } from '@/lib/etsyTokenStore';
+import { getEtsyRefreshToken, saveEtsyRefreshToken, getEtsyShopId } from '@/lib/etsyTokenStore';
 
 // --- AXIOS RETRY HELPER FOR RATE LIMITS ---
 async function axiosWithRetry(config: any, retries = 3, delay = 2000): Promise<any> {
@@ -137,7 +137,7 @@ export async function POST(req: Request) {
     const apiKey = process.env.ETSY_API_KEY;
     const sharedSecret = process.env.ETSY_SHARED_SECRET;
     const refreshToken = getEtsyRefreshToken();
-    shopId = process.env.ETSY_SHOP_ID || '';
+    shopId = getEtsyShopId() || process.env.ETSY_SHOP_ID || '';
 
     if (!apiKey || !sharedSecret || !refreshToken || !shopId) {
       return NextResponse.json({ error: 'Missing Etsy API credentials in .env.local' }, { status: 400 });
