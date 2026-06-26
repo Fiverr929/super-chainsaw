@@ -1843,13 +1843,14 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
           </button>
         </div>
       </div>
-      <div className="flex-1 w-full border border-zinc-200 dark:border-zinc-800 rounded-none overflow-hidden relative flex flex-col">
-        {fontsLoaded && (
-          <DataEditor
-            width="100%"
-            height="100%"
-            ref={gridRef}
-            gridSelection={gridSelection}
+      <div className="flex-1 w-full border border-zinc-200 dark:border-zinc-800 rounded-none overflow-hidden relative">
+        <div style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}>
+          {fontsLoaded && (
+            <DataEditor
+              width="100%"
+              height="100%"
+              ref={gridRef}
+              gridSelection={gridSelection}
             onGridSelectionChange={setGridSelection}
             theme={{
               bgHeader: "#f8fafc",
@@ -1904,7 +1905,8 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
                return null;
             }}
           />
-        )}
+          )}
+        </div>
       </div>
       {workstation === "etsy" && (
         <div className="flex-none h-10 border-t border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900 flex items-center justify-between px-3 select-none">
