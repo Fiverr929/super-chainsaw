@@ -1846,6 +1846,8 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
       <div className="flex-1 w-full border border-zinc-200 dark:border-zinc-800 rounded-none overflow-hidden relative flex flex-col">
         {fontsLoaded && (
           <DataEditor
+            width="100%"
+            height="100%"
             ref={gridRef}
             gridSelection={gridSelection}
             onGridSelectionChange={setGridSelection}
