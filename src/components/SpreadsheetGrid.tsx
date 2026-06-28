@@ -2462,13 +2462,13 @@ function AttributesDrawer({ row, rowData, onClose, setData }: AttributesDrawerPr
                 <span className="truncate">
                   {formData.materials || "Select materials..."}
                 </span>
-                <ChevronDown size={14} className="text-zinc-500" />
+                <ChevronDown size={14} className={`text-zinc-500 transition-transform ${isMaterialsOpen ? 'rotate-180' : ''}`} />
               </div>
               
               {isMaterialsOpen && (
                 <>
                   <div className="fixed inset-0 z-10" onClick={() => setIsMaterialsOpen(false)} />
-                  <div className="absolute left-0 mt-[54px] w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-750 shadow-lg z-20 max-h-60 overflow-y-auto p-2 space-y-1">
+                  <div className="absolute left-0 bottom-full mb-1 w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-750 shadow-lg z-20 max-h-60 overflow-y-auto p-2 space-y-1">
                     {["Cotton", "Polyester", "Ceramic", "Paper", "Canvas", "Wood", "Metal", "Glass", "Enamel", "Plastic", "Vinyl", "Leather"].map(mat => {
                       const selectedList = (formData.materials || "").split(",").map(s => s.trim()).filter(Boolean);
                       const isChecked = selectedList.includes(mat);

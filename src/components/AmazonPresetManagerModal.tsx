@@ -973,11 +973,11 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
                         <div className="relative flex flex-col gap-1">
                           <label className="text-xs font-semibold text-zinc-650 dark:text-zinc-400">Sport Type (up to 2)</label>
                           <button type="button" onClick={() => setIsSportTypeOpen(!isSportTypeOpen)} className="w-full px-3 py-2 text-sm border border-zinc-300 dark:border-zinc-700 bg-white dark:bg-zinc-900 text-zinc-900 dark:text-white flex justify-between items-center min-h-[38px]">
-                            <span className="truncate">{editForm.sport_type || "None"}</span><ChevronDown size={14} className="text-zinc-500" />
+                            <span className="truncate">{editForm.sport_type || "None"}</span><ChevronDown size={14} className={`text-zinc-500 transition-transform ${isSportTypeOpen ? 'rotate-180' : ''}`} />
                           </button>
                           {isSportTypeOpen && (<>
                             <div className="fixed inset-0 z-10" onClick={() => setIsSportTypeOpen(false)} />
-                            <div className="absolute top-full left-0 mt-1 w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 shadow-lg z-20 max-h-60 overflow-y-auto p-2 space-y-1">
+                            <div className="absolute bottom-full left-0 mb-1 w-full bg-white dark:bg-zinc-900 border border-zinc-300 dark:border-zinc-700 shadow-lg z-20 max-h-60 overflow-y-auto p-2 space-y-1">
                               {["Auto", "None", ...amazonOptions.sport_type].map(option => {
                                 const selected = editForm.sport_type === option || editForm.sport_type.split(",").map(value => value.trim()).includes(option);
                                 return <label key={option} className="flex items-center gap-2 px-2 py-1.5 hover:bg-zinc-100 dark:hover:bg-zinc-800 cursor-pointer text-sm">
