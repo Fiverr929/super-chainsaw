@@ -15,7 +15,6 @@ import {
 } from "lucide-react";
 import { usePathname } from "next/navigation";
 import SettingsModal from "./SettingsModal";
-import { ThemeToggle } from "./ThemeToggle";
 
 type Store = {
   id: string;
@@ -228,15 +227,12 @@ export default function Sidebar({
               <ChevronDown size={14} className={`transition-transform duration-200 ${workstationDropdownOpen ? 'rotate-180' : ''}`} />
             </button>
           </div>
-          <div className="flex items-center gap-1">
-            <ThemeToggle />
-            <button 
-              onClick={() => handleSetIsOpen(false)}
-              className="p-1.5 rounded-none hover:bg-zinc-100 dark:hover:bg-zinc-800 text-zinc-500"
-            >
-              <ChevronLeft size={16} />
-            </button>
-          </div>
+          <button 
+            onClick={() => handleSetIsOpen(false)}
+            className="p-1.5 rounded-none hover:bg-zinc-100 text-zinc-500"
+          >
+            <ChevronLeft size={16} />
+          </button>
           
           {workstationDropdownOpen && (
             <>
