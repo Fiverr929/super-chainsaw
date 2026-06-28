@@ -46,6 +46,8 @@ import { useAmazonPush } from "@/hooks/useAmazonPush";
 import { useAmazonAIPipeline } from "@/hooks/useAmazonAIPipeline";
 import { getAmazonPublishValidationError, planFolderImport } from "@/lib/listingWorkflow";
 import FolderImporterModal from "./FolderImporterModal";
+import { Theme as GlideTheme } from "@glideapps/glide-data-grid";
+import { useTheme } from "next-themes";
 import PresetManagerModal, { type Preset, PresetVariations, VariationCombination } from "./PresetManagerModal";
 import AmazonPresetManagerModal, { AmazonPreset } from "./AmazonPresetManagerModal";
 import AmazonDrawer, { AmazonDrawerType } from "./AmazonDrawer";
@@ -472,6 +474,7 @@ const parseAttributesSummary = (summaryText: string): Partial<RowData> => {
 export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?: "etsy" | "amazon" }) {
   const gridRef = useRef<DataEditorRef>(null);
   const [isMounted, setIsMounted] = useState(false);
+  const { theme: currentTheme } = useTheme();
   const [sheet, setSheet] = useState<"digital" | "physical">("digital");
 
   React.useEffect(() => {
@@ -1853,7 +1856,24 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
               ref={gridRef}
               gridSelection={gridSelection}
             onGridSelectionChange={setGridSelection}
-            theme={{
+            theme={currentTheme === 'dark' ? {
+              bgHeader: "#18181b",
+              bgHeaderHovered: "#27272a",
+              bgHeaderHasFocus: "#27272a",
+              textHeader: "#a1a1aa",
+              bgCell: "#09090b",
+              bgCellMedium: "#18181b",
+              textDark: "#f4f4f5",
+              textLight: "#a1a1aa",
+              accentColor: "#3b82f6",
+              accentLight: "rgba(59, 130, 246, 0.2)",
+              borderColor: "#27272a",
+              horizontalBorderColor: "#27272a",
+              headerBottomBorderColor: "#27272a",
+              roundingRadius: 0,
+              headerFontStyle: "600 13px Inter, sans-serif",
+              baseFontStyle: "13px Inter, sans-serif",
+            } as Partial<GlideTheme> : {
               bgHeader: "#f8fafc",
               bgHeaderHovered: "#f1f5f9",
               bgHeaderHasFocus: "#f1f5f9",
@@ -1862,7 +1882,6 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
               bgCellMedium: "#f8fafc",
               textDark: "#0f172a",
               textLight: "#64748b",
-              baseIconLight: "#94a3b8",
               accentColor: "#2b52d6",
               accentLight: "rgba(43, 82, 214, 0.1)",
               borderColor: "#e2e8f0",
@@ -1871,7 +1890,7 @@ export default function SpreadsheetGrid({ workstation = "etsy" }: { workstation?
               roundingRadius: 0,
               headerFontStyle: "600 13px Inter, sans-serif",
               baseFontStyle: "13px Inter, sans-serif",
-            } as Partial<Theme>}
+            } as Partial<GlideTheme>}
             rowMarkers="both"
             getCellContent={getCellContent}
             columns={columns}
