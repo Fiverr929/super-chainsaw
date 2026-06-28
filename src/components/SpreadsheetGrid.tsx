@@ -76,6 +76,7 @@ const DIGITAL_COLUMNS: GridColumn[] = [
 const PHYSICAL_COLUMNS: GridColumn[] = [
   { title: "Folder", id: "folder", width: 120 },
   { title: "Images", id: "images", width: 150 },
+  { title: "Design File", id: "digital_file", width: 150 },
   { title: "Category", id: "category", width: 150 },
   { title: "Video", id: "video", width: 120 },
   { title: "Status", id: "status", width: 100 },

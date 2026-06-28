@@ -7,6 +7,7 @@ import {
   getPrintifyShops, 
   getPrintifyVariants 
 } from "@/lib/printify";
+import { resolvePublicAssetPath } from "@/lib/serverPaths";
 import type { Preset } from "@/components/PresetManagerModal";
 import type { RowData } from "@/components/SpreadsheetGrid";
 
@@ -21,16 +22,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: "Missing preset or rowData" }, { status: 400 });
     }
 
-    // 1. Extract the design image (use the first image)
-    const imagesRaw = rowData.images || "";
-    const imagePaths = imagesRaw.split(",").map(i => i.trim()).filter(i => i);
-    if (imagePaths.length === 0) {
-      return NextResponse.json({ success: false, error: "No design image provided in the 'Images' column." }, { status: 400 });
+    // 1. Extract the design image
+    const designRaw = rowData.digital_file || rowData.images || "";
+    const designPaths = designRaw.split(",").map(i => i.trim()).filter(i => i);
+    if (designPaths.length === 0) {
+      return NextResponse.json({ success: false, error: "No design image provided. Please add it to the Design File or Images column." }, { status: 400 });
     }
-    const designFilePath = imagePaths[0]; // Take the first image as the design
+    
+    // Take the first file as the design
+    const relativeDesignPath = designPaths[0]; 
+    const designFilePath = resolvePublicAssetPath(relativeDesignPath);
 
-    if (!fs.existsSync(designFilePath)) {
-      return NextResponse.json({ success: false, error: `Image file not found: ${designFilePath}` }, { status: 400 });
+    if (!designFilePath || !fs.existsSync(designFilePath)) {
+      return NextResponse.json({ success: false, error: `Design file not found on server: ${relativeDesignPath}` }, { status: 400 });
     }
 
     // 2. Upload image to Printify
