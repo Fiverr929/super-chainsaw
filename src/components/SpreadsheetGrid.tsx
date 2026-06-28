@@ -84,6 +84,7 @@ const PHYSICAL_COLUMNS: GridColumn[] = [
  { title:"Listing ID", id:"listing_id", width: 120 },
  { title:"Context", id:"context", width: 200 },
  { title:"Shipping Profile", id:"shipping_profile", width: 180 },
+ { title:"Processing Profile ID", id:"readiness_state_id", width: 150 },
  { title:"Title", id:"title", width: 250 },
  { title:"Description", id:"description", width: 300 },
  { title:"Tags", id:"tags", width: 200 },
@@ -92,7 +93,6 @@ const PHYSICAL_COLUMNS: GridColumn[] = [
  { title:"Variations", id:"variations", width: 150 },
  { title:"Section", id:"section", width: 120 },
  { title:"Attributes", id:"attributes", width: 200 },
- { title:"Processing Profile ID", id:"readiness_state_id", width: 150 },
 ];
 
 export type RowData = {
@@ -854,7 +854,7 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  allowOverlay: false,
  readonly: true,
  data:`${enabledCombs.length} variants`,
- displayData: workstation ==="amazon"?`${enabledCombs.length} Variants (${priceStr})`:`âš™ï¸ ${enabledCombs.length} Variants (${priceStr})`,
+ displayData: `${enabledCombs.length} Variants (${priceStr})`,
  themeOverride: {
  baseFontStyle:"bold 12px Inter, sans-serif",
  textDark:"#2b52d6",
@@ -868,7 +868,7 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  allowOverlay: false,
  readonly: true,
  data: isEmptyRow ?"":"Configure",
- displayData: isEmptyRow ?"": workstation ==="amazon"?"Configure...":"âš™ï¸ Configure...",
+ displayData: isEmptyRow ? "" : "Configure...",
  themeOverride: isEmptyRow ? undefined : {
  textDark:"#64748b",
  bgCell:"#f8fafc"
@@ -1007,7 +1007,7 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  allowOverlay: false,
  readonly: true,
  data: state,
- displayData: workstation ==="amazon"? state :`â ³ ${state}`,
+ displayData: state,
  themeOverride: {
  textDark: textColor,
  textLight: textColor,
@@ -1247,7 +1247,7 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  allowOverlay: false,
  readonly: true,
  data:"",
- displayData: isEmptyRow ?"":"âš™ï¸ Configure...",
+ displayData: isEmptyRow ? "" : "Configure...",
  themeOverride: isEmptyRow ? undefined : {
  textDark:"#64748b",
  bgCell:"#f8fafc"
