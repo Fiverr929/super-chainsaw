@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { 
+import {
   ChevronLeft, 
   ChevronRight, 
   ShoppingBag, 
@@ -11,9 +11,9 @@ import {
   ChevronUp,
   LayoutGrid, 
   Image as ImageIcon,
-  Settings
+  Settings,
+  FileText
 } from "lucide-react";
-import { usePathname } from "next/navigation";
 import SettingsModal from "./SettingsModal";
 
 type Store = {
@@ -23,10 +23,10 @@ type Store = {
 };
 
 interface SidebarProps {
-  activeView?: "spreadsheet" | "image";
-  setActiveView?: (view: "spreadsheet" | "image") => void;
-  workstation?: "etsy" | "amazon";
-  setWorkstation?: (ws: "etsy" | "amazon") => void;
+  activeView?: "spreadsheet" | "image" | "pdf";
+  setActiveView?: (view: "spreadsheet" | "image" | "pdf") => void;
+  workstation?: "etsy" | "amazon" | "workspace";
+  setWorkstation?: (ws: "etsy" | "amazon" | "workspace") => void;
 }
 
 export default function Sidebar({ 
@@ -177,13 +177,21 @@ export default function Sidebar({
             >
               <ShoppingBag size={18} />
             </button>
-          ) : (
+          ) : workstation === "amazon" ? (
             <button 
               onClick={() => handleSetIsOpen(true)}
               className={`p-2 rounded-none transition-colors ${hasAmazonStores ? 'text-blue-500 bg-blue-50' : 'text-zinc-400 hover:bg-zinc-100'}`}
               title={hasAmazonStores ? `Amazon: ${activeAmazonStore?.name}` : "No Amazon Store"}
             >
               <ShoppingCart size={18} />
+            </button>
+          ) : (
+            <button 
+              onClick={() => handleSetIsOpen(true)}
+              className="p-2 rounded-none transition-colors text-blue-500 bg-blue-50"
+              title="Workspace"
+            >
+              <FileText size={18} />
             </button>
           )}
         </div>
@@ -223,7 +231,7 @@ export default function Sidebar({
               onClick={() => setWorkstationDropdownOpen((o) => !o)}
               className="flex items-center gap-1.5 text-[15px] font-bold text-zinc-900 hover:text-blue-600 transition-colors tracking-tight outline-none"
             >
-              <span>{workstation === "etsy" ? "Etsy Workstation" : "Amazon Workstation"}</span>
+              <span>{workstation === "etsy" ? "Etsy Manager" : workstation === "amazon" ? "Amazon Manager" : "Workspace"}</span>
               <ChevronDown size={14} className={`transition-transform duration-200 ${workstationDropdownOpen ? 'rotate-180' : ''}`} />
             </button>
           </div>
@@ -240,12 +248,21 @@ export default function Sidebar({
               <div className="absolute left-0 right-0 top-full z-50 bg-white border-b border-zinc-200 py-1 w-full animate-in fade-in slide-in-from-top-1 duration-200 rounded-none">
                 <button
                   onClick={() => {
+                    setWorkstation?.("workspace");
+                    setWorkstationDropdownOpen(false);
+                  }}
+                  className={`w-full text-left px-3 py-2 text-sm transition-colors ${workstation === "workspace" ? "bg-blue-50/50 text-blue-700 font-medium" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"}`}
+                >
+                  Workspace
+                </button>
+                <button
+                  onClick={() => {
                     setWorkstation?.("etsy");
                     setWorkstationDropdownOpen(false);
                   }}
                   className={`w-full text-left px-3 py-2 text-sm transition-colors ${workstation === "etsy" ? "bg-blue-50/50 text-blue-700 font-medium" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"}`}
                 >
-                  Etsy Workstation
+                  Etsy Manager
                 </button>
                 <button
                   onClick={() => {
@@ -254,7 +271,7 @@ export default function Sidebar({
                   }}
                   className={`w-full text-left px-3 py-2 text-sm transition-colors ${workstation === "amazon" ? "bg-blue-50/50 text-blue-700 font-medium" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"}`}
                 >
-                  Amazon Workstation
+                  Amazon Manager
                 </button>
               </div>
             </>
@@ -264,20 +281,34 @@ export default function Sidebar({
         {/* View selection tabs */}
         <div className="px-3 py-2 border-b border-zinc-200">
           <div className="space-y-1">
-            <button
-              onClick={() => setActiveView?.('spreadsheet')}
-              className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-none text-sm transition-colors ${activeView === 'spreadsheet' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-zinc-600 hover:bg-zinc-100'}`}
-            >
-              <LayoutGrid size={16} />
-              Spreadsheet
-            </button>
-            <button
-              onClick={() => setActiveView?.('image')}
-              className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-none text-sm transition-colors ${activeView === 'image' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-zinc-600 hover:bg-zinc-100'}`}
-            >
-              <ImageIcon size={16} />
-              Image Pipeline
-            </button>
+            {(workstation === "etsy" || workstation === "amazon") && (
+              <button
+                onClick={() => setActiveView?.('spreadsheet')}
+                className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-none text-sm transition-colors bg-blue-50 text-blue-600 font-medium`}
+              >
+                <LayoutGrid size={16} />
+                Spreadsheet
+              </button>
+            )}
+
+            {workstation === "workspace" && (
+              <>
+                <button
+                  onClick={() => setActiveView?.('pdf')}
+                  className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-none text-sm transition-colors ${activeView === 'pdf' || activeView !== 'image' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-zinc-600 hover:bg-zinc-100'}`}
+                >
+                  <FileText size={16} />
+                  PDF Manager
+                </button>
+                <button
+                  onClick={() => setActiveView?.('image')}
+                  className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-none text-sm transition-colors ${activeView === 'image' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-zinc-600 hover:bg-zinc-100'}`}
+                >
+                  <ImageIcon size={16} />
+                  Design Setup
+                </button>
+              </>
+            )}
           </div>
         </div>
         
@@ -346,7 +377,7 @@ export default function Sidebar({
                 </button>
               </div>
             )
-          ) : (
+          ) : workstation === "amazon" ? (
             // Amazon Workstation store selection
             hasAmazonStores && activeAmazonStore ? (
               <div className="mb-1">
@@ -410,6 +441,12 @@ export default function Sidebar({
                 </button>
               </div>
             )
+          ) : (
+            <div className="mb-1 rounded-none border border-dashed border-zinc-200 p-4 text-center">
+              <FileText size={20} className="text-zinc-300 mx-auto mb-2" />
+              <p className="text-xs font-medium text-zinc-600 mb-1">Workspace</p>
+              <p className="text-[11px] text-zinc-400 mb-3 leading-tight">Merge, split, and edit PDF files.</p>
+            </div>
           )}
         </div>
 

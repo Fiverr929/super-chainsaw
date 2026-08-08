@@ -3,6 +3,11 @@ import type { RowData } from '@/components/SpreadsheetGrid';
 import toast from 'react-hot-toast';
 import { getEtsyGridStorageKey } from '@/lib/listingWorkflow';
 
+type PrintifyVariant = {
+  title: string;
+  sku?: string;
+};
+
 export function useEtsyPush(
   dataRef: React.MutableRefObject<RowData[]>,
   setData: React.Dispatch<React.SetStateAction<RowData[]>>,
@@ -25,10 +30,9 @@ export function useEtsyPush(
                     actionType === "Update Digital Files" ? "files" : "all"
       };
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 180000); // 3 minute timeout
-
       const executeEtsyPush = (finalRowData: typeof rowDataToPush) => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 180000); // Etsy request only
         fetch('/api/etsy/push', {
           method: 'POST',
           signal: controller.signal,
@@ -136,7 +140,7 @@ export function useEtsyPush(
                      updatedRowData.variations.combinations = updatedRowData.variations.combinations.map(combo => {
                         const comboValues = Object.values(combo.values).map(v => String(v).toLowerCase().trim());
                         
-                        const matchedPrintifyVariant = printifyData.printify_product.variants.find((pv: any) => {
+                        const matchedPrintifyVariant = (printifyData.printify_product.variants as PrintifyVariant[]).find((pv) => {
                            const pvTitle = pv.title.toLowerCase();
                            // Ensure all combo values are in the printify title
                            return comboValues.every(cv => pvTitle.includes(cv));
@@ -152,10 +156,20 @@ export function useEtsyPush(
                  executeEtsyPush(updatedRowData);
               } else {
                  toast.error(`Printify Error: ${printifyData.error}`);
-                 const newData = [...dataRef.current];
-                 newData[row] = { ...newData[row], status: "Error" };
-                 dataRef.current = newData;
-                 setData(newData);
+                 if (sheetRef.current === sheetType) {
+                    const newData = [...dataRef.current];
+                    newData[row] = { ...newData[row], status: "Error" };
+                    dataRef.current = newData;
+                    setData(newData);
+                 } else {
+                    const key = getEtsyGridStorageKey(sheetType);
+                    const saved = localStorage.getItem(key);
+                    if (saved) {
+                       const parsed = JSON.parse(saved);
+                       parsed[row] = { ...parsed[row], status: "Error" };
+                       localStorage.setItem(key, JSON.stringify(parsed));
+                    }
+                 }
                  resolve();
               }
            })
@@ -163,6 +177,20 @@ export function useEtsyPush(
               toast.dismiss(`printify-${row}`);
               console.error(err);
               toast.error("Failed to connect to Printify");
+              if (sheetRef.current === sheetType) {
+                 const newData = [...dataRef.current];
+                 newData[row] = { ...newData[row], status: "Error" };
+                 dataRef.current = newData;
+                 setData(newData);
+              } else {
+                 const key = getEtsyGridStorageKey(sheetType);
+                 const saved = localStorage.getItem(key);
+                 if (saved) {
+                    const parsed = JSON.parse(saved);
+                    parsed[row] = { ...parsed[row], status: "Error" };
+                    localStorage.setItem(key, JSON.stringify(parsed));
+                 }
+              }
               resolve();
            });
         } else {

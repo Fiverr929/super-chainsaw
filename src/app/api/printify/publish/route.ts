@@ -79,8 +79,6 @@ export async function POST(req: NextRequest) {
     // For safety, if they didn't specify sizes, let's grab all available sizes for the requested colors.
     
     const matchedVariantIds: number[] = [];
-    const skuMap: Record<string, string> = {}; // To pass back to client for Etsy Push injection
-
     for (const v of availableVariants) {
       const vColor = v.options.color?.toLowerCase() || "";
       const vSize = v.options.size?.toLowerCase() || "";
@@ -125,8 +123,8 @@ export async function POST(req: NextRequest) {
       printify_product: product
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[Printify API Route Error]:", error);
-    return NextResponse.json({ success: false, error: error.message }, { status: 500 });
+    return NextResponse.json({ success: false, error: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }
 }

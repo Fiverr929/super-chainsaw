@@ -81,6 +81,13 @@ workstation-v2/
    ETSY_SHARED_SECRET=your_etsy_secret_key
    ETSY_REFRESH_TOKEN=your_refresh_token
    ETSY_SHOP_ID=your_shop_id
+
+   # Optional: Supabase Storage for Amazon listing images
+   # Create a public bucket in Supabase Storage, then add:
+   SUPABASE_URL=https://your-project.supabase.co
+   SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+   SUPABASE_STORAGE_BUCKET=amazon-listing-images
+   SUPABASE_STORAGE_PREFIX=amazon-listings
    ```
 
 3. **Spin Up the Server:**
@@ -94,4 +101,5 @@ workstation-v2/
 ## Important Usage Notes
 - **Etsy COMPLIANCE:** Titles must be strictly 140 characters or less. The AI pipeline enforces this and handles automatic downcasing/conversion of acronym clusters (e.g. converting `SVG PNG` to `Svg Png`) since Etsy rejects titles containing excessive uppercase terms.
 - **File Limits:** Etsy limits digital downloads to a maximum of 5 files per listing and listing images to 10. The automation pipelines truncate files automatically when exceeding these limits.
+- **Amazon Image Hosting:** Amazon listing images must be reachable through public HTTPS URLs. When Supabase Storage is configured, local Amazon images are uploaded to the configured public bucket before the Amazon push. If Supabase is not configured, the app falls back to the public tunnel URL setting.
 - **Git Ignore Safeguards:** All runtime error logs (`latest_error.json`) and raw asset listings (`public/listings/*`) are configured in `.gitignore` to prevent leakage of live e-commerce inventory or API credentials.

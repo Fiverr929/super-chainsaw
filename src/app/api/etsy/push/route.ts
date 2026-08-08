@@ -123,6 +123,20 @@ const resolveMaterialId = (matName: string): number | null => {
   return null;
 };
 
+function parseLocalAssetList(value: string | undefined, label: string, maxFiles: number): string[] {
+  const assets = (value || '').split(',').map(item => item.trim()).filter(Boolean);
+  if (assets.length > maxFiles) {
+    throw new Error(`${label} supports at most ${maxFiles} files.`);
+  }
+  for (const asset of assets) {
+    const absolutePath = resolvePublicAssetPath(asset);
+    if (!absolutePath || !fs.existsSync(absolutePath)) {
+      throw new Error(`${label} file was not found in public assets: ${asset}`);
+    }
+  }
+  return assets;
+}
+
 export async function POST(req: Request) {
   let data: Record<string, string> = {};
   let listingId: string | undefined = undefined;
@@ -169,6 +183,18 @@ export async function POST(req: Request) {
 
     listingId = data.listing_id;
     isNewListing = !listingId;
+
+    // Validate replacement assets before creating a draft or deleting anything
+    // from an existing Etsy listing.
+    const imageAssets = data.updateType === "all" || data.updateType === "images"
+      ? parseLocalAssetList(data.images, 'Etsy images', 10)
+      : [];
+    const digitalAssets = data.listingType !== 'physical' && (data.updateType === "all" || data.updateType === "files")
+      ? parseLocalAssetList(data.digital_file, 'Etsy digital downloads', 5)
+      : [];
+    if ((data.updateType === "all" || data.updateType === "video") && data.video) {
+      parseLocalAssetList(data.video, 'Etsy video', 1);
+    }
 
     if (data.updateType === "all" || data.updateType === "text") {
       // 2. Resolve listing sections dynamically from Etsy
@@ -244,16 +270,23 @@ export async function POST(req: Request) {
 
       // 3. Create or Update Draft Listing
       const payload: Record<string, unknown> = {
-        quantity: parseInt(data.quantity) || 999,
+        quantity: data.quantity?.trim() === '' || data.quantity === undefined ? 999 : Number.parseInt(data.quantity, 10),
         title: data.title ? data.title.substring(0, 140) : undefined,
         description: data.description,
-        price: parseFloat(data.price) || 0.0,
+        price: Number.parseFloat(data.price),
         who_made: data.who_made || "i_did",
         when_made: data.when_made || "2020_2026",
         taxonomy_id: TAXONOMY_MAP[data.category as string] || 2078,
         is_supply: data.is_supply === "true",
         type: isPhysical ? "physical" : "download"
       };
+
+      if (!Number.isInteger(payload.quantity) || (payload.quantity as number) < 0) {
+        return NextResponse.json({ error: 'Failed to push to Etsy', details: 'Quantity must be a non-negative whole number.' }, { status: 400 });
+      }
+      if (!Number.isFinite(payload.price) || (payload.price as number) <= 0) {
+        return NextResponse.json({ error: 'Failed to push to Etsy', details: 'Price must be greater than zero.' }, { status: 400 });
+      }
 
       if (isPhysical) {
         if (shippingProfileId !== undefined) {
@@ -477,7 +510,7 @@ export async function POST(req: Request) {
           }
         }
 
-        const imageUrls = data.images.split(",").map((s: string) => s.trim()).filter(Boolean);
+        const imageUrls = imageAssets;
         let rank = 1;
         for (const imgUrl of imageUrls) {
           const absolutePath = resolvePublicAssetPath(imgUrl);
@@ -614,7 +647,7 @@ export async function POST(req: Request) {
           }
         }
 
-        const files = data.digital_file.split(",").map((s: string) => s.trim()).filter(Boolean).slice(0, 5);
+        const files = digitalAssets;
         for (const fileUrl of files) {
           const absolutePath = resolvePublicAssetPath(fileUrl);
           if (absolutePath && fs.existsSync(absolutePath)) {
@@ -718,7 +751,11 @@ export async function POST(req: Request) {
 
             // Resolve Price and Quantity
             const priceFloat = parseFloat(comb.price) || parseFloat(data.price) || 0.0;
-            const qtyInt = parseInt(comb.quantity) || parseInt(data.quantity) || 999;
+            const quantitySource = String(comb.quantity ?? data.quantity ?? '').trim();
+            const qtyInt = quantitySource === '' ? 999 : Number.parseInt(quantitySource, 10);
+            if (!Number.isInteger(qtyInt) || qtyInt < 0) {
+              throw new Error(`Variation ${Object.values(comb.values).join(' / ')} needs a non-negative whole-number quantity.`);
+            }
 
             // Resolve Property Values
             const propertyValues = resolvedProperties.map((prop: any) => {

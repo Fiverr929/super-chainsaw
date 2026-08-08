@@ -26,6 +26,8 @@ export type AmazonPreset = {
  hsn_code: string;
  recommended_browse_node: string;
  product_id_exemption: string;
+ external_product_id: string;
+ external_product_id_type: string;
  variation_theme: string;
  size_system: string;
  fit_type: string;
@@ -140,6 +142,8 @@ export const DEFAULT_AMAZON_PRESET: AmazonPreset = {
  hsn_code:"61091000",
  recommended_browse_node:"",
  product_id_exemption:"No",
+ external_product_id:"",
+ external_product_id_type:"",
  variation_theme:"SIZE_NAME/COLOR_NAME",
  size_system:"as5",
  fit_type:"Regular",
@@ -620,8 +624,8 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
  if (!editForm) return null;
  
  const formatOptionLabel = (val: string) => {
- if (!val.includes('_')) return val;
- return val.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join('');
+    if (!val.includes('_')) return val.charAt(0).toUpperCase() + val.slice(1);
+    return val.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
  };
 
  return (
@@ -812,11 +816,16 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
 
  {renderAutoTextField("Bullet Points","bullet_points","Example: Soft cotton fabric | Regular fit | Machine washable", true)}
  <div className="grid grid-cols-2 gap-4">
- {renderDropdownField("Recommended Browse Node","recommended_browse_node", AMAZON_RECOMMENDED_BROWSE_NODES)}
- {renderYesNoField("Product ID Exemption Approved?","product_id_exemption")}
- </div>
+  {renderDropdownField("Recommended Browse Node","recommended_browse_node", AMAZON_RECOMMENDED_BROWSE_NODES)}
+  {renderYesNoField("Product ID Exemption Approved?","product_id_exemption")}
+  </div>
 
- <div className="grid grid-cols-2 gap-4">
+  <div className="grid grid-cols-2 gap-4">
+  {renderStaticField("External Product ID","external_product_id","UPC/EAN/GTIN")}
+  {renderStaticField("External Product ID Type","external_product_id_type","Example: UPC or EAN")}
+  </div>
+
+  <div className="grid grid-cols-2 gap-4">
  {renderStaticField("Variation Theme","variation_theme","Example: SIZE_NAME/COLOR_NAME", true)}
  {renderStaticField("Amazon Size System","size_system","Example: as5", true)}
  </div>
@@ -1013,7 +1022,7 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
  )}
  </div>
 
- <p className="text-[11px] text-zinc-500">Amazon India SHIRT child listings require both Color and Size values.</p>
+ <p className="text-[11px] text-zinc-500">Use Color, Size, or both. The push will map whichever variation values are enabled.</p>
  <div className="space-y-3">
  {(editForm.variations?.properties || []).map((prop, propIdx) => (
  <div key={prop.name} className="p-3 bg-white border border-zinc-200 space-y-2 relative">

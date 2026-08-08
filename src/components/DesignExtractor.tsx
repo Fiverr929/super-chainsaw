@@ -2,11 +2,13 @@
 
 import React, { useState, useRef, useEffect } from'react';
 import Image from'next/image';
-import { UploadCloud, FileText, ImageIcon, RefreshCw, Settings2, Download, Loader2, Eraser } from'lucide-react';
+import { UploadCloud, FileText, ImageIcon, RefreshCw, Settings2, Download, Loader2, Eraser, Shirt } from'lucide-react';
 import toast from'react-hot-toast';
 import ImagePresetManagerModal, { ImagePreset, DEFAULT_IMAGE_PRESET } from'./ImagePresetManagerModal';
+import MockupStudio from'./MockupStudio';
 
 export default function DesignExtractor() {
+ const [mode, setMode] = useState<"extract" | "mockup">("mockup");
  const [selectedFile, setSelectedFile] = useState<File | null>(null);
  const [originalImageUrl, setOriginalImageUrl] = useState<string | null>(null);
  const [extractedImageUrl, setExtractedImageUrl] = useState<string | null>(null);
@@ -193,13 +195,27 @@ export default function DesignExtractor() {
  return (
  <div className="w-full h-full flex flex-col min-h-0 bg-white">
  <div className="shrink-0 p-4 lg:px-6 border-b border-zinc-200 flex items-center justify-between bg-zinc-50">
+ <div className="flex items-center gap-4">
  <div>
- <h2 className="text-sm font-semibold text-zinc-800 flex items-center gap-2">
- Nano Banana 2
- <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-700">PRO</span>
- </h2>
- <p className="text-xs text-zinc-500">AI-powered graphic extraction</p>
+ <h2 className="text-sm font-semibold text-zinc-800">Design Setup</h2>
+ <p className="text-xs text-zinc-500">{mode ==="mockup" ?"Existing blank mockups with saved placement":"AI-powered graphic extraction"}</p>
  </div>
+ <div className="flex items-center border border-zinc-200 bg-white">
+ <button
+ onClick={() => setMode("mockup")}
+ className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${mode ==="mockup" ?"bg-blue-600 text-white":"text-zinc-600 hover:bg-zinc-50"}`}
+ >
+ <Shirt size={13} /> Mockup
+ </button>
+ <button
+ onClick={() => setMode("extract")}
+ className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors ${mode ==="extract" ?"bg-blue-600 text-white":"text-zinc-600 hover:bg-zinc-50"}`}
+ >
+ <ImageIcon size={13} /> Extract
+ </button>
+ </div>
+ </div>
+ {mode ==="extract" && (
  <div className="flex items-center gap-3">
  <button
  onClick={() => setShowPresets(true)}
@@ -232,8 +248,13 @@ export default function DesignExtractor() {
  </button>
  )}
  </div>
+ )}
  </div>
 
+ {mode ==="mockup" ? (
+ <MockupStudio />
+ ) : (
+ <>
  {!originalImageUrl ? (
  <div className="flex-1 p-6 flex flex-col">
  <div 
@@ -330,6 +351,8 @@ export default function DesignExtractor() {
  onClose={() => setShowPresets(false)} 
  onSelectDefault={(preset) => setDefaultPreset(preset)}
  />
+ )}
+ </>
  )}
  </div>
  );

@@ -14,6 +14,7 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get('code');
   const error = url.searchParams.get('error');
+  const returnedState = url.searchParams.get('state');
 
   if (error) {
     console.error("Etsy OAuth Error:", error);
@@ -27,10 +28,17 @@ export async function GET(request: Request) {
   // Retrieve the PKCE code verifier from cookies
   const cookieStore = await cookies();
   const codeVerifier = cookieStore.get('etsy_code_verifier')?.value;
+  const expectedState = cookieStore.get('etsy_oauth_state')?.value;
 
-  if (!codeVerifier) {
-    return NextResponse.json({ error: 'Missing PKCE code verifier in cookies. Session may have expired.' }, { status: 400 });
+  if (!codeVerifier || !expectedState) {
+    return NextResponse.json({ error: 'Missing Etsy OAuth session cookies. The connection attempt may have expired.' }, { status: 400 });
   }
+  if (!returnedState || returnedState !== expectedState) {
+    return NextResponse.json({ error: 'Invalid Etsy OAuth state. Please start the connection again.' }, { status: 400 });
+  }
+
+  cookieStore.delete('etsy_code_verifier');
+  cookieStore.delete('etsy_oauth_state');
 
   // Determine redirect URI
   const host = request.headers.get('host') || 'localhost:3000';
@@ -68,8 +76,11 @@ export async function GET(request: Request) {
           }
         });
         
-        if (shopRes.data && shopRes.data.shop_id) {
-          shopId = shopRes.data.shop_id.toString();
+        const discoveredShop = Array.isArray(shopRes.data?.results)
+          ? shopRes.data.results[0]
+          : shopRes.data;
+        if (discoveredShop?.shop_id) {
+          shopId = discoveredShop.shop_id.toString();
         }
       } catch (err) {
         console.error("Failed to dynamically fetch Etsy shop ID during OAuth callback:", err);

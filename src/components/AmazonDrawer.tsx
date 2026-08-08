@@ -67,12 +67,15 @@ export default function AmazonDrawer({ row, rowData, type, onClose, setData }: A
  model_name: rowData?.model_name ||"",
  model_number: rowData?.model_number ||"",
  product_id_exemption: rowData?.product_id_exemption ||"",
+ external_product_id: rowData?.external_product_id ||"",
+ external_product_id_type: rowData?.external_product_id_type ||"",
  // packaging_specs
  number_of_items: rowData?.number_of_items ||"",
  item_package_quantity: rowData?.item_package_quantity ||"",
  unit_count: rowData?.unit_count ||"",
  unit_count_type: rowData?.unit_count_type ||"",
  });
+ type AmazonDrawerFormKey = keyof typeof formData;
 
  if (!rowData) return null;
 
@@ -98,12 +101,12 @@ export default function AmazonDrawer({ row, rowData, type, onClose, setData }: A
  garment_specs: ["collar_style","sleeve_length","sleeve_cuff","top_style","shirt_form_type","hemline_form","closure_type","apparel_fabric_stretch","apparel_fabric_weight_class","fabric_stretchability"],
  theme_features: ["theme","subject_character","animal_theme","special_features","fashion_decade","seasons","embellishment_feature","pocket_description","number_of_pockets"],
  dimensions_sizing: ["size_system","item_length_description","item_dimension_length","item_dimension_width","item_dimension_height","item_dimension_unit","garment_size_country","shoulder_hem_length","shoulder_hem_unit","item_weight","item_weight_unit"],
- compliance_origin: ["manufacturer_address","packer_address","age_range_description","part_number","model_name","model_number","product_id_exemption"],
+ compliance_origin: ["manufacturer_address","packer_address","age_range_description","part_number","model_name","model_number","product_id_exemption","external_product_id","external_product_id_type"],
  packaging_specs: ["number_of_items","item_package_quantity","unit_count","unit_count_type"]
  };
 
  const formatLabel = (key: string) => {
- return key.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join('');
+ return key.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
  };
 
  return (
@@ -146,7 +149,7 @@ export default function AmazonDrawer({ row, rowData, type, onClose, setData }: A
  </div>
  <input
  type="text"
- value={isAuto ?"Auto (Uses SKU)": (formData as any)[fieldKey]}
+  value={isAuto ?"Auto (Uses SKU)": String(formData[fieldKey as AmazonDrawerFormKey] ?? "")}
  disabled={!!isAuto}
  onChange={e => setFormData(prev => ({ ...prev, [fieldKey]: e.target.value }))}
  className={`w-full px-3 py-2 border border-zinc-200 bg-white text-xs rounded-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-800 ${
@@ -161,7 +164,7 @@ export default function AmazonDrawer({ row, rowData, type, onClose, setData }: A
  <label className="text-xs font-semibold text-zinc-600">{formatLabel(fieldKey)}</label>
  <input
  type="text"
- value={(formData as any)[fieldKey]}
+  value={String(formData[fieldKey as AmazonDrawerFormKey] ?? "")}
  onChange={e => setFormData(prev => ({ ...prev, [fieldKey]: e.target.value }))}
  className="w-full px-3 py-2 border border-zinc-200 bg-white text-xs rounded-none focus:outline-none focus:ring-1 focus:ring-blue-500 text-zinc-800"
  />

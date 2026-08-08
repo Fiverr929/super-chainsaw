@@ -3,6 +3,7 @@ import axios from 'axios';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { isSupabaseStorageConfigured, uploadPublicAssetToSupabase } from '@/lib/supabaseStorage';
 
 export const dynamic = 'force-dynamic';
 type AmazonStringField =
@@ -20,7 +21,8 @@ type AmazonStringField =
   | 'target_gender' | 'team_name' | 'theme' | 'title' | 'top_style' | 'tunnelUrl' | 'unit_count'
   | 'unit_count_type' | 'recommended_browse_node' | 'product_id_exemption' | 'variation_theme' | 'size_system'
   | 'fit_type' | 'style_name' | 'item_length_description' | 'model_name' | 'model_number'
-  | 'item_dimension_length' | 'item_dimension_width' | 'item_dimension_height' | 'item_dimension_unit';
+  | 'item_dimension_length' | 'item_dimension_width' | 'item_dimension_height' | 'item_dimension_unit'
+  | 'primary_color' | 'secondary_color' | 'asin' | 'external_product_id' | 'external_product_id_type';
 
 type AmazonBooleanField =
   | 'animal_theme_auto' | 'brand_auto' | 'embellishment_feature_auto' | 'fabric_stretchability_auto'
@@ -38,6 +40,8 @@ type AmazonVariationCombination = {
   maximum_retail_price?: string;
   minimum_seller_allowed_price?: string;
   maximum_seller_allowed_price?: string;
+  external_product_id?: string;
+  external_product_id_type?: string;
 };
 
 type AmazonVariations = {
@@ -51,6 +55,7 @@ type AmazonListingRow = Partial<Record<AmazonStringField, string>>
 
 type AmazonAttributes = Record<string, unknown>;
 type AmazonListingPayload = { productType: string; requirements: string; attributes: AmazonAttributes };
+type AmazonPatchPayload = { productType: string; patches: Array<{ op: 'replace' | 'delete'; path: string; value?: unknown }> };
 type AmazonChildError = { sku?: string; combinationId?: string; error: unknown };
 type AmazonPutResult =
   | { success: true; sku: string; data: { identifiers?: Array<{ asin?: string }>; issues?: Array<{ code?: string; message?: string; severity?: string; attributeNames?: string[] }> } }
@@ -67,6 +72,203 @@ function isAmazonVariations(value: unknown): value is AmazonVariations {
   if (!value || typeof value !== 'object') return false;
   const candidate = value as Partial<AmazonVariations>;
   return Array.isArray(candidate.properties) && Array.isArray(candidate.combinations);
+}
+
+function getVariationEntries(combination: AmazonVariationCombination): Array<[string, string]> {
+  return Object.entries(combination.values || {})
+    .map(([key, value]) => [key, String(value).trim()] as [string, string])
+    .filter(([, value]) => value.length > 0);
+}
+
+function getVariationValue(entries: Array<[string, string]>, fieldName: string): string {
+  return entries.find(([key]) => key.toLowerCase() === fieldName.toLowerCase())?.[1] || "";
+}
+
+function getVariationKey(entries: Array<[string, string]>): string {
+  return entries
+    .map(([key, value]) => `${key.toLowerCase()}:${value.toLowerCase()}`)
+    .sort()
+    .join('|');
+}
+
+function getVariationSuffix(entries: Array<[string, string]>): string {
+  return entries.map(([, value]) => value).join(', ');
+}
+
+function cleanSkuValue(value: string): string {
+  return value.trim().toUpperCase().replace(/\s+/g, '-');
+}
+
+function resolveSkuTemplateBase(rowData: AmazonListingRow): string {
+  let baseSku = rowData.sku_template || '';
+  baseSku = baseSku.replace(/{brand(?::(\d+))?}/gi, (match: string, p1: string) => {
+    const val = (rowData.brand || 'YVZ').replace(/\s+/g, '');
+    return (p1 && !isNaN(parseInt(p1))) ? val.substring(0, parseInt(p1)) : val;
+  });
+  baseSku = baseSku.replace(/{folder(?::(\d+))?}/gi, (match: string, p1: string) => {
+    const val = (rowData.folder || 'ITEM').replace(/\s+/g, '-');
+    return (p1 && !isNaN(parseInt(p1))) ? val.substring(0, parseInt(p1)) : val;
+  });
+  baseSku = baseSku.replace(/{part_number(?::(\d+))?}/gi, (match: string, p1: string) => {
+    const val = (rowData.part_number || '').replace(/\s+/g, '');
+    return (p1 && !isNaN(parseInt(p1))) ? val.substring(0, parseInt(p1)) : val;
+  });
+  baseSku = baseSku.replace(/{timestamp}/gi, Date.now().toString());
+  return baseSku;
+}
+
+function cleanSku(sku: string): string {
+  return sku.replace(/[^a-zA-Z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').toUpperCase();
+}
+
+function resolveParentSku(rowData: AmazonListingRow): string {
+  if (rowData.sku) return rowData.sku;
+  if (rowData.sku_template) {
+    const baseSku = resolveSkuTemplateBase(rowData)
+      .replace(/-?{color}-?/gi, '-')
+      .replace(/-?{size}-?/gi, '-');
+    const parentSku = cleanSku(baseSku);
+    if (parentSku) return parentSku;
+  }
+  return `YVZ-AMZN-${Date.now()}`;
+}
+
+function resolveChildSku(rowData: AmazonListingRow, parentSku: string, variationEntries: Array<[string, string]>): string {
+  const colorVal = getVariationValue(variationEntries, 'color');
+  const sizeVal = getVariationValue(variationEntries, 'size');
+  const cleanColor = colorVal ? cleanSkuValue(colorVal) : "";
+  const cleanSize = sizeVal ? cleanSkuValue(sizeVal) : "";
+  const skuSuffix = variationEntries.map(([, value]) => cleanSkuValue(value)).filter(Boolean).join('-');
+
+  if (rowData.sku_template) {
+    const templateHasVariationToken = /{color}|{size}/i.test(rowData.sku_template);
+    const baseSku = resolveSkuTemplateBase(rowData)
+      .replace(/{color}/gi, cleanColor)
+      .replace(/{size}/gi, cleanSize);
+    return cleanSku(templateHasVariationToken ? baseSku : `${baseSku}-${skuSuffix}`);
+  }
+
+  return cleanSku(`${parentSku}-${skuSuffix}`);
+}
+
+function describeAmazonChildIdentifierGuidance(rowData: AmazonListingRow, error: unknown): unknown {
+  const errorText = typeof error === 'string' ? error : JSON.stringify(error);
+  if (
+    rowData.product_id_exemption === 'Yes' &&
+    errorText.includes('externally_assigned_product_identifier') &&
+    errorText.includes('merchant_suggested_asin')
+  ) {
+    return {
+      original: error,
+      guidance: 'Amazon rejected the child SKU without a product identifier even though Product ID Exemption was sent. Confirm this Amazon account/category/product type is approved for GTIN exemption for SHIRT variations, or provide a unique external product ID/type per child variation.'
+    };
+  }
+  return error;
+}
+
+function getVariationTheme(rowTheme: string | undefined, variations: AmazonVariations | null): string {
+  const propertyNames = (variations?.properties || []).map(property => property.name.toLowerCase());
+  const hasColor = propertyNames.includes('color');
+  const hasSize = propertyNames.includes('size');
+
+  if (hasColor && hasSize) return 'SIZE_NAME/COLOR_NAME';
+  if (hasColor) return 'COLOR_NAME';
+  if (hasSize) return 'SIZE_NAME';
+
+  return rowTheme || 'SIZE_NAME/COLOR_NAME';
+}
+
+function resolveFixedColor(rowData: AmazonListingRow): string | null {
+  const candidates = [rowData.primary_color, rowData.secondary_color, rowData.color];
+  const color = candidates
+    .map(value => typeof value === 'string' ? value.trim() : '')
+    .find(value => value && value !== 'Auto' && value !== 'None');
+
+  return color || null;
+}
+
+function buildProductIdentifierAttributes(
+  rowData: AmazonListingRow,
+  marketplaceId: string,
+  combination?: AmazonVariationCombination
+): AmazonAttributes {
+  if (rowData.product_id_exemption === 'Yes') {
+    return { supplier_declared_has_product_identifier_exemption: [{ value: true, marketplace_id: marketplaceId }] };
+  }
+
+  const externalProductId = combination
+    ? (typeof combination.external_product_id === 'string' ? combination.external_product_id.trim() : '')
+    : rowData.external_product_id?.trim();
+  const externalProductIdType = combination
+    ? (typeof combination.external_product_id_type === 'string' ? combination.external_product_id_type.trim() : '')
+    : rowData.external_product_id_type?.trim();
+
+  const attrs: AmazonAttributes = {};
+  if (externalProductId && externalProductIdType) {
+    attrs.externally_assigned_product_identifier = [
+      {
+        value: externalProductId,
+        type: externalProductIdType,
+        marketplace_id: marketplaceId
+      }
+    ];
+  }
+  if (rowData.asin) attrs.merchant_suggested_asin = [{ value: rowData.asin, marketplace_id: marketplaceId }];
+
+  return attrs;
+}
+
+function getMissingIdentifierReason(rowData: AmazonListingRow, combination?: AmazonVariationCombination): string | null {
+  if (rowData.product_id_exemption === 'Yes') return null;
+  const externalProductId = combination
+    ? (typeof combination.external_product_id === 'string' ? combination.external_product_id.trim() : '')
+    : rowData.external_product_id?.trim();
+  const externalProductIdType = combination
+    ? (typeof combination.external_product_id_type === 'string' ? combination.external_product_id_type.trim() : '')
+    : rowData.external_product_id_type?.trim();
+
+  if (externalProductId && externalProductIdType) return null;
+  return combination
+    ? 'Amazon requires Product ID Exemption Approved = Yes or a unique external product ID plus type on each child variation.'
+    : 'Amazon requires Product ID Exemption Approved = Yes or an external product ID plus type.';
+}
+
+function parseMoney(value: string | undefined): number | null {
+  if (value === undefined || value.trim() === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function parseQuantity(value: string | undefined): number | null {
+  if (value === undefined || value.trim() === '') return null;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function addPriceSchedule(offer: Record<string, unknown>, key: string, value: number) {
+  offer[key] = [{ schedule: [{ value_with_tax: value }] }];
+}
+
+function getOfferInputError(
+  rowData: AmazonListingRow,
+  price: string | undefined,
+  quantity: string | undefined,
+  label: string,
+  overrides: Partial<Pick<AmazonVariationCombination, 'maximum_retail_price' | 'minimum_seller_allowed_price' | 'maximum_seller_allowed_price'>> = {}
+): string | null {
+  const parsedPrice = parseMoney(price);
+  const parsedQuantity = parseQuantity(quantity);
+  if (parsedPrice === null) return `${label} needs a valid positive selling price.`;
+  if (parsedQuantity === null) return `${label} needs a valid non-negative quantity.`;
+
+  const mrp = parseMoney(overrides.maximum_retail_price || rowData.maximum_retail_price);
+  if (mrp !== null && mrp < parsedPrice) return `${label} has an MRP below its selling price.`;
+  const minimum = parseMoney(overrides.minimum_seller_allowed_price || rowData.minimum_seller_allowed_price);
+  if (minimum !== null && minimum > parsedPrice) return `${label} has a minimum seller price above its selling price.`;
+  const maximum = parseMoney(overrides.maximum_seller_allowed_price || rowData.maximum_seller_allowed_price);
+  if (maximum !== null && maximum < parsedPrice) return `${label} has a maximum seller price below its selling price.`;
+
+  return null;
 }
 
 
@@ -90,10 +292,17 @@ function mapSizeToAmazonKey(sizeName: string): string {
   return normalized.toLowerCase(); // fallback
 }
 
-function buildImageAttributes(images: string[], tunnelUrl: string, marketplaceId: string) {
-  if (images.length === 0) return {};
+async function prepareAmazonImageUrls(images: string[], tunnelUrl: string, namespace: string): Promise<string[]> {
+  if (images.length === 0) return [];
 
-  const imgUrls = images.map(img => {
+  if (isSupabaseStorageConfigured()) {
+    return Promise.all(images.map(async (img) => {
+      if (img.startsWith('http://') || img.startsWith('https://')) return img;
+      return uploadPublicAssetToSupabase(img, namespace);
+    }));
+  }
+
+  return images.map(img => {
     if (img.startsWith('http://') || img.startsWith('https://')) {
       return img;
     }
@@ -102,21 +311,25 @@ function buildImageAttributes(images: string[], tunnelUrl: string, marketplaceId
       const relative = img.startsWith('/') ? img : `/${img}`;
       return `${base}${relative}`;
     }
-    return img; // fallback
+    return img;
   });
+}
+
+function buildImageAttributes(images: string[], marketplaceId: string) {
+  if (images.length === 0) return {};
 
   const attrs: AmazonAttributes = {};
   attrs.main_product_image_locator = [
     {
-      media_location: imgUrls[0],
+      media_location: images[0],
       marketplace_id: marketplaceId
     }
   ];
 
-  for (let i = 1; i < imgUrls.length && i <= 8; i++) {
+  for (let i = 1; i < images.length && i <= 8; i++) {
     attrs[`other_product_image_locator_${i}`] = [
       {
-        media_location: imgUrls[i],
+        media_location: images[i],
         marketplace_id: marketplaceId
       }
     ];
@@ -125,7 +338,7 @@ function buildImageAttributes(images: string[], tunnelUrl: string, marketplaceId
   return attrs;
 }
 
-function buildImageAttributesForColor(images: string[], tunnelUrl: string, marketplaceId: string, color?: string) {
+function buildImageAttributesForColor(images: string[], marketplaceId: string, color?: string) {
   if (images.length === 0) return {};
   
   let filteredImages = images;
@@ -140,30 +353,88 @@ function buildImageAttributesForColor(images: string[], tunnelUrl: string, marke
     }
   }
   
-  return buildImageAttributes(filteredImages, tunnelUrl, marketplaceId);
+  return buildImageAttributes(filteredImages, marketplaceId);
 }
 
-function buildOfferAttributes(rowData: AmazonListingRow, marketplaceId: string, price: string, quantity: string): AmazonAttributes {
-  const parsedPrice = Number(price);
-  const parsedQuantity = Number.parseInt(quantity, 10);
-  if (!Number.isFinite(parsedPrice) || parsedPrice <= 0 || !Number.isInteger(parsedQuantity) || parsedQuantity < 0) return {};
+function buildOfferAttributes(
+  rowData: AmazonListingRow,
+  marketplaceId: string,
+  price: string,
+  quantity: string,
+  overrides: Partial<Pick<AmazonVariationCombination, 'maximum_retail_price' | 'minimum_seller_allowed_price' | 'maximum_seller_allowed_price'>> = {}
+): AmazonAttributes {
+  const parsedPrice = parseMoney(price);
+  const parsedQuantity = parseQuantity(quantity);
+  if (parsedPrice === null || parsedQuantity === null) return {};
 
   const offer: Record<string, unknown> = {
     marketplace_id: marketplaceId,
     currency: 'INR',
     our_price: [{ schedule: [{ value_with_tax: parsedPrice }] }]
   };
-  const mrp = Number(rowData.maximum_retail_price);
-  if (Number.isFinite(mrp) && mrp >= parsedPrice) offer.maximum_retail_price = [{ schedule: [{ value_with_tax: mrp }] }];
-  const minimum = Number(rowData.minimum_seller_allowed_price);
-  if (Number.isFinite(minimum) && minimum > 0) offer.minimum_seller_allowed_price = [{ schedule: [{ value_with_tax: minimum }] }];
-  const maximum = Number(rowData.maximum_seller_allowed_price);
-  if (Number.isFinite(maximum) && maximum >= parsedPrice) offer.maximum_seller_allowed_price = [{ schedule: [{ value_with_tax: maximum }] }];
+
+  const mrp = parseMoney(overrides.maximum_retail_price || rowData.maximum_retail_price);
+  if (mrp !== null && mrp >= parsedPrice) addPriceSchedule(offer, 'maximum_retail_price', mrp);
+  const minimum = parseMoney(overrides.minimum_seller_allowed_price || rowData.minimum_seller_allowed_price);
+  if (minimum !== null && minimum <= parsedPrice) addPriceSchedule(offer, 'minimum_seller_allowed_price', minimum);
+  const maximum = parseMoney(overrides.maximum_seller_allowed_price || rowData.maximum_seller_allowed_price);
+  if (maximum !== null && maximum >= parsedPrice) addPriceSchedule(offer, 'maximum_seller_allowed_price', maximum);
 
   return {
     purchasable_offer: [offer],
     fulfillment_availability: [{ fulfillment_channel_code: 'DEFAULT', quantity: parsedQuantity }]
   };
+}
+
+function buildVariationOfferAttributes(
+  rowData: AmazonListingRow,
+  combination: AmazonVariationCombination,
+  marketplaceId: string
+): AmazonAttributes {
+  return buildOfferAttributes(
+    rowData,
+    marketplaceId,
+    combination.price || rowData.price || '',
+    combination.quantity || rowData.quantity || '',
+    combination
+  );
+}
+
+function buildBulletPointsPayload(rowData: AmazonListingRow, marketplaceId: string): Array<{ value: string; marketplace_id: string; language_tag: string }> {
+  const bulletPoints = (rowData.bullet_points || "")
+    .split(/[\n|]/)
+    .map((value: string) => value.trim())
+    .filter(Boolean);
+
+  const values = bulletPoints.length > 0
+    ? bulletPoints
+    : [rowData.title || "Amazon listing detail"];
+
+  return values.slice(0, 5).map((value: string) => ({ value, marketplace_id: marketplaceId, language_tag: 'en_IN' }));
+}
+
+function buildDetailUpdateAttributes(
+  rowData: AmazonListingRow,
+  marketplaceId: string,
+  bulletPointsPayload: Array<{ value: string; marketplace_id: string; language_tag: string }>,
+  isChild: boolean,
+  sku: string,
+  titleSuffix?: string
+): AmazonAttributes {
+  return {
+    item_name: [{ value: `${rowData.title || "Amazon listing"}${titleSuffix ? ` (${titleSuffix})` : ""}`, marketplace_id: marketplaceId, language_tag: 'en_IN' }],
+    product_description: [{ value: rowData.description || rowData.title || "Amazon listing", marketplace_id: marketplaceId, language_tag: 'en_IN' }],
+    bullet_point: bulletPointsPayload,
+    model_name: [{ value: rowData.title || "Amazon listing", marketplace_id: marketplaceId, language_tag: 'en_IN' }],
+    ...buildOptionalListingAttributes(rowData, marketplaceId, isChild, sku),
+    ...buildAttributes(rowData, marketplaceId, isChild, sku)
+  };
+}
+
+function buildReplacePatches(attributes: AmazonAttributes): AmazonPatchPayload['patches'] {
+  return Object.entries(attributes)
+    .filter(([, value]) => value !== undefined)
+    .map(([key, value]) => ({ op: 'replace' as const, path: `/attributes/${key}`, value }));
 }
 
 function buildOptionalListingAttributes(rowData: AmazonListingRow, marketplaceId: string, includeRequiredProductDetails: boolean, parentSku?: string): AmazonAttributes {
@@ -256,6 +527,66 @@ async function putListingItem(
   }
 }
 
+async function patchListingItem(
+  accessToken: string,
+  sku: string,
+  payload: AmazonPatchPayload,
+  config: {
+    sellerId: string;
+    awsAccessKey: string;
+    awsSecretKey: string;
+    region: string;
+    marketplaceId: string;
+  }
+): Promise<AmazonPutResult> {
+  const host = `sellingpartnerapi-${config.region}.amazon.com`;
+  const requestPath = `/listings/2021-08-01/items/${config.sellerId}/${sku}`;
+  const queryParams: Record<string, string> = { marketplaceIds: config.marketplaceId };
+
+  const bodyString = JSON.stringify(payload);
+  const now = new Date();
+  const amzDate = now.toISOString().replace(/[:-]/g, '').split('.')[0] + 'Z';
+  const dateStamp = amzDate.substring(0, 8);
+  const sortedQuery = Object.keys(queryParams)
+    .sort()
+    .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(queryParams[key])}`)
+    .join('&');
+
+  const canonicalHeaders = `host:${host}\nx-amz-date:${amzDate}\n`;
+  const signedHeaders = 'host;x-amz-date';
+  const payloadHash = crypto.createHash('sha256').update(bodyString).digest('hex');
+  const canonicalRequest = ['PATCH', requestPath, sortedQuery, canonicalHeaders, signedHeaders, payloadHash].join('\n');
+  const credentialScope = `${dateStamp}/${config.region}/execute-api/aws4_request`;
+  const stringToSign = [
+    'AWS4-HMAC-SHA256',
+    amzDate,
+    credentialScope,
+    crypto.createHash('sha256').update(canonicalRequest).digest('hex')
+  ].join('\n');
+
+  const signingKey = getSignatureKeySigV4(config.awsSecretKey, dateStamp, config.region, 'execute-api');
+  const signature = crypto.createHmac('sha256', signingKey).update(stringToSign).digest('hex');
+  const headers = {
+    'x-amz-access-token': accessToken,
+    'x-amz-date': amzDate,
+    'Authorization': `AWS4-HMAC-SHA256 Credential=${config.awsAccessKey}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`,
+    'Content-Type': 'application/json'
+  };
+
+  try {
+    const response = await axios.patch(`https://${host}${requestPath}?${sortedQuery}`, payload, { headers });
+    return { success: true, sku, data: response.data };
+  } catch (error: unknown) {
+    const details = getErrorDetails(error);
+    console.error(`SP-API PATCH failed for ${sku}:`, details.responseData ?? details.message);
+    return {
+      success: false,
+      sku,
+      error: details.responseData ?? details.message
+    };
+  }
+}
+
 function describeValidationIssues(result: AmazonPutResult): string | null {
   if (!result.success) return JSON.stringify(result.error);
   const errors = (result.data.issues || []).filter(issue => issue.severity === 'ERROR');
@@ -266,13 +597,48 @@ function describeValidationIssues(result: AmazonPutResult): string | null {
   }).join('\n');
 }
 
+function isIdentifierOnlyPreviewIssue(validationError: string): boolean {
+  const lines = validationError.split('\n').map(line => line.trim()).filter(Boolean);
+  if (lines.length === 0) return false;
+
+  return lines.every(line =>
+    line.includes('externally_assigned_product_identifier') ||
+    line.includes('merchant_suggested_asin')
+  );
+}
+
+function isTransientMediaPreviewIssue(validationError: string): boolean {
+  const normalized = validationError.toLowerCase();
+  return normalized.includes('media download timed out') ||
+    normalized.includes('unable to retrieve media content');
+}
+
 async function validateAndPutListingItem(
   accessToken: string, sku: string, payload: AmazonListingPayload,
-  config: { sellerId: string; awsAccessKey: string; awsSecretKey: string; region: string; marketplaceId: string }
+  config: { sellerId: string; awsAccessKey: string; awsSecretKey: string; region: string; marketplaceId: string },
+  options: { allowIdentifierOnlyPreviewBypass?: boolean; skipValidationPreview?: boolean } = {}
 ): Promise<AmazonPutResult> {
-  const preview = await putListingItem(accessToken, sku, payload, config, 'VALIDATION_PREVIEW');
-  const validationError = describeValidationIssues(preview);
-  if (validationError) return { success: false, sku, error: { message: 'Amazon validation preview failed', issues: validationError } };
+  if (!options.skipValidationPreview) {
+    let preview = await putListingItem(accessToken, sku, payload, config, 'VALIDATION_PREVIEW');
+    let validationError = describeValidationIssues(preview);
+
+    // Amazon occasionally checks a newly uploaded public image before its media
+    // downloader can reach it. Retry only that transient preview error; all other
+    // validation failures should still return immediately to the UI.
+    if (validationError && isTransientMediaPreviewIssue(validationError)) {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      preview = await putListingItem(accessToken, sku, payload, config, 'VALIDATION_PREVIEW');
+      validationError = describeValidationIssues(preview);
+    }
+
+    if (validationError) {
+      if (options.allowIdentifierOnlyPreviewBypass && isIdentifierOnlyPreviewIssue(validationError)) {
+        console.warn(`Amazon validation preview reported identifier-only issues for ${sku}; submitting because product ID exemption is enabled.`);
+      } else {
+        return { success: false, sku, error: { message: 'Amazon validation preview failed', issues: validationError } };
+      }
+    }
+  }
   return putListingItem(accessToken, sku, payload, config);
 }
 
@@ -637,33 +1003,8 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Missing Amazon SP-API credentials in .env.local' }, { status: 400 });
     }
 
-    let parentSku = rowData.sku;
-    if (!parentSku && rowData.sku_template) {
-      let baseSku = rowData.sku_template;
-      baseSku = baseSku.replace(/{brand(?::(\d+))?}/gi, (match: string, p1: string) => {
-        const val = (rowData.brand || 'YVZ').replace(/\s+/g, '');
-        return (p1 && !isNaN(parseInt(p1))) ? val.substring(0, parseInt(p1)) : val;
-      });
-      baseSku = baseSku.replace(/{folder(?::(\d+))?}/gi, (match: string, p1: string) => {
-        const val = (rowData.folder || 'ITEM').replace(/\s+/g, '-');
-        return (p1 && !isNaN(parseInt(p1))) ? val.substring(0, parseInt(p1)) : val;
-      });
-      baseSku = baseSku.replace(/{part_number(?::(\d+))?}/gi, (match: string, p1: string) => {
-        const val = (rowData.part_number || '').replace(/\s+/g, '');
-        return (p1 && !isNaN(parseInt(p1))) ? val.substring(0, parseInt(p1)) : val;
-      });
-      
-      // For parent, remove {color} and {size}
-      baseSku = baseSku.replace(/-?{color}-?/gi, '-');
-      baseSku = baseSku.replace(/-?{size}-?/gi, '-');
-      baseSku = baseSku.replace(/{timestamp}/gi, Date.now().toString());
-      
-      parentSku = baseSku.replace(/[^a-zA-Z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '').toUpperCase();
-      if (!parentSku) parentSku = `YVZ-AMZN-${Date.now()}`;
-    } else if (!parentSku) {
-      parentSku = `YVZ-AMZN-${Date.now()}`;
-    }
-    const tunnelUrl = rowData.tunnelUrl || '';
+    const parentSku = resolveParentSku(rowData);
+    const tunnelUrl = (rowData.tunnelUrl || '').trim();
 
     // Parse image list
     const imageList: string[] = rowData.images
@@ -683,6 +1024,7 @@ export async function POST(request: Request) {
     const variations = isAmazonVariations(parsedVariations) ? parsedVariations : null;
     const hasActiveVariations = !!variations && variations.properties.length > 0;
     const enabledCombs = hasActiveVariations ? variations.combinations.filter(c => c.isEnabled) : [];
+    const variationTheme = getVariationTheme(rowData.variation_theme, variations);
 
     // 1. Authenticate with LWA
     const tokenRes = await axios.post('https://api.amazon.com/auth/o2/token', new URLSearchParams({
@@ -697,8 +1039,291 @@ export async function POST(request: Request) {
 
     const apiConfig = { sellerId, awsAccessKey, awsSecretKey, region, marketplaceId };
 
+    if (rowData.updateType === 'sync') {
+      let listingStatus: AmazonListingStatus;
+      try {
+        listingStatus = await getListingStatus(accessToken, parentSku, apiConfig);
+      } catch (error) {
+        const details = getErrorDetails(error);
+        try {
+          fs.writeFileSync(path.join(process.cwd(), 'latest_error.json'), JSON.stringify({
+            timestamp: new Date().toISOString(),
+            requestBody,
+            error: details.responseData ?? details.message
+          }, null, 2));
+        } catch (e) {
+          console.error("Failed to write error log", e);
+        }
+        return NextResponse.json({
+          success: false,
+          sku: parentSku,
+          parentSku,
+          asin: rowData.asin || null,
+          error: details.responseData ?? details.message
+        });
+      }
+      if (listingStatus.errors.length > 0) {
+        try {
+          fs.writeFileSync(path.join(process.cwd(), 'latest_error.json'), JSON.stringify({
+            timestamp: new Date().toISOString(),
+            requestBody,
+            errors: listingStatus.errors.map(error => ({ sku: parentSku, error }))
+          }, null, 2));
+        } catch (e) {
+          console.error("Failed to write error log", e);
+        }
+        return NextResponse.json({
+          success: true,
+          partial: true,
+          sku: parentSku,
+          parentSku,
+          asin: listingStatus.asin || rowData.asin || null,
+          details: `Amazon reported ${listingStatus.errors.length} issue(s). Errors logged to latest_error.json`
+        });
+      }
+
+      return NextResponse.json({
+        success: true,
+        sku: parentSku,
+        parentSku,
+        asin: listingStatus.asin || rowData.asin || null,
+        pending: !listingStatus.asin && !rowData.asin,
+        details: listingStatus.asin || rowData.asin ? 'Synced Amazon listing status.' : 'Amazon accepted the SKU, but no ASIN is available yet.'
+      });
+    }
+
+    if (rowData.updateType === 'offer') {
+      const offerErrors: AmazonChildError[] = [];
+      let updatedOfferCount = 0;
+
+      if (hasActiveVariations) {
+        if (enabledCombs.length === 0) throw new Error('At least one enabled Amazon variation is required for offer updates.');
+        for (const comb of enabledCombs) {
+          const variationEntries = getVariationEntries(comb);
+          if (variationEntries.length === 0) {
+            offerErrors.push({ combinationId: comb.id, error: 'Missing variation value in combination' });
+            continue;
+          }
+          const offerInputError = getOfferInputError(
+            rowData,
+            comb.price || rowData.price,
+            comb.quantity || rowData.quantity,
+            `Variation ${getVariationSuffix(variationEntries)}`,
+            comb
+          );
+          if (offerInputError) {
+            offerErrors.push({ combinationId: comb.id, error: offerInputError });
+            continue;
+          }
+          const childSku = resolveChildSku(rowData, parentSku, variationEntries);
+          const offerPayload: AmazonListingPayload = {
+            productType: 'SHIRT',
+            requirements: 'LISTING_OFFER_ONLY',
+            attributes: buildVariationOfferAttributes(rowData, comb, marketplaceId)
+          };
+          const offerRes = await validateAndPutListingItem(accessToken, childSku, offerPayload, apiConfig, {
+            skipValidationPreview: true
+          });
+          if (offerRes.success) {
+            updatedOfferCount++;
+          } else {
+            offerErrors.push({ sku: childSku, error: offerRes.error });
+          }
+        }
+      } else {
+        const offerInputError = getOfferInputError(rowData, rowData.price, rowData.quantity, 'Standalone listing');
+        if (offerInputError) throw new Error(offerInputError);
+        const offerPayload: AmazonListingPayload = {
+          productType: 'SHIRT',
+          requirements: 'LISTING_OFFER_ONLY',
+          attributes: buildOfferAttributes(rowData, marketplaceId, rowData.price || '', rowData.quantity || '')
+        };
+        const offerRes = await validateAndPutListingItem(accessToken, parentSku, offerPayload, apiConfig, {
+          skipValidationPreview: true
+        });
+        if (offerRes.success) {
+          updatedOfferCount++;
+        } else {
+          offerErrors.push({ sku: parentSku, error: offerRes.error });
+        }
+      }
+
+      if (offerErrors.length > 0) {
+        try {
+          fs.writeFileSync(path.join(process.cwd(), 'latest_error.json'), JSON.stringify({
+            timestamp: new Date().toISOString(),
+            requestBody,
+            errors: offerErrors
+          }, null, 2));
+        } catch (e) {
+          console.error("Failed to write error log", e);
+        }
+        return NextResponse.json({
+          success: true,
+          partial: true,
+          sku: parentSku,
+          parentSku,
+          asin: rowData.asin || null,
+          details: `Updated ${updatedOfferCount} offers but failed on ${offerErrors.length}. Errors logged to latest_error.json`
+        });
+      }
+
+      return NextResponse.json({
+        success: true,
+        sku: parentSku,
+        parentSku,
+        asin: rowData.asin || null,
+        details: hasActiveVariations ? `Updated ${updatedOfferCount} child offers.` : 'Updated parent offer.'
+      });
+    }
+
+    if (rowData.updateType === 'images') {
+      if (imageList.length === 0) throw new Error('Images Only update needs at least one image in the row.');
+      const amazonImageUrls = await prepareAmazonImageUrls(imageList, tunnelUrl, parentSku);
+      const updateErrors: AmazonChildError[] = [];
+      let updatedCount = 0;
+
+      const parentImagePayload: AmazonPatchPayload = {
+        productType: 'SHIRT',
+        patches: buildReplacePatches(buildImageAttributes(amazonImageUrls, marketplaceId))
+      };
+      const parentImageRes = await patchListingItem(accessToken, parentSku, parentImagePayload, apiConfig);
+      if (parentImageRes.success) {
+        updatedCount++;
+      } else {
+        updateErrors.push({ sku: parentSku, error: parentImageRes.error });
+      }
+
+      if (hasActiveVariations) {
+        for (const comb of enabledCombs) {
+          const variationEntries = getVariationEntries(comb);
+          if (variationEntries.length === 0) {
+            updateErrors.push({ combinationId: comb.id, error: 'Missing variation value in combination' });
+            continue;
+          }
+          const childSku = resolveChildSku(rowData, parentSku, variationEntries);
+          const colorVal = getVariationValue(variationEntries, 'color');
+          const childImageAttrs = buildImageAttributesForColor(amazonImageUrls, marketplaceId, colorVal);
+          const childImagePayload: AmazonPatchPayload = {
+            productType: 'SHIRT',
+            patches: buildReplacePatches(childImageAttrs)
+          };
+          const childImageRes = await patchListingItem(accessToken, childSku, childImagePayload, apiConfig);
+          if (childImageRes.success) {
+            updatedCount++;
+          } else {
+            updateErrors.push({ sku: childSku, error: childImageRes.error });
+          }
+        }
+      }
+
+      if (updateErrors.length > 0) {
+        try {
+          fs.writeFileSync(path.join(process.cwd(), 'latest_error.json'), JSON.stringify({
+            timestamp: new Date().toISOString(),
+            requestBody,
+            errors: updateErrors
+          }, null, 2));
+        } catch (e) {
+          console.error("Failed to write error log", e);
+        }
+        return NextResponse.json({
+          success: true,
+          partial: true,
+          sku: parentSku,
+          parentSku,
+          asin: rowData.asin || null,
+          details: `Updated ${updatedCount} image set(s) but failed on ${updateErrors.length}. Errors logged to latest_error.json`
+        });
+      }
+
+      return NextResponse.json({
+        success: true,
+        sku: parentSku,
+        parentSku,
+        asin: rowData.asin || null,
+        details: hasActiveVariations ? `Updated images for parent and ${enabledCombs.length} child listings.` : 'Updated listing images.'
+      });
+    }
+
+    if (rowData.updateType === 'details') {
+      const updateErrors: AmazonChildError[] = [];
+      let updatedCount = 0;
+      const bulletPointsPayload = buildBulletPointsPayload(rowData, marketplaceId);
+      const parentDetailPayload: AmazonPatchPayload = {
+        productType: 'SHIRT',
+        patches: buildReplacePatches(buildDetailUpdateAttributes(rowData, marketplaceId, bulletPointsPayload, false, parentSku))
+      };
+      const parentDetailRes = await patchListingItem(accessToken, parentSku, parentDetailPayload, apiConfig);
+      if (parentDetailRes.success) {
+        updatedCount++;
+      } else {
+        updateErrors.push({ sku: parentSku, error: parentDetailRes.error });
+      }
+
+      if (hasActiveVariations) {
+        for (const comb of enabledCombs) {
+          const variationEntries = getVariationEntries(comb);
+          if (variationEntries.length === 0) {
+            updateErrors.push({ combinationId: comb.id, error: 'Missing variation value in combination' });
+            continue;
+          }
+          const childSku = resolveChildSku(rowData, parentSku, variationEntries);
+          const childDetailAttrs = buildDetailUpdateAttributes(rowData, marketplaceId, bulletPointsPayload, true, childSku, getVariationSuffix(variationEntries));
+          const colorVal = getVariationValue(variationEntries, 'color') || resolveFixedColor(rowData);
+          const sizeVal = getVariationValue(variationEntries, 'size');
+          if (colorVal) {
+            childDetailAttrs.color = [{ value: colorVal, standardized_values: [colorVal], language_tag: 'en_IN', marketplace_id: marketplaceId }];
+          }
+          if (sizeVal) {
+            childDetailAttrs.shirt_size = [{ size_system: rowData.size_system || 'as5', size_class: 'alpha', size: mapSizeToAmazonKey(sizeVal), marketplace_id: marketplaceId }];
+          }
+          const childDetailPayload: AmazonPatchPayload = {
+            productType: 'SHIRT',
+            patches: buildReplacePatches(childDetailAttrs)
+          };
+          const childDetailRes = await patchListingItem(accessToken, childSku, childDetailPayload, apiConfig);
+          if (childDetailRes.success) {
+            updatedCount++;
+          } else {
+            updateErrors.push({ sku: childSku, error: childDetailRes.error });
+          }
+        }
+      }
+
+      if (updateErrors.length > 0) {
+        try {
+          fs.writeFileSync(path.join(process.cwd(), 'latest_error.json'), JSON.stringify({
+            timestamp: new Date().toISOString(),
+            requestBody,
+            errors: updateErrors
+          }, null, 2));
+        } catch (e) {
+          console.error("Failed to write error log", e);
+        }
+        return NextResponse.json({
+          success: true,
+          partial: true,
+          sku: parentSku,
+          parentSku,
+          asin: rowData.asin || null,
+          details: `Updated ${updatedCount} detail set(s) but failed on ${updateErrors.length}. Errors logged to latest_error.json`
+        });
+      }
+
+      return NextResponse.json({
+        success: true,
+        sku: parentSku,
+        parentSku,
+        asin: rowData.asin || null,
+        details: hasActiveVariations ? `Updated details for parent and ${enabledCombs.length} child listings.` : 'Updated listing details.'
+      });
+    }
+
+    const amazonImageUrls = await prepareAmazonImageUrls(imageList, tunnelUrl, parentSku);
+
     // 2. Prepare Parent Listing Payload
-    const parentImageAttrs = buildImageAttributes(imageList, tunnelUrl, marketplaceId);
+    const parentImageAttrs = buildImageAttributes(amazonImageUrls, marketplaceId);
     
     // Parse Bullet Points
     const bpStr = rowData.bullet_points || "";
@@ -756,23 +1381,34 @@ Separate each bullet point by a newline. Do not include bullet characters like '
       if (enabledCombs.length === 0) throw new Error('At least one Amazon variation combination must be enabled.');
       const seenCombinations = new Set<string>();
       for (const comb of enabledCombs) {
-        const color = Object.entries(comb.values || {}).find(([key]) => key.toLowerCase() === 'color')?.[1]?.trim();
-        const size = Object.entries(comb.values || {}).find(([key]) => key.toLowerCase() === 'size')?.[1]?.trim();
-        if (!color || !size) throw new Error('Every enabled Amazon variation must contain both Color and Size.');
-        const combinationKey = color.toLowerCase() + '|' + size.toLowerCase();
-        if (seenCombinations.has(combinationKey)) throw new Error('Duplicate Amazon variation: ' + color + ' / ' + size);
+        const variationEntries = getVariationEntries(comb);
+        if (variationEntries.length === 0) throw new Error('Every enabled Amazon variation must contain at least one variation value.');
+        const colorVal = getVariationValue(variationEntries, 'color');
+        if (!colorVal && !resolveFixedColor(rowData)) {
+          throw new Error('Amazon SHIRT child listings require a color. Add Color as a variation, or set a real primary_color/secondary_color on the row or preset.');
+        }
+        const missingIdentifierReason = getMissingIdentifierReason(rowData, comb);
+        if (missingIdentifierReason) throw new Error(missingIdentifierReason);
+        const combinationKey = getVariationKey(variationEntries);
+        if (seenCombinations.has(combinationKey)) throw new Error('Duplicate Amazon variation: ' + getVariationSuffix(variationEntries));
         seenCombinations.add(combinationKey);
-        const price = Number(comb.price || rowData.price);
-        const quantity = Number.parseInt(comb.quantity || rowData.quantity || '', 10);
-        if (!Number.isFinite(price) || price <= 0) throw new Error('Every enabled Amazon variation needs a valid positive price.');
-        if (!Number.isInteger(quantity) || quantity < 0) throw new Error('Every enabled Amazon variation needs a valid non-negative quantity.');
+        const offerInputError = getOfferInputError(
+          rowData,
+          comb.price || rowData.price,
+          comb.quantity || rowData.quantity,
+          `Variation ${getVariationSuffix(variationEntries)}`,
+          comb
+        );
+        if (offerInputError) throw new Error(offerInputError);
       }
       parentPayload.attributes.parentage_level = [ { value: 'parent', marketplace_id: marketplaceId } ];
-      parentPayload.attributes.variation_theme = [ { name: rowData.variation_theme || 'SIZE_NAME/COLOR_NAME', marketplace_id: marketplaceId } ];
+      parentPayload.attributes.variation_theme = [ { name: variationTheme, marketplace_id: marketplaceId } ];
     } else {
+      const offerInputError = getOfferInputError(rowData, rowData.price, rowData.quantity, 'Standalone listing');
+      if (offerInputError) throw new Error(offerInputError);
       Object.assign(parentPayload.attributes, buildOfferAttributes(rowData, marketplaceId, rowData.price || '', rowData.quantity || ''));
       Object.assign(parentPayload.attributes, buildOptionalListingAttributes(rowData, marketplaceId, true, parentSku));
-      if (rowData.product_id_exemption === 'Yes') parentPayload.attributes.supplier_declared_has_product_identifier_exemption = [{ value: true, marketplace_id: marketplaceId }];
+      Object.assign(parentPayload.attributes, buildProductIdentifierAttributes(rowData, marketplaceId));
     }
 
     console.log(`Pushing parent listing SKU: ${parentSku}...`);
@@ -789,121 +1425,48 @@ Separate each bullet point by a newline. Do not include bullet characters like '
     if (hasActiveVariations && enabledCombs.length > 0) {
       console.log(`Pushing ${enabledCombs.length} child variation listings...`);
       for (const comb of enabledCombs) {
-        const values = comb.values || {};
-        let colorVal = "";
-        let sizeVal = "";
+        const variationEntries = getVariationEntries(comb);
+        const colorVal = getVariationValue(variationEntries, 'color');
+        const sizeVal = getVariationValue(variationEntries, 'size');
+        const resolvedColor = colorVal || resolveFixedColor(rowData);
+        const variationSuffix = getVariationSuffix(variationEntries);
+        const skuSuffix = variationEntries.map(([, value]) => cleanSkuValue(value)).filter(Boolean).join('-');
 
-        for (const k of Object.keys(values)) {
-          if (k.toLowerCase() === 'color') {
-            colorVal = values[k];
-          } else if (k.toLowerCase() === 'size') {
-            sizeVal = values[k];
-          }
+        if (variationEntries.length === 0 || !skuSuffix) {
+          childErrors.push({ combinationId: comb.id, error: "Missing variation value in combination" });
+          continue;
         }
-
-        if (!colorVal || !sizeVal) {
-          childErrors.push({ combinationId: comb.id, error: "Missing Color or Size value in combination" });
+        if (!resolvedColor) {
+          childErrors.push({ combinationId: comb.id, error: "Amazon SHIRT child listings require a color. Add Color as a variation, or set a real primary_color/secondary_color on the row or preset." });
+          continue;
+        }
+        const missingIdentifierReason = getMissingIdentifierReason(rowData, comb);
+        if (missingIdentifierReason) {
+          childErrors.push({ combinationId: comb.id, error: missingIdentifierReason });
           continue;
         }
 
-        const cleanColor = colorVal.trim().toUpperCase().replace(/\s+/g, '-');
-        const cleanSize = sizeVal.trim().toUpperCase().replace(/\s+/g, '-');
-        
-        let childSku = "";
-        if (rowData.sku_template) {
-            let baseSku = rowData.sku_template;
-            baseSku = baseSku.replace(/{brand(?::(\d+))?}/gi, (match: string, p1: string) => {
-              const val = (rowData.brand || 'YVZ').replace(/\s+/g, '');
-              return (p1 && !isNaN(parseInt(p1))) ? val.substring(0, parseInt(p1)) : val;
-            });
-            baseSku = baseSku.replace(/{folder(?::(\d+))?}/gi, (match: string, p1: string) => {
-              const val = (rowData.folder || 'ITEM').replace(/\s+/g, '-');
-              return (p1 && !isNaN(parseInt(p1))) ? val.substring(0, parseInt(p1)) : val;
-            });
-            baseSku = baseSku.replace(/{part_number(?::(\d+))?}/gi, (match: string, p1: string) => {
-              const val = (rowData.part_number || '').replace(/\s+/g, '');
-              return (p1 && !isNaN(parseInt(p1))) ? val.substring(0, parseInt(p1)) : val;
-            });
-            
-            if (!baseSku.toLowerCase().includes('{color}')) baseSku += `-{color}`;
-            if (!baseSku.toLowerCase().includes('{size}')) baseSku += `-{size}`;
-            
-            baseSku = baseSku.replace(/{color}/gi, cleanColor);
-            baseSku = baseSku.replace(/{size}/gi, cleanSize);
-            baseSku = baseSku.replace(/{timestamp}/gi, Date.now().toString());
-            childSku = baseSku.replace(/[^a-zA-Z0-9-]/g, '-').replace(/-+/g, '-').toUpperCase();
-        } else {
-            childSku = `${parentSku}-${cleanColor}-${cleanSize}`.replace(/[^a-zA-Z0-9-]/g, '-').toUpperCase();
-        }
-
-        const priceVal = comb.price || rowData.price || "1200";
-        const quantityVal = comb.quantity || rowData.quantity || "10";
+        const childSku = resolveChildSku(rowData, parentSku, variationEntries);
 
         // Build child specific images
-        const childImageAttrs = buildImageAttributesForColor(imageList, tunnelUrl, marketplaceId, colorVal);
+        const childImageAttrs = buildImageAttributesForColor(amazonImageUrls, marketplaceId, colorVal);
+        const childOfferAttrs = buildVariationOfferAttributes(rowData, comb, marketplaceId);
 
         const childPayload = {
           productType: 'SHIRT',
           requirements: 'LISTING',
           attributes: {
-            item_name: [ { value: `${rowData.title} (${colorVal}, ${sizeVal})`, marketplace_id: marketplaceId, language_tag: 'en_IN' } ],
+            item_name: [ { value: `${rowData.title} (${variationSuffix})`, marketplace_id: marketplaceId, language_tag: 'en_IN' } ],
             country_of_origin: [ { value: 'IN', marketplace_id: marketplaceId } ],
             product_description: [ { value: rowData.description || rowData.title, marketplace_id: marketplaceId, language_tag: 'en_IN' } ],
             bullet_point: bulletPointsPayload,
             parentage_level: [ { value: 'child', marketplace_id: marketplaceId } ],
-            variation_theme: [ { name: rowData.variation_theme || 'SIZE_NAME/COLOR_NAME', marketplace_id: marketplaceId } ],
+            variation_theme: [ { name: variationTheme, marketplace_id: marketplaceId } ],
             child_parent_sku_relationship: [ { child_parent_sku_relationship_name: 'VARIATION', parent_sku: parentSku, marketplace_id: marketplaceId } ],
-            color: [ { value: colorVal, standardized_values: [colorVal], language_tag: 'en_IN', marketplace_id: marketplaceId } ],
-            shirt_size: [ { size_system: rowData.size_system || 'as5', size_class: 'alpha', size: mapSizeToAmazonKey(sizeVal), marketplace_id: marketplaceId } ],
-            ...(rowData.product_id_exemption === 'Yes' ? { supplier_declared_has_product_identifier_exemption: [{ value: true, marketplace_id: marketplaceId }] } : {}),
-            purchasable_offer: [
-              {
-                marketplace_id: marketplaceId,
-                currency: 'INR',
-                our_price: [
-                  {
-                    schedule: [
-                      {
-                        value_with_tax: parseFloat(priceVal)
-                      }
-                    ]
-                  }
-                ],
-                maximum_retail_price: [
-                  {
-                    schedule: [
-                      {
-                        value_with_tax: parseFloat(comb.maximum_retail_price || rowData.maximum_retail_price || Math.round(parseFloat(priceVal) * 1.86).toString())
-                      }
-                    ]
-                  }
-                ],
-                minimum_seller_allowed_price: (comb.minimum_seller_allowed_price || rowData.minimum_seller_allowed_price) ? [
-                  {
-                    schedule: [
-                      {
-                        value_with_tax: parseFloat(comb.minimum_seller_allowed_price || rowData.minimum_seller_allowed_price || "")
-                      }
-                    ]
-                  }
-                ] : undefined,
-                maximum_seller_allowed_price: (comb.maximum_seller_allowed_price || rowData.maximum_seller_allowed_price) ? [
-                  {
-                    schedule: [
-                      {
-                        value_with_tax: parseFloat(comb.maximum_seller_allowed_price || rowData.maximum_seller_allowed_price || "")
-                      }
-                    ]
-                  }
-                ] : undefined
-              }
-            ],
-            fulfillment_availability: [
-              {
-                fulfillment_channel_code: 'DEFAULT',
-                quantity: parseInt(quantityVal, 10)
-              }
-            ],
+            color: [ { value: resolvedColor, standardized_values: [resolvedColor], language_tag: 'en_IN', marketplace_id: marketplaceId } ],
+            ...(sizeVal ? { shirt_size: [ { size_system: rowData.size_system || 'as5', size_class: 'alpha', size: mapSizeToAmazonKey(sizeVal), marketplace_id: marketplaceId } ] } : {}),
+            ...buildProductIdentifierAttributes(rowData, marketplaceId, comb),
+            ...childOfferAttrs,
             model_name: [ { value: rowData.title, marketplace_id: marketplaceId } ],
             ...buildOptionalListingAttributes(rowData, marketplaceId, true, parentSku),
             ...buildAttributes(rowData, marketplaceId, true, childSku),
@@ -911,11 +1474,26 @@ Separate each bullet point by a newline. Do not include bullet characters like '
           }
         };
 
-        const childRes = await validateAndPutListingItem(accessToken, childSku, childPayload, apiConfig);
+        const childRes = await validateAndPutListingItem(accessToken, childSku, childPayload, apiConfig, {
+          allowIdentifierOnlyPreviewBypass: rowData.product_id_exemption === 'Yes',
+          skipValidationPreview: rowData.product_id_exemption === 'Yes'
+        });
         if (childRes.success) {
-          succeededChildrenCount++;
+          const offerPayload: AmazonListingPayload = {
+            productType: 'SHIRT',
+            requirements: 'LISTING_OFFER_ONLY',
+            attributes: childOfferAttrs
+          };
+          const offerRes = await validateAndPutListingItem(accessToken, childSku, offerPayload, apiConfig, {
+            skipValidationPreview: true
+          });
+          if (offerRes.success) {
+            succeededChildrenCount++;
+          } else {
+            childErrors.push({ sku: childSku, error: describeAmazonChildIdentifierGuidance(rowData, offerRes.error) });
+          }
         } else {
-          childErrors.push({ sku: childSku, error: childRes.error });
+          childErrors.push({ sku: childSku, error: describeAmazonChildIdentifierGuidance(rowData, childRes.error) });
         }
       }
     }
@@ -941,6 +1519,8 @@ Separate each bullet point by a newline. Do not include bullet characters like '
       return NextResponse.json({
         success: true,
         partial: true,
+        sku: parentSku,
+        parentSku,
         asin: createdAsin,
         details: `Created parent but failed on ${childErrors.length} children. Errors logged to latest_error.json`
       });
@@ -948,6 +1528,8 @@ Separate each bullet point by a newline. Do not include bullet characters like '
 
     return NextResponse.json({
       success: true,
+      sku: parentSku,
+      parentSku,
       asin: createdAsin,
       pending: !createdAsin
     });

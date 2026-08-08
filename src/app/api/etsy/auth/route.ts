@@ -31,20 +31,23 @@ export async function GET(request: Request) {
   const challengeBuffer = crypto.createHash('sha256').update(codeVerifier).digest();
   const codeChallenge = base64URLEncode(challengeBuffer);
 
-  // 3. Store verifier in a cookie so we can retrieve it in the callback
+  const state = crypto.randomBytes(16).toString('hex'); // Prevent CSRF
+
+  // 3. Store the one-time verifier and state for the callback.
   const cookieStore = await cookies();
-  cookieStore.set('etsy_code_verifier', codeVerifier, {
+  const oauthCookieOptions = {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax' as const,
     path: '/',
     maxAge: 60 * 10, // 10 minutes
-  });
+  };
+  cookieStore.set('etsy_code_verifier', codeVerifier, oauthCookieOptions);
+  cookieStore.set('etsy_oauth_state', state, oauthCookieOptions);
 
   // 4. Construct the Etsy OAuth URL
   // Scopes needed: shops_r, shops_w, listings_r, listings_w, listings_d
   const scopes = 'shops_r shops_w listings_r listings_w listings_d';
-  const state = crypto.randomBytes(16).toString('hex'); // Prevent CSRF
-  
   const searchParams = new URLSearchParams({
     response_type: 'code',
     client_id: apiKey,

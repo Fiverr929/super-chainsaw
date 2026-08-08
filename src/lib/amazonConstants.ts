@@ -1,5 +1,7 @@
 import { GridColumn } from "@glideapps/glide-data-grid";
 
+export const AMAZON_STATUSES = ["Draft", "Generating...", "Pushing...", "Updating...", "Updating Offer...", "Submitted", "Published", "Partial Error", "Error"];
+
 export const AMAZON_COLUMNS: GridColumn[] = [
   { title: "Folder", id: "folder", width: 120 },
   { title: "Images", id: "images", width: 100 },

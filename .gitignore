@@ -44,6 +44,7 @@ public/listings/*
 
 # local runtime logs
 latest_error.json
+supabase_upload_cache.json
 
 # etsy tokens
 tokens.json

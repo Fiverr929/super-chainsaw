@@ -40,14 +40,14 @@ export function getEtsyShopId(): string | null {
 
 export function saveEtsyRefreshToken(refreshToken: string, shopId?: string): void {
   try {
-    let existingData = {};
+    let existingData: Partial<EtsyTokens> = {};
     if (fs.existsSync(TOKENS_FILE)) {
       try {
         existingData = JSON.parse(fs.readFileSync(TOKENS_FILE, 'utf-8'));
       } catch {}
     }
     
-    const newData: any = { ...existingData, refreshToken };
+    const newData: EtsyTokens = { ...existingData, refreshToken };
     if (shopId) {
       newData.shopId = shopId;
     }

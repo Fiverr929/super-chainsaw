@@ -11,8 +11,8 @@ import DataEditor, {
  Item,
  TextCell,
  GridSelection,
- Theme,
- Rectangle
+ Rectangle,
+ CompactSelection
 } from"@glideapps/glide-data-grid";
 import { allCells } from"@glideapps/glide-data-grid-cells";
 import"@glideapps/glide-data-grid/dist/index.css";
@@ -50,8 +50,8 @@ import { Theme as GlideTheme } from"@glideapps/glide-data-grid";
 import PresetManagerModal, { type Preset, PresetVariations, VariationCombination } from"./PresetManagerModal";
 import AmazonPresetManagerModal, { AmazonPreset } from"./AmazonPresetManagerModal";
 import AmazonDrawer, { AmazonDrawerType } from"./AmazonDrawer";
-import { FolderPlus, Layers, ChevronDown, Trash2, Shirt } from"lucide-react";
-import { AMAZON_COLUMNS } from"@/lib/amazonConstants";
+import { FolderPlus, Layers, ChevronDown, Trash2 } from"lucide-react";
+import { AMAZON_COLUMNS, AMAZON_STATUSES } from"@/lib/amazonConstants";
 
 const imageCache: Record<string, { absoluteUrlArray: string[], thumbnailUrls: string[] }> = {};
 const tagCache: Record<string, string[]> = {};
@@ -491,6 +491,7 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  const [isImporterOpen, setIsImporterOpen] = useState(false);
  const [showPresets, setShowPresets] = useState(false);
  const [isDataLoaded, setIsDataLoaded] = useState(false);
+ const [loadedGridKey, setLoadedGridKey] = useState<string | null>(null);
  
  // Task Queue State
  type QueueTask = { id: string; action: string; row: number; sheet:"digital"|"physical"};
@@ -580,6 +581,7 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  } else {
  setColumns(sheet ==="digital"? DIGITAL_COLUMNS : PHYSICAL_COLUMNS);
  }
+ setGridSelection(undefined);
  }, [sheet, workstation]);
 
  const [data, setData] = useState<RowData[]>(() => {
@@ -598,6 +600,7 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
 
  React.useEffect(() => {
  setIsDataLoaded(false);
+ setLoadedGridKey(null);
  
  if (typeof window !=="undefined") {
  const oldDigital = localStorage.getItem("workstation_v2_grid_data");
@@ -638,6 +641,7 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  dataRef.current = freshData;
  }
  setIsDataLoaded(true);
+ setLoadedGridKey(`${workstation}-${sheet}`);
  }, [sheet, workstation]);
 
  const dataRef = React.useRef(data);
@@ -722,14 +726,26 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  }
  } else if (currentTask.action ==="publish") {
  if (workstation ==="amazon") {
- await triggerAmazonPush(currentTask.row);
+ await triggerAmazonPush(currentTask.row, "all");
  } else {
  await triggerEtsyPush(currentTask.row,"all");
  }
+ } else if (currentTask.action ==="sync_status") {
+ await triggerAmazonPush(currentTask.row, "sync");
+ } else if (currentTask.action ==="update_offer") {
+ await triggerAmazonPush(currentTask.row, "offer");
  } else if (currentTask.action ==="update_text") {
+ if (workstation ==="amazon") {
+ await triggerAmazonPush(currentTask.row, "details");
+ } else {
  await triggerEtsyPush(currentTask.row,"Update Text & SEO");
+ }
  } else if (currentTask.action ==="update_images") {
+ if (workstation ==="amazon") {
+ await triggerAmazonPush(currentTask.row, "images");
+ } else {
  await triggerEtsyPush(currentTask.row,"Update Images Only");
+ }
  } else if (currentTask.action ==="update_video") {
  await triggerEtsyPush(currentTask.row,"Update Video Only");
  } else if (currentTask.action ==="update_files") {
@@ -801,15 +817,15 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
 
  const summaryCols = ["garment_specs","theme_features","dimensions_sizing","compliance_origin","packaging_specs"];
  if (workstation ==="amazon"&& summaryCols.includes(columnId as string)) {
- let vals: any[] = [];
- if (columnId ==="garment_specs") vals = [dataRow.collar_style, dataRow.sleeve_length, dataRow.sleeve_cuff, dataRow.top_style, dataRow.shirt_form_type, dataRow.hemline_form, dataRow.closure_type, dataRow.apparel_fabric_stretch, dataRow.apparel_fabric_weight_class, dataRow.fabric_stretchability];
- else if (columnId ==="theme_features") vals = [dataRow.theme, dataRow.subject_character, dataRow.animal_theme, dataRow.special_features, dataRow.fashion_decade, dataRow.seasons, dataRow.embellishment_feature, dataRow.pocket_description, dataRow.number_of_pockets];
- else if (columnId ==="dimensions_sizing") vals = [dataRow.size_system, dataRow.item_dimension_length, dataRow.item_weight, dataRow.garment_size_country];
- else if (columnId ==="compliance_origin") vals = [dataRow.manufacturer_address, dataRow.packer_address, dataRow.age_range_description, dataRow.part_number, dataRow.model_name];
- else if (columnId ==="packaging_specs") vals = [dataRow.number_of_items, dataRow.item_package_quantity, dataRow.unit_count];
+  let vals: unknown[] = [];
+  if (columnId ==="garment_specs") vals = [dataRow.collar_style, dataRow.sleeve_length, dataRow.sleeve_cuff, dataRow.top_style, dataRow.shirt_form_type, dataRow.hemline_form, dataRow.closure_type, dataRow.apparel_fabric_stretch, dataRow.apparel_fabric_weight_class, dataRow.fabric_stretchability];
+  else if (columnId ==="theme_features") vals = [dataRow.theme, dataRow.subject_character, dataRow.animal_theme, dataRow.special_features, dataRow.fashion_decade, dataRow.seasons, dataRow.embellishment_feature, dataRow.pocket_description, dataRow.number_of_pockets];
+  else if (columnId ==="dimensions_sizing") vals = [dataRow.size_system, dataRow.item_dimension_length, dataRow.item_weight, dataRow.garment_size_country];
+  else if (columnId ==="compliance_origin") vals = [dataRow.manufacturer_address, dataRow.packer_address, dataRow.age_range_description, dataRow.part_number, dataRow.model_name, dataRow.model_number, dataRow.product_id_exemption, dataRow.external_product_id, dataRow.external_product_id_type];
+  else if (columnId ==="packaging_specs") vals = [dataRow.number_of_items, dataRow.item_package_quantity, dataRow.unit_count, dataRow.unit_count_type];
  
- vals = vals.filter(Boolean);
- const summary = vals.length > 0 ? vals.join(",") : (isActiveRow ?"Configure...":"");
+ const summaryValues = vals.map(item => typeof item ==="string" ? item : "").filter(Boolean);
+ const summary = summaryValues.length > 0 ? summaryValues.join(",") : (isActiveRow ?"Configure...":"");
  return {
  kind: GridCellKind.Text,
  allowOverlay: false,
@@ -998,7 +1014,7 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  }
 
  const state = value ||"Draft";
- const isLoading = state ==="Generating..."|| state ==="Pushing...";
+ const isLoading = state ==="Generating..."|| state ==="Pushing..."|| state ==="Updating..."|| state ==="Updating Offer...";
 
  if (isLoading) {
  const textColor ="#b45309";
@@ -1022,9 +1038,15 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  if (state ==="Review") {
  textColor ="#047857";
  bgCell ="#ecfdf5";
+ } else if (state ==="Submitted") {
+ textColor ="#1d4ed8";
+ bgCell ="#dbeafe";
  } else if (state ==="Published") {
  textColor ="#15803d";
  bgCell ="#dcfce7";
+ } else if (state ==="Partial Error") {
+ textColor ="#b45309";
+ bgCell ="#fef3c7";
  } else if (state ==="Error") {
  textColor ="#b91c1c";
  bgCell ="#fee2e2";
@@ -1036,7 +1058,7 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  copyData: state,
  data: {
  kind:"dropdown-cell",
- allowedValues: ETSY_STATUSES,
+ allowedValues: workstation ==="amazon" ? AMAZON_STATUSES : ETSY_STATUSES,
  value: state
  },
  themeOverride: { 
@@ -1464,7 +1486,7 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  } else if (workstation ==="amazon"&& ["garment_specs","theme_features","dimensions_sizing","compliance_origin","packaging_specs"].includes(columnId as string)) {
  const dataRow = dataRef.current[row];
  if (dataRow) {
- setGlobalAmazonDrawer({ row, type: columnId as any });
+ setGlobalAmazonDrawer({ row, type: columnId as AmazonDrawerType });
  }
  }
  },
@@ -1602,7 +1624,7 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  garment_specs: ["collar_style","sleeve_length","sleeve_cuff","top_style","shirt_form_type","hemline_form","closure_type","apparel_fabric_stretch","apparel_fabric_weight_class","fabric_stretchability"],
  theme_features: ["theme","subject_character","animal_theme","special_features","fashion_decade","seasons","embellishment_feature","pocket_description","number_of_pockets"],
  dimensions_sizing: ["size_system","item_length_description","item_dimension_length","item_dimension_width","item_dimension_height","item_dimension_unit","garment_size_country","shoulder_hem_length","shoulder_hem_unit","item_weight","item_weight_unit"],
- compliance_origin: ["manufacturer_address","packer_address","age_range_description","part_number","model_name","model_number","product_id_exemption"],
+ compliance_origin: ["manufacturer_address","packer_address","age_range_description","part_number","model_name","model_number","product_id_exemption","external_product_id","external_product_id_type"],
  packaging_specs: ["number_of_items","item_package_quantity","unit_count","unit_count_type"]
  };
 
@@ -1685,7 +1707,7 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  }
  return true;
  },
- [columns]
+ [columns, sheet, workstation]
  );
 
  const onWheel = useCallback((e: React.WheelEvent) => {
@@ -1843,8 +1865,9 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  </div>
  <div className="flex-1 w-full border border-zinc-200 rounded-none overflow-hidden relative">
  <div style={{ position:'absolute', inset: 0, width:'100%', height:'100%'}}>
- {fontsLoaded && (
+ {fontsLoaded && isDataLoaded && loadedGridKey === `${workstation}-${sheet}` && (
  <DataEditor
+ key={`${workstation}-${sheet}`}
  width="100%"
  height="100%"
  ref={gridRef}
@@ -2129,12 +2152,27 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  {showGenerateMenu && (
  <div className="absolute bottom-full left-0 mb-3 bg-[#2b52d6] border border-blue-500 shadow-xl flex flex-col p-1 min-w-[210px]">
  <span className="text-xs font-bold text-blue-200 px-3 py-1.5 uppercase tracking-wider">Amazon Generate</span>
- <button onClick={() => processBulkQueue('generate', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700">Fill Missing & Auto Fields</button>
- <button onClick={() => processBulkQueue('generate_title', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700">Regenerate Title</button>
- <button onClick={() => processBulkQueue('generate_description', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700">Regenerate Description</button>
- <button onClick={() => processBulkQueue('generate_bullets', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700">Regenerate Bullet Points</button>
- <button onClick={() => processBulkQueue('generate_keywords', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700">Regenerate Keywords</button>
- <button onClick={() => processBulkQueue('generate_all', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700 font-semibold">Regenerate Main Content</button>
+ <button onClick={() => processBulkQueue('generate', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700 transition-colors">Fill Missing & Auto Fields</button>
+ <button onClick={() => processBulkQueue('generate_title', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700 transition-colors">Regenerate Title</button>
+ <button onClick={() => processBulkQueue('generate_description', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700 transition-colors">Regenerate Description</button>
+ <button onClick={() => processBulkQueue('generate_bullets', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700 transition-colors">Regenerate Bullet Points</button>
+ <button onClick={() => processBulkQueue('generate_keywords', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700 transition-colors">Regenerate Keywords</button>
+ <button onClick={() => processBulkQueue('generate_all', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700 transition-colors font-semibold">Regenerate Main Content</button>
+ </div>
+ )}
+ </div>
+ <div className="relative flex items-center">
+ <button onClick={() => { setShowUpdateMenu(!showUpdateMenu); setShowGenerateMenu(false); }} className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium hover:bg-blue-700 transition-colors">
+ {selectedRowsList.length > 1 ?"Bulk Update":"Update"}
+ <ChevronDown size={14} className={`transition-transform ${showUpdateMenu ?'rotate-180':''}`} />
+ </button>
+ {showUpdateMenu && (
+ <div className="absolute bottom-full left-0 mb-3 bg-[#2b52d6] border border-blue-500 shadow-xl flex flex-col p-1 min-w-[210px]">
+ <span className="text-xs font-bold text-blue-200 px-3 py-1.5 uppercase tracking-wider">Amazon Update</span>
+ <button onClick={() => processBulkQueue('sync_status', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700 transition-colors">Sync Status</button>
+ <button onClick={() => processBulkQueue('update_offer', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700 transition-colors">Offer Only</button>
+ <button onClick={() => processBulkQueue('update_images', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700 transition-colors">Images Only</button>
+ <button onClick={() => processBulkQueue('update_text', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700 transition-colors">Details Only</button>
  </div>
  )}
  </div>
@@ -2146,7 +2184,10 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  <div className="w-px h-5 bg-blue-500 mx-1"></div>
  
  <button onClick={() => {
- const fakeSelection = { rows: { toArray: () => selectedRowsList } } as any;
+  const fakeSelection: GridSelection = {
+  columns: CompactSelection.empty(),
+  rows: selectedRowsList.reduce((selection, rowIndex) => selection.add(rowIndex), CompactSelection.empty()),
+  };
  onDelete(fakeSelection);
  setGridSelection(undefined);
  }} className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium hover:bg-red-600 transition-colors"title="Delete Selected Rows">

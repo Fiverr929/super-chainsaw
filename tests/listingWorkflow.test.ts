@@ -32,10 +32,26 @@ test('allows Amazon publishing with a SKU template', () => {
 test('validates standalone Amazon offers and variation matrices', () => {
   assert.match(getAmazonPublishValidationError({ ...validAmazonRow, price: '', quantity: '' }, 1) || '', /price and quantity/);
   assert.equal(getAmazonPublishValidationError(validAmazonRow, 1), null);
+  assert.equal(getAmazonPublishValidationError({
+    ...validAmazonRow, sku: undefined, sku_template: 'SKU-{color}', product_id_exemption: 'Yes',
+    variations: { properties: [{ name: 'Color' }], combinations: [{ values: { Color: 'White' }, isEnabled: true, price: '1200', quantity: '10' }] }
+  }, 2), null);
+  assert.equal(getAmazonPublishValidationError({
+    ...validAmazonRow, sku: undefined, sku_template: 'SKU-{size}', product_id_exemption: 'Yes', primary_color: 'White',
+    variations: { properties: [{ name: 'Size' }], combinations: [{ values: { Size: 'XL' }, isEnabled: true, price: '1200', quantity: '10' }] }
+  }, 2), null);
   assert.match(getAmazonPublishValidationError({
-    ...validAmazonRow, sku: undefined, sku_template: 'SKU-{color}-{size}',
-    variations: { properties: [{ name: 'Color' }, { name: 'Size' }], combinations: [{ values: { Color: 'White' }, isEnabled: true, price: '1200', quantity: '10' }] }
-  }, 2) || '', /both Color and Size/);
+    ...validAmazonRow, sku: undefined, sku_template: 'SKU-{size}', product_id_exemption: 'Yes',
+    variations: { properties: [{ name: 'Size' }], combinations: [{ values: { Size: 'XL' }, isEnabled: true, price: '1200', quantity: '10' }] }
+  }, 2) || '', /real color/);
+  assert.match(getAmazonPublishValidationError({
+    ...validAmazonRow, sku: undefined, sku_template: 'SKU-{color}', product_id_exemption: 'No',
+    variations: { properties: [{ name: 'Color' }], combinations: [{ values: { Color: 'White' }, isEnabled: true, price: '1200', quantity: '10' }] }
+  }, 2) || '', /external product ID/);
+  assert.match(getAmazonPublishValidationError({
+    ...validAmazonRow, sku: undefined, sku_template: 'SKU-{color}-{size}', product_id_exemption: 'Yes',
+    variations: { properties: [{ name: 'Color' }, { name: 'Size' }], combinations: [{ values: {}, isEnabled: true, price: '1200', quantity: '10' }] }
+  }, 2) || '', /variation value/);
 });
 
 test('preserves every generated metadata field returned by the AI route', () => {

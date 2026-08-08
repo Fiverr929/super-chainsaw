@@ -15,9 +15,17 @@ export type AmazonPublishRow = {
   target_gender?: string; age_range_description?: string; department_name?: string; care_instructions?: string;
   number_of_items?: string; item_weight?: string; manufacturer_address?: string; packer_address?: string;
   item_dimension_length?: string; item_dimension_width?: string; item_dimension_height?: string; variation_theme?: string; size_system?: string;
+  primary_color?: string; secondary_color?: string; external_product_id?: string; external_product_id_type?: string;
   variations?: {
     properties?: Array<{ name?: string }>;
-    combinations?: Array<{ values?: Record<string, string>; price?: string; quantity?: string; isEnabled?: boolean }>;
+    combinations?: Array<{
+      values?: Record<string, string>;
+      price?: string;
+      quantity?: string;
+      isEnabled?: boolean;
+      external_product_id?: string;
+      external_product_id_type?: string;
+    }>;
   };
 };
 
@@ -60,12 +68,26 @@ export function getAmazonPublishValidationError(row: AmazonPublishRow, rowNumber
     if (enabled.length === 0) return `Row ${rowNumber} needs at least one enabled Amazon variation.`;
     const seen = new Set<string>();
     for (const combination of enabled) {
-      const entries = Object.entries(combination.values || {});
+      const entries = Object.entries(combination.values || {})
+        .map(([key, value]) => [key, String(value).trim()] as [string, string])
+        .filter(([, value]) => value.length > 0);
+      if (entries.length === 0) return `Row ${rowNumber} has an enabled variation without a variation value.`;
       const color = entries.find(([key]) => key.toLowerCase() === 'color')?.[1]?.trim();
-      const size = entries.find(([key]) => key.toLowerCase() === 'size')?.[1]?.trim();
-      if (!color || !size) return `Row ${rowNumber} has an enabled variation without both Color and Size.`;
-      const key = color.toLowerCase() + '|' + size.toLowerCase();
-      if (seen.has(key)) return `Row ${rowNumber} has a duplicate ${color} / ${size} variation.`;
+      const fixedColor = [row.primary_color, row.secondary_color]
+        .map(value => typeof value === 'string' ? value.trim() : '')
+        .find(value => value && value !== 'Auto' && value !== 'None');
+      if (!color && !fixedColor) return `Row ${rowNumber} has size-only or non-color variations, but Amazon SHIRT child listings still need a real color. Add Color as a variation or set Primary/Secondary Color.`;
+      const externalProductId = combination.external_product_id?.trim();
+      const externalProductIdType = combination.external_product_id_type?.trim();
+      if (row.product_id_exemption !== 'Yes' && (!externalProductId || !externalProductIdType)) {
+        return `Row ${rowNumber} needs Product ID Exemption Approved = Yes or a unique external product ID plus type for each Amazon variation.`;
+      }
+      const key = entries
+        .map(([entryKey, value]) => `${entryKey.toLowerCase()}:${value.toLowerCase()}`)
+        .sort()
+        .join('|');
+      const label = entries.map(([, value]) => value).join(' / ');
+      if (seen.has(key)) return `Row ${rowNumber} has a duplicate ${label} variation.`;
       seen.add(key);
       const childPrice = Number(combination.price || row.price);
       const childQuantity = Number(combination.quantity || row.quantity);
@@ -82,6 +104,8 @@ export type AmazonPushResponse = {
   success?: boolean;
   partial?: boolean;
   asin?: string | null;
+  sku?: string;
+  parentSku?: string;
   details?: unknown;
   error?: unknown;
   pending?: boolean;
@@ -107,10 +131,13 @@ function describeUnknown(value: unknown, fallback: string): string {
 export function getAmazonPushResult(response: AmazonPushResponse, currentAsin = ''): AmazonPushResult {
   const asin = response.asin || currentAsin;
   if (response.success && !response.partial) {
+    const successMessage = typeof response.details === 'string'
+      ? response.details
+      : 'Successfully pushed listing to Amazon!';
     return {
       status: response.pending ? 'Submitted' : 'Published',
       asin,
-      message: response.pending ? 'Amazon accepted the submission and is still processing it.' : 'Successfully pushed listing to Amazon!',
+      message: response.pending ? 'Amazon accepted the submission and is still processing it.' : successMessage,
       isError: false,
     };
   }
