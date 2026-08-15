@@ -917,7 +917,7 @@ export async function POST(req: Request) {
       try {
         console.log(`Triggering rollback deletion for orphan listing draft ID: ${listingId}`);
         await axiosWithRetry({
-          url: `https://api.etsy.com/v3/application/listings/${listingId}`,
+          url: `https://api.etsy.com/v3/application/shops/${shopId}/listings/${listingId}`,
           method: 'DELETE',
           headers
         });

@@ -14,6 +14,42 @@ export function useEtsyPush(
   sheetType: 'digital' | 'physical',
   sheetRef: React.MutableRefObject<'digital' | 'physical'>
 ) {
+  const updateRowStatus = useCallback((
+    row: number,
+    targetSheet: 'digital' | 'physical',
+    status: string,
+    listingId?: string
+  ) => {
+    if (sheetRef.current === targetSheet) {
+      const newData = [...dataRef.current];
+      if (!newData[row]) return;
+      newData[row] = {
+        ...newData[row],
+        status,
+        ...(listingId !== undefined ? { listing_id: listingId } : {})
+      };
+      dataRef.current = newData;
+      setData(newData);
+      return;
+    }
+
+    try {
+      const key = getEtsyGridStorageKey(targetSheet);
+      const saved = localStorage.getItem(key);
+      if (!saved) return;
+      const parsed = JSON.parse(saved);
+      if (!Array.isArray(parsed) || !parsed[row]) return;
+      parsed[row] = {
+        ...parsed[row],
+        status,
+        ...(listingId !== undefined ? { listing_id: listingId } : {})
+      };
+      localStorage.setItem(key, JSON.stringify(parsed));
+    } catch (error) {
+      console.error(`Failed to update background Etsy ${targetSheet} row ${row + 1}:`, error);
+    }
+  }, [dataRef, setData, sheetRef]);
+
   const triggerEtsyPush = useCallback((row: number, actionType: string): Promise<void> => {
     return new Promise((resolve) => {
       const newData = [...dataRef.current];
@@ -45,9 +81,8 @@ export function useEtsyPush(
         })
         .then(pushData => {
           if (sheetRef.current === sheetType) {
-              const newData = [...dataRef.current];
               if (pushData.success) {
-                newData[row] = { ...newData[row], status: "Published", listing_id: pushData.listing_id?.toString() || "" };
+                updateRowStatus(row, sheetType, "Published", pushData.listing_id?.toString() || "");
                 toast.success("Successfully pushed to Etsy!");
               } else {
                 let errMsg = pushData.details?.error || pushData.details || pushData.error || "Unknown Error";
@@ -55,27 +90,19 @@ export function useEtsyPush(
                   errMsg = JSON.stringify(errMsg, null, 2);
                 }
                 toast.error(`Etsy API Error:\n${errMsg}`);
-                newData[row] = { ...newData[row], status: "Error" };
+                updateRowStatus(row, sheetType, "Error");
               }
-              dataRef.current = newData;
-              setData(newData);
           } else {
-              const key = getEtsyGridStorageKey(sheetType);
-              const saved = localStorage.getItem(key);
-              if (saved) {
-                 const parsed = JSON.parse(saved);
-                 if (pushData.success) {
-                    parsed[row] = { ...parsed[row], status: "Published", listing_id: pushData.listing_id?.toString() || "" };
-                    toast.success("Successfully pushed background task to Etsy!");
-                 } else {
-                    let errMsg = pushData.details?.error || pushData.details || pushData.error || "Unknown Error";
-                    if (typeof errMsg === 'object') {
-                      errMsg = JSON.stringify(errMsg, null, 2);
-                    }
-                    toast.error(`Etsy API Error (Background Task):\n${errMsg}`);
-                    parsed[row] = { ...parsed[row], status: "Error" };
+              if (pushData.success) {
+                 updateRowStatus(row, sheetType, "Published", pushData.listing_id?.toString() || "");
+                 toast.success("Successfully pushed background task to Etsy!");
+              } else {
+                 let errMsg = pushData.details?.error || pushData.details || pushData.error || "Unknown Error";
+                 if (typeof errMsg === 'object') {
+                   errMsg = JSON.stringify(errMsg, null, 2);
                  }
-                 localStorage.setItem(key, JSON.stringify(parsed));
+                 toast.error(`Etsy API Error (Background Task):\n${errMsg}`);
+                 updateRowStatus(row, sheetType, "Error");
               }
           }
           resolve();
@@ -90,20 +117,7 @@ export function useEtsyPush(
             toast.error("Network error while pushing to Etsy.");
           }
           
-          if (sheetRef.current === sheetType) {
-              const newData = [...dataRef.current];
-              newData[row] = { ...newData[row], status: "Error" };
-              dataRef.current = newData;
-              setData(newData);
-          } else {
-              const key = getEtsyGridStorageKey(sheetType);
-              const saved = localStorage.getItem(key);
-              if (saved) {
-                 const parsed = JSON.parse(saved);
-                 parsed[row] = { ...parsed[row], status: "Error" };
-                 localStorage.setItem(key, JSON.stringify(parsed));
-              }
-          }
+          updateRowStatus(row, sheetType, "Error");
           resolve();
         });
       };
@@ -156,20 +170,7 @@ export function useEtsyPush(
                  executeEtsyPush(updatedRowData);
               } else {
                  toast.error(`Printify Error: ${printifyData.error}`);
-                 if (sheetRef.current === sheetType) {
-                    const newData = [...dataRef.current];
-                    newData[row] = { ...newData[row], status: "Error" };
-                    dataRef.current = newData;
-                    setData(newData);
-                 } else {
-                    const key = getEtsyGridStorageKey(sheetType);
-                    const saved = localStorage.getItem(key);
-                    if (saved) {
-                       const parsed = JSON.parse(saved);
-                       parsed[row] = { ...parsed[row], status: "Error" };
-                       localStorage.setItem(key, JSON.stringify(parsed));
-                    }
-                 }
+                 updateRowStatus(row, sheetType, "Error");
                  resolve();
               }
            })
@@ -177,20 +178,7 @@ export function useEtsyPush(
               toast.dismiss(`printify-${row}`);
               console.error(err);
               toast.error("Failed to connect to Printify");
-              if (sheetRef.current === sheetType) {
-                 const newData = [...dataRef.current];
-                 newData[row] = { ...newData[row], status: "Error" };
-                 dataRef.current = newData;
-                 setData(newData);
-              } else {
-                 const key = getEtsyGridStorageKey(sheetType);
-                 const saved = localStorage.getItem(key);
-                 if (saved) {
-                    const parsed = JSON.parse(saved);
-                    parsed[row] = { ...parsed[row], status: "Error" };
-                    localStorage.setItem(key, JSON.stringify(parsed));
-                 }
-              }
+              updateRowStatus(row, sheetType, "Error");
               resolve();
            });
         } else {
@@ -202,7 +190,7 @@ export function useEtsyPush(
         executeEtsyPush(rowDataToPush);
       }
     });
-  }, [dataRef, setData, sheetType, sheetRef]);
+  }, [dataRef, setData, sheetType, sheetRef, updateRowStatus]);
 
   return { triggerEtsyPush };
 }

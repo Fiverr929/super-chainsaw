@@ -617,26 +617,34 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
 
  const key = getStorageKey(workstation, sheet);
  const saved = localStorage.getItem(key);
+ const createFreshData = () => Array.from({ length: 50 }).map(() => ({
+ ...(workstation ==="amazon"? emptyRowAmazon : (sheet ==="digital"? emptyRowDigital : emptyRowPhysical))
+ }));
  if (saved) {
  try {
  const parsed = JSON.parse(saved);
  if (Array.isArray(parsed) && parsed.length > 0) {
- setData(parsed);
- dataRef.current = parsed;
- } else {
- const freshData = Array.from({ length: 50 }).map(() => ({
+ const normalized = parsed.slice();
+ while (normalized.length < 50) {
+ normalized.push({
  ...(workstation ==="amazon"? emptyRowAmazon : (sheet ==="digital"? emptyRowDigital : emptyRowPhysical))
- }));
+ });
+ }
+ setData(normalized);
+ dataRef.current = normalized;
+ } else {
+ const freshData = createFreshData();
  setData(freshData);
  dataRef.current = freshData;
  }
  } catch (e) {
  console.error("Failed to parse local storage grid data", e);
+ const freshData = createFreshData();
+ setData(freshData);
+ dataRef.current = freshData;
  }
  } else {
- const freshData = Array.from({ length: 50 }).map(() => ({
- ...(workstation ==="amazon"? emptyRowAmazon : (sheet ==="digital"? emptyRowDigital : emptyRowPhysical))
- }));
+ const freshData = createFreshData();
  setData(freshData);
  dataRef.current = freshData;
  }
@@ -783,6 +791,14 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  };
  window.addEventListener("beforeunload", handleBeforeUnload);
  return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+ }, [workstation]);
+
+ const changeEtsySheet = useCallback((nextSheet: "digital" | "physical") => {
+ if (nextSheet === sheetRef.current) return;
+ const currentKey = getStorageKey(workstation, sheetRef.current);
+ localStorage.setItem(currentKey, JSON.stringify(dataRef.current));
+ localStorage.setItem("workstation_v2_active_sheet", nextSheet);
+ setSheet(nextSheet);
  }, [workstation]);
 
  const getCellContent = useCallback(
@@ -1933,10 +1949,7 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  <div className="flex-none h-10 border-t border-zinc-200 bg-zinc-50 flex items-center justify-between px-3 select-none">
  <div className="flex items-start gap-1 h-full -mt-[1px]">
  <button
- onClick={() => {
- setSheet("digital");
- localStorage.setItem("workstation_v2_active_sheet","digital");
- }}
+ onClick={() => changeEtsySheet("digital")}
  className={`px-4 h-[28px] text-[11px] font-semibold uppercase tracking-wider transition-all border flex items-center rounded-none cursor-pointer ${
  sheet ==="digital"
  ?"bg-white text-blue-600 border-zinc-200 border-t-white border-b-2 border-b-blue-600 z-10 font-bold"
@@ -1946,10 +1959,7 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  Digital Worksheet
  </button>
  <button
- onClick={() => {
- setSheet("physical");
- localStorage.setItem("workstation_v2_active_sheet","physical");
- }}
+ onClick={() => changeEtsySheet("physical")}
  className={`px-4 h-[28px] text-[11px] font-semibold uppercase tracking-wider transition-all border flex items-center rounded-none cursor-pointer ${
  sheet ==="physical"
  ?"bg-white text-blue-600 border-zinc-200 border-t-white border-b-2 border-b-blue-600 z-10 font-bold"

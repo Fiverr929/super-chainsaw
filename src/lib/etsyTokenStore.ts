@@ -55,5 +55,6 @@ export function saveEtsyRefreshToken(refreshToken: string, shopId?: string): voi
     fs.writeFileSync(TOKENS_FILE, JSON.stringify(newData, null, 2), 'utf-8');
   } catch (err) {
     console.error("Failed to save tokens.json:", err);
+    throw new Error('Failed to persist the refreshed Etsy credentials. Check workspace write permissions.', { cause: err });
   }
 }
