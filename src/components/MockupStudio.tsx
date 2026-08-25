@@ -5,6 +5,7 @@ import Image from "next/image";
 import JSZip from "jszip";
 import { Copy, Download, ImageIcon, Loader2, Plus, Save, Settings2, Trash2, UploadCloud, X } from "lucide-react";
 import toast from "react-hot-toast";
+import { loadMockupPresets, saveMockupPresets } from "@/lib/mockupPresetStorage";
 
 type Placement = {
   x: number;
@@ -49,7 +50,7 @@ type GeneratedMockup = {
   dataUrl: string;
 };
 
-const STORAGE_KEY = "workstation_mockup_presets";
+const LEGACY_STORAGE_KEY = "workstation_mockup_presets";
 
 const DEFAULT_PLACEMENT: Placement = {
   x: 35,
@@ -862,34 +863,70 @@ export default function MockupStudio() {
   const designInputRef = useRef<HTMLInputElement>(null);
   const frameInputRef = useRef<HTMLInputElement>(null);
   const slotImageInputRef = useRef<HTMLInputElement>(null);
+  const hasLoadedPresetsRef = useRef(false);
+  const storageErrorShownRef = useRef(false);
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        const validPresets = Array.isArray(parsed) ? parsed.filter(isValidPreset).map(normalizePreset) : [];
-        if (validPresets.length > 0) {
-          setPresets(validPresets);
-          setActivePresetId(validPresets[0].id);
-          return;
+    let cancelled = false;
+
+    const hydratePresets = async () => {
+      let storedPresets: unknown;
+
+      try {
+        storedPresets = await loadMockupPresets();
+      } catch (error) {
+        console.warn("Failed to load mockup presets from IndexedDB:", error);
+      }
+
+      if (storedPresets === undefined) {
+        try {
+          const legacyValue = localStorage.getItem(LEGACY_STORAGE_KEY);
+          if (legacyValue) {
+            storedPresets = JSON.parse(legacyValue);
+            await saveMockupPresets(storedPresets);
+            localStorage.removeItem(LEGACY_STORAGE_KEY);
+          }
+        } catch (error) {
+          console.warn("Failed to migrate legacy mockup presets:", error);
         }
       }
-    } catch {}
-    const initial = createTshirtPreset();
-    setPresets([initial]);
-    setActivePresetId(initial.id);
+
+      if (cancelled) return;
+
+      const validPresets = Array.isArray(storedPresets)
+        ? storedPresets.filter(isValidPreset).map(normalizePreset)
+        : [];
+      const nextPresets = validPresets.length > 0 ? validPresets : [createTshirtPreset()];
+
+      hasLoadedPresetsRef.current = true;
+      setPresets(nextPresets);
+      setActivePresetId(nextPresets[0].id);
+    };
+
+    void hydratePresets();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
-    if (presets.length > 0) {
-      try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(presets));
-      } catch (error) {
+    if (!hasLoadedPresetsRef.current || presets.length === 0) return;
+
+    const saveTimer = window.setTimeout(() => {
+      void saveMockupPresets(presets).then(() => {
+        storageErrorShownRef.current = false;
+      }).catch((error) => {
         console.warn("Failed to save mockup presets:", error);
-        toast.error("Mockup preset is too large to save in browser storage.");
-      }
-    }
+        if (!storageErrorShownRef.current) {
+          storageErrorShownRef.current = true;
+          toast.error("Could not save mockup presets in browser storage.");
+        }
+      });
+    }, 500);
+
+    return () => {
+      window.clearTimeout(saveTimer);
+    };
   }, [presets]);
 
   const activePreset = useMemo(
