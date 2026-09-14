@@ -92,3 +92,14 @@ test('resolves only paths inside public assets', () => {
   assert.equal(resolvePublicAssetPath('../tokens.json', cwd), null);
   assert.equal(resolvePublicAssetPath('https://example.com/image.png', cwd), null);
 });
+
+test('resolves Google AI Studio key from headers and fallback keys', async () => {
+  const { resolveGeminiApiKey } = await import('../src/lib/geminiApi.ts');
+  const mockReqWithHeader = new Request('https://example.com', {
+    headers: { 'x-gemini-api-key': 'AIzaSy_HeaderKey' }
+  });
+  assert.equal(resolveGeminiApiKey(mockReqWithHeader), 'AIzaSy_HeaderKey');
+
+  const mockReqNoHeader = new Request('https://example.com');
+  assert.equal(resolveGeminiApiKey(mockReqNoHeader, 'AIzaSy_BodyKey'), 'AIzaSy_BodyKey');
+});

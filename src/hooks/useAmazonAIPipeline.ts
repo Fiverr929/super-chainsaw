@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import toast from 'react-hot-toast';
 import type { RowData } from '@/components/SpreadsheetGrid';
 import { AMAZON_AI_DROPDOWN_OPTIONS, AMAZON_AI_TEXT_FIELDS } from '@/lib/amazonAiConstants';
+import { getStoredGeminiApiKey } from '@/lib/clientApiKey';
 
 export function useAmazonAIPipeline(dataRef: React.MutableRefObject<RowData[]>, setData: React.Dispatch<React.SetStateAction<RowData[]>>) {
   const triggerAmazonAIGeneration = useCallback((row: number, forceRegenerate: string[] = []): Promise<void> => {
@@ -29,9 +30,15 @@ export function useAmazonAIPipeline(dataRef: React.MutableRefObject<RowData[]>, 
       const context = [current.context || '', current.folder ? 'Folder/Product Name: ' + current.folder : ''].filter(Boolean).join('\n');
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 180000);
+      const userApiKey = getStoredGeminiApiKey();
 
       fetch('/api/amazon/generate', {
-        method: 'POST', signal: controller.signal, headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          ...(userApiKey ? { 'x-gemini-api-key': userApiKey } : {})
+        },
         body: JSON.stringify({ context, imagePaths, existingData: current, requestedFields: [...requested], rules: {
           title: current.ai_title_rules || '', description: current.ai_desc_rules || '',
           bullet_points: current.ai_bullet_rules || '', keywords: current.ai_keyword_rules || '',

@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { isSupabaseStorageConfigured, uploadPublicAssetToSupabase } from '@/lib/supabaseStorage';
+import { resolveGeminiApiKey, callGeminiGenerateContent } from '@/lib/geminiApi';
 
 export const dynamic = 'force-dynamic';
 type AmazonStringField =
@@ -1330,7 +1331,7 @@ export async function POST(request: Request) {
     let bpArray = bpStr.split(/[\n|]/).map((s: string) => s.trim()).filter(Boolean);
     
     if (bpArray.length === 0) {
-      const apiKey = process.env.GOOGLE_API_KEY;
+      const apiKey = resolveGeminiApiKey(request, (rowData as Record<string, unknown>).apiKey as string | undefined);
       if (apiKey) {
         const prompt = `You create metadata for an Amazon India physical T-shirt listing.
 Write exactly 5 concise factual bullet points for the following product.
@@ -1339,16 +1340,15 @@ Description: ${rowData.description || ""}
 Tags: ${rowData.search_terms || ""}
 Separate each bullet point by a newline. Do not include bullet characters like '- ' or '* ' at the start of the line.`;
         try {
-          const aiRes = await fetch('https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-2.5-flash:generateContent?key=' + apiKey, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0.7 } })
+          const data = await callGeminiGenerateContent({
+            apiKey,
+            model: 'gemini-2.5-flash',
+            contents: [{ role: 'user', parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.7 }
           });
-          if (aiRes.ok) {
-            const data = await aiRes.json();
-            const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-            if (typeof rawText === 'string') {
-              bpArray = rawText.split('\n').map((s: string) => s.replace(/^[-*•]\s*/, '').trim()).filter(Boolean).slice(0, 5);
-            }
+          const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (typeof rawText === 'string') {
+            bpArray = rawText.split('\n').map((s: string) => s.replace(/^[-*•]\s*/, '').trim()).filter(Boolean).slice(0, 5);
           }
         } catch (e) {
           console.error("Failed to generate AI bullet points for Amazon", e);

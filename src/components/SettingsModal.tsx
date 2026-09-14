@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
-import { X, ShoppingBag, ShoppingCart, ChevronDown, ChevronUp, Check, Loader2 } from "lucide-react";
+import React, { useState, useEffect } from "react";
+import { X, ShoppingBag, ShoppingCart, ChevronDown, ChevronUp, Check, Loader2, Sparkles, Eye, EyeOff, ExternalLink, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
+import { getStoredGeminiApiKey, setStoredGeminiApiKey, removeStoredGeminiApiKey } from "@/lib/clientApiKey";
 
 type Store = {
   id: string;
@@ -40,12 +41,25 @@ export default function SettingsModal({
   const [etsyOpen, setEtsyOpen] = useState(false);
   const [amazonOpen, setAmazonOpen] = useState(false);
 
+  // Google AI Studio state
+  const [geminiKey, setGeminiKey] = useState("");
+  const [hasSavedKey, setHasSavedKey] = useState(false);
+  const [showGeminiKey, setShowGeminiKey] = useState(false);
+  const [isTestingGemini, setIsTestingGemini] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      const stored = getStoredGeminiApiKey();
+      setGeminiKey(stored);
+      setHasSavedKey(Boolean(stored));
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const handleConnectEtsy = async () => {
     setIsConnectingEtsy(true);
     try {
-      // Redirect to the new Etsy OAuth flow
       window.location.href = '/api/etsy/auth';
     } catch {
       toast.error("Error connecting to Etsy");
@@ -62,7 +76,6 @@ export default function SettingsModal({
     toast.success("Etsy store disconnected");
   };
 
-  // Real Amazon Auto-Connect using backend API
   const handleAutoConnectAmazon = async () => {
     setIsConnectingAmazon(true);
     try {
@@ -105,6 +118,56 @@ export default function SettingsModal({
     toast.success("Amazon store disconnected");
   };
 
+  const handleSaveGeminiKey = () => {
+    const trimmed = geminiKey.trim();
+    if (!trimmed) {
+      removeStoredGeminiApiKey();
+      setHasSavedKey(false);
+      toast.success("Google AI Studio key cleared");
+      return;
+    }
+    setStoredGeminiApiKey(trimmed);
+    setHasSavedKey(true);
+    toast.success("Google AI Studio key saved locally");
+  };
+
+  const handleTestGeminiKey = async () => {
+    const keyToTest = geminiKey.trim();
+    if (!keyToTest) {
+      toast.error("Please enter a Google AI Studio API key to test");
+      return;
+    }
+
+    setIsTestingGemini(true);
+    try {
+      const res = await fetch("/api/ai/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey: keyToTest }),
+      });
+      const data = await res.json();
+
+      if (res.ok && data.valid) {
+        setStoredGeminiApiKey(keyToTest);
+        setHasSavedKey(true);
+        toast.success(`Connection verified! Model: ${data.model || 'gemini-2.5-flash'}`);
+      } else {
+        toast.error(data.error || "Verification failed. Check your API key.");
+      }
+    } catch {
+      toast.error("Failed to connect to verification service");
+    } finally {
+      setIsTestingGemini(false);
+    }
+  };
+
+  const handleClearGeminiKey = () => {
+    removeStoredGeminiApiKey();
+    setGeminiKey("");
+    setHasSavedKey(false);
+    toast.success("Google AI Studio key removed");
+  };
+
   const activeEtsyStore = etsyStores.find((s) => s.id === activeEtsyStoreId);
   const activeAmazonStore = amazonStores.find((s) => s.id === activeAmazonStoreId);
 
@@ -134,17 +197,105 @@ export default function SettingsModal({
         <div className="flex-1 overflow-y-auto p-6 space-y-8">
           <div>
             <h1 className="text-xl font-bold text-zinc-900 tracking-tight mb-1">
-              Link marketplaces
+              Workstation Settings
             </h1>
             <p className="text-xs text-zinc-500 leading-relaxed">
-              Link your store accounts to automate listing creation, push products, and manage metadata.
+              Connect your Google AI Studio key and marketplaces to automate metadata generation and listing management.
             </p>
           </div>
 
           <div className="space-y-6">
+
+            {/* Google AI Studio Section */}
+            <div className="flex flex-col border border-zinc-200 p-4 bg-zinc-50/40">
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-blue-50 text-blue-600 rounded-none shrink-0">
+                    <Sparkles size={20} />
+                  </div>
+                  <div className="flex flex-col">
+                    <span className="font-semibold text-zinc-900 text-sm">Google AI Studio</span>
+                    {hasSavedKey ? (
+                      <span className="text-xs text-emerald-600 font-medium mt-0.5 flex items-center gap-1">
+                        <Check size={12} /> Key configured
+                      </span>
+                    ) : (
+                      <span className="text-xs text-zinc-400 mt-0.5">Key not configured</span>
+                    )}
+                  </div>
+                </div>
+
+                <a
+                  href="https://aistudio.google.com/app/apikey"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-[11px] text-blue-600 hover:text-blue-700 font-medium transition-colors"
+                >
+                  Get free key <ExternalLink size={11} />
+                </a>
+              </div>
+
+              <p className="text-xs text-zinc-500 mt-3">
+                Powers AI titles, bullet points, tags, and design extraction with Gemini 2.5 Flash. Your key stays stored in your browser.
+              </p>
+
+              {/* API Key Input Field */}
+              <div className="mt-3 flex flex-col gap-2">
+                <div className="relative flex items-center">
+                  <input
+                    type={showGeminiKey ? "text" : "password"}
+                    value={geminiKey}
+                    onChange={(e) => setGeminiKey(e.target.value)}
+                    placeholder="AIzaSy..."
+                    className="w-full text-xs font-mono border border-zinc-200 bg-white px-3 py-2 pr-9 focus:outline-none focus:border-blue-500 text-zinc-800"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowGeminiKey(!showGeminiKey)}
+                    className="absolute right-2.5 text-zinc-400 hover:text-zinc-600 transition-colors"
+                    title={showGeminiKey ? "Hide key" : "Show key"}
+                  >
+                    {showGeminiKey ? <EyeOff size={14} /> : <Eye size={14} />}
+                  </button>
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center justify-between gap-2 mt-1">
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={handleTestGeminiKey}
+                      disabled={isTestingGemini || !geminiKey.trim()}
+                      className="border border-zinc-200 bg-white hover:bg-zinc-50 text-zinc-700 text-xs px-3 py-1.5 font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+                    >
+                      {isTestingGemini && <Loader2 size={12} className="animate-spin" />}
+                      Test & Verify
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleSaveGeminiKey}
+                      className="border border-blue-600 bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1.5 font-medium transition-colors"
+                    >
+                      Save Key
+                    </button>
+                  </div>
+
+                  {hasSavedKey && (
+                    <button
+                      type="button"
+                      onClick={handleClearGeminiKey}
+                      className="text-zinc-400 hover:text-red-600 text-xs p-1 transition-colors flex items-center gap-1"
+                      title="Clear stored key"
+                    >
+                      <Trash2 size={13} /> Clear
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
             
             {/* Etsy Row */}
-            <div className="flex flex-col">
+            <div className="flex flex-col border-t border-zinc-100 pt-6">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-3">
                   <div className="p-2.5 bg-orange-50 text-orange-600 rounded-none shrink-0">

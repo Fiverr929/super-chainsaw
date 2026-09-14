@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import type { RowData } from '@/components/SpreadsheetGrid';
 import toast from 'react-hot-toast';
 import { getEtsyGridStorageKey } from '@/lib/listingWorkflow';
+import { getStoredGeminiApiKey } from '@/lib/clientApiKey';
 
 export function useAIPipeline(
   dataRef: React.MutableRefObject<RowData[]>,
@@ -45,10 +46,15 @@ export function useAIPipeline(
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 180000); 
 
+    const userApiKey = getStoredGeminiApiKey();
+
     fetch('/api/generate', {
       method: 'POST',
       signal: controller.signal,
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(userApiKey ? { 'x-gemini-api-key': userApiKey } : {})
+      },
       body: JSON.stringify({ 
         context: promptContext,
         imagePaths: imagePaths,

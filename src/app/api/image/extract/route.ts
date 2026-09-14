@@ -1,5 +1,9 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
+import { resolveGeminiApiKey, missingApiKeyResponse, AI_STUDIO_BASE_URL } from '@/lib/geminiApi';
+
+export const dynamic = 'force-dynamic';
+
 type GeminiPart = {
   text?: string;
   inlineData?: { data?: string; mimeType?: string };
@@ -17,14 +21,15 @@ export async function POST(request: Request) {
     const resolution = formData.get('resolution') as string || '1K';
     const aspectRatio = formData.get('aspectRatio') as string || '1:1';
     const prompt = formData.get('prompt') as string || '';
+    const formApiKey = formData.get('apiKey') as string | null;
 
     if (!imageFile) {
       return NextResponse.json({ error: 'No image provided' }, { status: 400 });
     }
 
-    const apiKey = process.env.GOOGLE_API_KEY;
+    const apiKey = resolveGeminiApiKey(request, formApiKey || undefined);
     if (!apiKey) {
-      return NextResponse.json({ error: 'Missing GOOGLE_API_KEY' }, { status: 500 });
+      return missingApiKeyResponse();
     }
 
     const arrayBuffer = await imageFile.arrayBuffer();
@@ -74,15 +79,16 @@ export async function POST(request: Request) {
           contents: [{ parts: [{ text: systemPrompt }, { inlineData: "[BASE64_IMAGE_TRUNCATED]" }]}]
         }, null, 2));
 
+        const model = (formData.get('model') as string) || 'gemini-2.5-flash';
         const response = await axios.post(
-          `https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-3.1-flash-image-preview:generateContent?key=${apiKey}`,
+          `${AI_STUDIO_BASE_URL}/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`,
           payload,
           {
             headers: { 'Content-Type': 'application/json' },
-          timeout: 120000 // 2 minute timeout
-        }
-      );
-      data = response.data;
+            timeout: 120000 // 2 minute timeout
+          }
+        );
+        data = response.data;
     } catch (error: unknown) {
       const errorText = axios.isAxiosError(error)
         ? (error.response?.data ? JSON.stringify(error.response.data) : error.message)

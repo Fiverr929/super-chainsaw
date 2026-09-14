@@ -3,6 +3,7 @@ import fs from 'fs';
 import sharp from 'sharp';
 import { AMAZON_AI_DROPDOWN_OPTIONS, type AmazonAiDropdownField } from '@/lib/amazonAiConstants';
 import { resolvePublicAssetPath } from '@/lib/serverPaths';
+import { resolveGeminiApiKey, missingApiKeyResponse, callGeminiGenerateContent } from '@/lib/geminiApi';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,16 +58,16 @@ export async function POST(request: Request) {
       'Context:', body.context || ''
     ].join('\n');
 
-    const apiKey = process.env.GOOGLE_API_KEY;
-    if (!apiKey) return NextResponse.json({ error: 'GOOGLE_API_KEY is missing from .env.local.' }, { status: 400 });
+    const apiKey = resolveGeminiApiKey(request, (body as Record<string, unknown>).apiKey as string | undefined);
+    if (!apiKey) return missingApiKeyResponse();
 
-    const response = await fetch('https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-2.5-flash:generateContent?key=' + apiKey, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }, ...imageParts] }], generationConfig: { temperature: 0.35, responseMimeType: 'application/json' } })
+    const data = await callGeminiGenerateContent({
+      apiKey,
+      model: 'gemini-2.5-flash',
+      contents: [{ role: 'user', parts: [{ text: prompt }, ...imageParts] }],
+      generationConfig: { temperature: 0.35, responseMimeType: 'application/json' }
     });
-    if (!response.ok) return NextResponse.json({ error: 'Amazon AI generation failed: ' + await response.text() }, { status: 500 });
 
-    const data = await response.json();
     const rawText = data.candidates?.[0]?.content?.parts?.[0]?.text;
     if (typeof rawText !== 'string') return NextResponse.json({ error: 'Amazon AI returned no content.' }, { status: 500 });
     const parsed = JSON.parse(rawText.replace(/^```(json)?\s*/i, '').replace(/```\s*$/, '').trim()) as Record<string, unknown>;

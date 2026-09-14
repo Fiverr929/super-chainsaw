@@ -4,34 +4,19 @@ import sharp from 'sharp';
 import { categorySupportsOccasion, categorySupportsCelebration, categorySupportsSubject, categorySupportsGraphic } from '@/lib/etsyConstants';
 import { buildGeneratedMetadataResponse } from '@/lib/listingWorkflow';
 import { resolvePublicAssetPath } from '@/lib/serverPaths';
+import { resolveGeminiApiKey, missingApiKeyResponse, callGeminiGenerateContent } from '@/lib/geminiApi';
+
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   try {
-    const { context, imagePaths = [], existingData = {}, aiRules = {}, forceRegenerate = [] } = await request.json();
+    const body = await request.json();
+    const { context, imagePaths = [], existingData = {}, aiRules = {}, forceRegenerate = [] } = body;
 
-    if (!context || context.trim() === '') {
-      // Proceed even if context is empty
-    }
-
-    const apiKey = process.env.GOOGLE_API_KEY;
+    const apiKey = resolveGeminiApiKey(request, body.apiKey);
 
     if (!apiKey) {
-      console.warn("GOOGLE_API_KEY is missing from .env! Using highly realistic mock fallback for testing.");
-      // Artificial delay to simulate AI thinking
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      return NextResponse.json({
-        title: `Vintage Grunge ${context.substring(0, 15)} Graphic Tee | Aesthetic 90s Streetwear Shirt | Oversized Edgy Clothing Gift`,
-        description: `Step up your streetwear game with this ultra-premium vintage graphic tee.\n\nInspired by classic 90s grunge aesthetics, this shirt is designed to look perfectly worn-in while maintaining an incredibly soft and heavy-weight feel.\n\nContext provided: ${context}\n\nFeatures:\n- 100% Ring-Spun Cotton\n- Relaxed, Oversized Fit\n- Distressed Graphic Print\n- Wash inside out on cold to preserve the vintage fade.\n\nPlease note this is a handmade item and slight variations in the wash may occur.`,
-        tags: "grunge shirt, vintage tee, 90s aesthetic, streetwear, oversized shirt, graphic tee, edgy clothing, alternative fashion, skater shirt, unisex tee, gift for him, punk shirt, retro clothing",
-        alt_texts: [
-          "Front view of vintage grunge graphic tee",
-          "Back view showing oversized streetwear fit",
-          "Close up of distressed graphic print",
-          "Lifestyle shot of skater wearing the aesthetic shirt",
-          "Size chart for unisex oversized fit"
-        ]
-      });
+      return missingApiKeyResponse();
     }
 
     // Resolve and read local images
@@ -130,33 +115,25 @@ Format example: { "title": "...", "primary_color": "...", "secondary_color": "..
        );
     }
 
-    const response = await fetch(`https://aiplatform.googleapis.com/v1/publishers/google/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({
-        contents: [
-          { 
-            role: "user",
-            parts: [{ text: `${finalPrompt}\n\nContext: ${context}` }, ...imageParts] 
-          }
-        ],
-        generationConfig: {
-          temperature: 0.7,
-          responseMimeType: "application/json"
+    const data = await callGeminiGenerateContent({
+      apiKey,
+      model: 'gemini-2.5-flash',
+      contents: [
+        { 
+          role: "user",
+          parts: [{ text: `${finalPrompt}\n\nContext: ${context}` }, ...imageParts] 
         }
-      })
+      ],
+      generationConfig: {
+        temperature: 0.7,
+        responseMimeType: "application/json"
+      }
     });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Gemini API Error:", errorText);
-      return NextResponse.json({ error: `Failed to generate from Gemini: ${errorText}` }, { status: 500 });
+    const contentText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!contentText) {
+      return NextResponse.json({ error: "Google AI Studio returned an empty response." }, { status: 500 });
     }
-
-    const data = await response.json();
-    const contentText = data.candidates[0].content.parts[0].text;
     
     // Robust parsing to strip out markdown formatting if the LLM includes it
     const cleanedText = contentText.replace(/^```(json)?\s*/i, '').replace(/```\s*$/, '').trim();

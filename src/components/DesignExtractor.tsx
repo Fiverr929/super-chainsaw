@@ -6,6 +6,7 @@ import { UploadCloud, FileText, ImageIcon, RefreshCw, Settings2, Download, Loade
 import toast from'react-hot-toast';
 import ImagePresetManagerModal, { ImagePreset, DEFAULT_IMAGE_PRESET } from'./ImagePresetManagerModal';
 import MockupStudio from'./MockupStudio';
+import { getStoredGeminiApiKey } from '@/lib/clientApiKey';
 
 export default function DesignExtractor() {
  const [mode, setMode] = useState<"extract" | "mockup">("mockup");
@@ -75,8 +76,16 @@ export default function DesignExtractor() {
  formData.append('aspectRatio', finalAspectRatio);
  formData.append('thinkingLevel', activePreset.thinkingLevel ||'Medium');
 
+ const userApiKey = getStoredGeminiApiKey();
+ if (userApiKey) {
+   formData.append('apiKey', userApiKey);
+ }
+
  const response = await fetch('/api/image/extract', {
  method:'POST',
+ headers: {
+   ...(userApiKey ? { 'x-gemini-api-key': userApiKey } : {})
+ },
  body: formData,
  });
 
