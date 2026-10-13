@@ -3,11 +3,6 @@ import type { RowData } from '@/components/SpreadsheetGrid';
 import toast from 'react-hot-toast';
 import { getEtsyGridStorageKey } from '@/lib/listingWorkflow';
 
-type PrintifyVariant = {
-  title: string;
-  sku?: string;
-};
-
 export function useEtsyPush(
   dataRef: React.MutableRefObject<RowData[]>,
   setData: React.Dispatch<React.SetStateAction<RowData[]>>,
@@ -18,7 +13,8 @@ export function useEtsyPush(
     row: number,
     targetSheet: 'digital' | 'physical',
     status: string,
-    listingId?: string
+    listingId?: string,
+    printifyProductId?: string
   ) => {
     if (sheetRef.current === targetSheet) {
       const newData = [...dataRef.current];
@@ -26,7 +22,8 @@ export function useEtsyPush(
       newData[row] = {
         ...newData[row],
         status,
-        ...(listingId !== undefined ? { listing_id: listingId } : {})
+        ...(listingId !== undefined ? { listing_id: listingId } : {}),
+        ...(printifyProductId !== undefined ? { printify_product_id: printifyProductId } : {})
       };
       dataRef.current = newData;
       setData(newData);
@@ -42,7 +39,8 @@ export function useEtsyPush(
       parsed[row] = {
         ...parsed[row],
         status,
-        ...(listingId !== undefined ? { listing_id: listingId } : {})
+        ...(listingId !== undefined ? { listing_id: listingId } : {}),
+        ...(printifyProductId !== undefined ? { printify_product_id: printifyProductId } : {})
       };
       localStorage.setItem(key, JSON.stringify(parsed));
     } catch (error) {
@@ -122,7 +120,7 @@ export function useEtsyPush(
         });
       };
 
-      if (sheetType === 'physical' && rowDataToPush.enable_pod && actionType === "all") {
+      if (sheetType === 'physical' && rowDataToPush.enable_pod && actionType === "all" && !rowDataToPush.listing_id) {
         // Intercept and do Printify first
         const preset = {
           enable_pod: rowDataToPush.enable_pod,
@@ -132,45 +130,40 @@ export function useEtsyPush(
         };
 
         if (preset) {
-           toast.loading("Creating product in Printify...", { id: `printify-${row}` });
+           toast.loading("Publishing through Printify...", { id: `printify-${row}` });
            fetch('/api/printify/publish', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ preset, rowData: rowDataToPush })
+              body: JSON.stringify({
+                preset,
+                rowData: rowDataToPush,
+                shopId: Number(localStorage.getItem('workstation_printify_shop_id')) || undefined
+              })
            })
            .then(res => res.json())
            .then(printifyData => {
               toast.dismiss(`printify-${row}`);
               if (printifyData.success) {
-                 toast.success("Printify product created! Pushing to Etsy...");
-                 
-                 // Inject SKUs into Etsy payload here
-                 // The Printify product has variants with actual SKUs
-                 const updatedRowData = { ...rowDataToPush };
-                 
-                 if (updatedRowData.variations && updatedRowData.variations.combinations && printifyData.printify_product?.variants) {
-                    // We map the Etsy combination to the Printify SKU
-                    // For example, if combination has "White" and Printify variant title has "White"
-                     updatedRowData.variations.combinations = updatedRowData.variations.combinations.map(combo => {
-                        const comboValues = Object.values(combo.values).map(v => String(v).toLowerCase().trim());
-                        
-                        const matchedPrintifyVariant = (printifyData.printify_product.variants as PrintifyVariant[]).find((pv) => {
-                           const pvTitle = pv.title.toLowerCase();
-                           // Ensure all combo values are in the printify title
-                           return comboValues.every(cv => pvTitle.includes(cv));
-                        });
-
-                        if (matchedPrintifyVariant) {
-                           return { ...combo, skuTemplate: matchedPrintifyVariant.sku };
-                        }
-                        return combo;
-                    });
+                 const productId = String(printifyData.product_id);
+                 if (!printifyData.listing_id) {
+                    updateRowStatus(row, sheetType, "Publishing", undefined, productId);
+                    toast.success("Printify is publishing to Etsy. Retry this row shortly to check the link.");
+                    resolve();
+                    return;
                  }
-                 
-                 executeEtsyPush(updatedRowData);
+                 const listingId = String(printifyData.listing_id);
+                 updateRowStatus(row, sheetType, "Publishing", listingId, productId);
+                 if (rowDataToPush.images?.trim()) {
+                    toast.loading("Applying listing images on Etsy...", { id: `etsy-images-${row}` });
+                    executeEtsyPush({ ...rowDataToPush, listing_id: listingId, updateType: "images" });
+                 } else {
+                    updateRowStatus(row, sheetType, "Published", listingId, productId);
+                    toast.success("Published on Etsy through Printify.");
+                    resolve();
+                 }
               } else {
                  toast.error(`Printify Error: ${printifyData.error}`);
-                 updateRowStatus(row, sheetType, "Error");
+                 updateRowStatus(row, sheetType, "Error", undefined, printifyData.product_id ? String(printifyData.product_id) : undefined);
                  resolve();
               }
            })
@@ -192,5 +185,17 @@ export function useEtsyPush(
     });
   }, [dataRef, setData, sheetType, sheetRef, updateRowStatus]);
 
-  return { triggerEtsyPush };
+  const triggerEtsySync = useCallback(async (row: number): Promise<void> => {
+    const listingId = dataRef.current[row]?.listing_id;
+    if (!listingId) { toast.error('This row has no Etsy listing ID to sync.'); return; }
+    try {
+      const response = await fetch(`/api/etsy/listing-status?listingId=${encodeURIComponent(listingId)}`, { cache: 'no-store' });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Could not sync Etsy status.');
+      updateRowStatus(row, sheetType, result.status, listingId);
+      toast.success(`Etsy status: ${result.status}`);
+    } catch (error) { toast.error(error instanceof Error ? error.message : 'Could not sync Etsy status.'); }
+  }, [dataRef, sheetType, updateRowStatus]);
+
+  return { triggerEtsyPush, triggerEtsySync };
 }

@@ -173,7 +173,9 @@ export function useAIPipeline(
                ...updatedArray[row],
                images: assetData.images,
                video: assetData.video,
-               digital_file: assetData.digital_file
+               digital_file: assetData.digital_file,
+               ...(assetData.workspace_product_id ? { workspace_product_id: assetData.workspace_product_id } : {}),
+               ...(assetData.workspace_product_revision ? { workspace_product_revision: assetData.workspace_product_revision } : {})
             };
             dataRef.current = updatedArray;
             setData(updatedArray);

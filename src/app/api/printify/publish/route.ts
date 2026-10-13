@@ -5,9 +5,13 @@ import {
   uploadImageToPrintify, 
   createPrintifyProduct, 
   getPrintifyShops, 
-  getPrintifyVariants 
+  getPrintifyVariants,
+  getPrintifyProduct,
+  printifyExternalListingId,
+  publishPrintifyProduct
 } from "@/lib/printify";
 import { resolvePublicAssetPath } from "@/lib/serverPaths";
+import { mapPrintifyVariants } from '@/lib/printifyVariantMapping';
 import type { Preset } from "@/components/PresetManagerModal";
 import type { RowData } from "@/components/SpreadsheetGrid";
 
@@ -16,17 +20,39 @@ export const dynamic = 'force-dynamic';
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { preset, rowData }: { preset: Preset, rowData: RowData } = body;
+    const { preset, rowData, shopId }: { preset: Preset, rowData: RowData, shopId?: number } = body;
 
     if (!preset || !rowData) {
       return NextResponse.json({ success: false, error: "Missing preset or rowData" }, { status: 400 });
     }
+    if (rowData.listing_id) {
+      return NextResponse.json({ success: false, error: 'This row already has an Etsy listing. Use the Etsy update actions or link it in Printify; publishing again would create a duplicate.' }, { status: 400 });
+    }
+    if (!Number.isInteger(shopId) || !shopId || shopId <= 0) {
+      return NextResponse.json({ success: false, error: 'Select a Printify shop in Settings before publishing.' }, { status: 400 });
+    }
+
+    // Validate the selected shop before uploading artwork so a bad selection
+    // cannot create an orphaned Printify upload or product.
+    const shops = await getPrintifyShops();
+    const shop = shops.find(candidate => candidate.id === shopId);
+    if (!shop) {
+      return NextResponse.json({ success: false, error: 'Selected Printify shop is no longer available. Choose a shop in Settings.' }, { status: 400 });
+    }
+    if (shop.sales_channel.toLowerCase() !== 'etsy') {
+      return NextResponse.json({ success: false, error: 'Select an Etsy-connected Printify shop in Settings.' }, { status: 400 });
+    }
+    if (rowData.printify_product_id) {
+      const existing = await getPrintifyProduct(shop.id, rowData.printify_product_id);
+      const listingId = printifyExternalListingId(existing);
+      return NextResponse.json({ success: true, product_id: existing.id, listing_id: listingId, pending: !listingId });
+    }
 
     // 1. Extract the design image
-    const designRaw = rowData.digital_file || rowData.images || "";
+    const designRaw = rowData.digital_file || "";
     const designPaths = designRaw.split(",").map(i => i.trim()).filter(i => i);
     if (designPaths.length === 0) {
-      return NextResponse.json({ success: false, error: "No design image provided. Please add it to the Design File or Images column." }, { status: 400 });
+      return NextResponse.json({ success: false, error: "Add the print-ready artwork to Design File. Listing mockups cannot be used as print artwork." }, { status: 400 });
     }
     
     // Take the first file as the design
@@ -45,82 +71,82 @@ export async function POST(req: NextRequest) {
     console.log(`[Printify] Uploading ${fileName}...`);
     const printifyImageId = await uploadImageToPrintify(base64Image, fileName);
     console.log(`[Printify] Uploaded image ID: ${printifyImageId}`);
-
-    // 3. Get Shop ID
-    const shops = await getPrintifyShops();
-    const shop = shops.find(s => s.sales_channel === 'etsy') || shops[0];
-    if (!shop) {
-      return NextResponse.json({ success: false, error: "No Printify shops found." }, { status: 400 });
+    let backImageId: string | undefined;
+    if (typeof rowData.workspace_back_artwork === 'string' && rowData.workspace_back_artwork) {
+      const backPath = resolvePublicAssetPath(rowData.workspace_back_artwork);
+      if (!backPath || !fs.existsSync(backPath)) return NextResponse.json({ success: false, error: 'Back print artwork is missing. Reopen the listing draft and save it again.' }, { status: 400 });
+      backImageId = await uploadImageToPrintify(fs.readFileSync(backPath).toString('base64'), path.basename(backPath));
     }
 
-    // 4. Match Variants
-    console.log(`[Printify] Fetching variants for Blueprint ${preset.pod_blueprint_id} and Provider ${preset.pod_print_provider_id}`);
-    const availableVariants = await getPrintifyVariants(preset.pod_blueprint_id!, preset.pod_print_provider_id!);
-    
-    // We need to parse rowData.variations if it exists, or fall back to primary_color / secondary_color
-    const requestedColors = new Set<string>();
-    const requestedSizes = new Set<string>();
+    // 3. Match Variants
+    const blueprintId = preset.pod_blueprint_id || 706;
+    // Printify Choice is the default provider for Comfort Colors 1717. Provider
+    // 16 was the old SwiftPOD identifier and is retained for legacy presets.
+    const providerId = preset.pod_print_provider_id === 16 ? 39 : (preset.pod_print_provider_id || 99);
 
-    if (rowData.variations?.properties) {
-      rowData.variations.properties.forEach(prop => {
-        const title = prop.name.toLowerCase();
-        if (title.includes("color")) {
-           prop.options.forEach(v => requestedColors.add(v.toLowerCase().trim()));
-        } else if (title.includes("size")) {
-           prop.options.forEach(v => requestedSizes.add(v.toLowerCase().trim()));
-        }
-      });
-    }
-
-    if (rowData.primary_color) requestedColors.add(rowData.primary_color.toLowerCase().trim());
-    if (rowData.secondary_color) requestedColors.add(rowData.secondary_color.toLowerCase().trim());
+    console.log(`[Printify] Fetching variants for Blueprint ${blueprintId} and Provider ${providerId}`);
+    const availableVariants = await getPrintifyVariants(blueprintId, providerId);
     
-    // If no explicit sizes are requested, we might want to default to standard sizes or just take what they have.
-    // For safety, if they didn't specify sizes, let's grab all available sizes for the requested colors.
-    
-    const matchedVariantIds: number[] = [];
-    for (const v of availableVariants) {
-      const vColor = v.options.color?.toLowerCase() || "";
-      const vSize = v.options.size?.toLowerCase() || "";
-      
-      const matchesColor = requestedColors.size === 0 || requestedColors.has(vColor);
-      const matchesSize = requestedSizes.size === 0 || requestedSizes.has(vSize);
-      
-      if (matchesColor && matchesSize) {
-         matchedVariantIds.push(v.id);
+    let variantMapping;
+    try { variantMapping = mapPrintifyVariants(availableVariants, rowData.variations?.combinations || [], rowData.primary_color); }
+    catch (error) { return NextResponse.json({ success: false, error: error instanceof Error ? error.message : 'Invalid Printify variants.' }, { status: 400 }); }
+    const matchedVariantIds = [...new Set(variantMapping.map(mapping => mapping.variantId))];
+    const priceByVariant: Record<number, number> = {};
+    for (const mapping of variantMapping) {
+      const combination = rowData.variations?.combinations.find(item => item.id === mapping.combinationId);
+      const price = Number(combination?.price || rowData.price);
+      if (!Number.isFinite(price) || price <= 0) {
+        return NextResponse.json({ success: false, error: `Set a valid price for each enabled Printify variation.` }, { status: 400 });
       }
+      priceByVariant[mapping.variantId] = Math.round(price * 100);
     }
 
-    if (matchedVariantIds.length === 0) {
-      // If we couldn't match anything perfectly, just fallback to the first variant so it doesn't fail.
-      if (availableVariants.length > 0) {
-         console.warn("[Printify] No exact variant matches found. Falling back to the first available variant.");
-         matchedVariantIds.push(availableVariants[0].id);
-      } else {
-         return NextResponse.json({ success: false, error: "No variants available for this Print Provider." }, { status: 400 });
-      }
-    }
-
-    // 5. Create Product
-    const title = rowData.title || `Custom ${preset.name}`;
+    // 4. Create Product
+    const title = (rowData.title || `Custom ${preset.name}`).slice(0, 140);
     console.log(`[Printify] Creating product with ${matchedVariantIds.length} variants...`);
     
     const product = await createPrintifyProduct(
        shop.id,
        title,
-       preset.pod_blueprint_id!,
-       preset.pod_print_provider_id!,
+       blueprintId,
+       providerId,
        matchedVariantIds,
        printifyImageId,
-       (preset.pod_position as "top" | "center" | "bottom") || "top"
+       (preset.pod_position as "top" | "center" | "bottom") || "top",
+       backImageId,
+       {
+         description: rowData.description,
+         tags: rowData.tags?.split(',').map(tag => tag.toLowerCase().replace(/[^a-z0-9\s]/g, '').trim().slice(0, 20)).filter(Boolean).slice(0, 13),
+         prices: priceByVariant
+       }
     );
 
     console.log(`[Printify] Product created! ID: ${product.id}`);
+    try {
+      await publishPrintifyProduct(shop.id, product.id);
+    } catch (error) {
+      return NextResponse.json({
+        success: false,
+        product_id: product.id,
+        error: `${error instanceof Error ? error.message : String(error)}. Product ${product.id} was created in Printify; resolve this before retrying to avoid a duplicate.`
+      }, { status: 502 });
+    }
+
+    let listingId: string | undefined;
+    for (let attempt = 0; attempt < 8; attempt++) {
+      const current = await getPrintifyProduct(shop.id, product.id);
+      listingId = printifyExternalListingId(current);
+      if (listingId) break;
+      if (attempt < 7) await new Promise(resolve => setTimeout(resolve, 2500));
+    }
 
     return NextResponse.json({ 
       success: true, 
       product_id: product.id,
-      printify_product: product
+      listing_id: listingId,
+      pending: !listingId,
+      printify_product: product,
+      variant_mapping: variantMapping
     });
 
   } catch (error: unknown) {

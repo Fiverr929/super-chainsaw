@@ -28,6 +28,13 @@ graph TD
 - **Preview Compression:** Detects listing images and automatically downscales files >5MB into fast-loading JPEGs using `sharp` to stay under Etsy API limits.
 - **Digital Delivery Bundle:** Automatically scans the subdirectory `/digital/` inside each listing folder, aggregates the digital downloads, and prepares them for listing attachments.
 
+### 3. Local Product and Listing Records
+- Saved products have stable UUIDs in `.workspace-data/products/` and content-addressed media in `public/workspace-products/`.
+- Preparing a listing exports a manifest-backed folder to `public/listings-physical/` or `public/listings-amazon/`. Previous image versions remain available at their original URLs.
+- Worksheets are saved in `.workspace-data/listings/` with revision checks. A second window must resolve a save conflict before replacing the disk version. Browser storage remains a recovery copy.
+- Existing disk worksheets receive stable local listing IDs on first load; the original file is backed up with a `.pre-migration.json` suffix. Browser-only worksheets are backed up under `.workspace-data/listings/browser-backups/` before their first disk save.
+- `/api/workspace/listing-records` exposes channel-specific listing records with product IDs and remote listing IDs for future order and site links.
+
 ---
 
 ## Directory Structure
@@ -94,7 +101,7 @@ workstation-v2/
    ```bash
    npm run dev
    ```
-   Open [http://localhost:3000](http://localhost:3000) to access the workstation database.
+   Open [http://localhost:3001](http://localhost:3001) to access the workstation database.
 
 ---
 
@@ -102,4 +109,4 @@ workstation-v2/
 - **Etsy COMPLIANCE:** Titles must be strictly 140 characters or less. The AI pipeline enforces this and handles automatic downcasing/conversion of acronym clusters (e.g. converting `SVG PNG` to `Svg Png`) since Etsy rejects titles containing excessive uppercase terms.
 - **File Limits:** Etsy limits digital downloads to a maximum of 5 files per listing and listing images to 10. The automation pipelines truncate files automatically when exceeding these limits.
 - **Amazon Image Hosting:** Amazon listing images must be reachable through public HTTPS URLs. When Supabase Storage is configured, local Amazon images are uploaded to the configured public bucket before the Amazon push. If Supabase is not configured, the app falls back to the public tunnel URL setting.
-- **Git Ignore Safeguards:** All runtime error logs (`latest_error.json`) and raw asset listings (`public/listings/*`) are configured in `.gitignore` to prevent leakage of live e-commerce inventory or API credentials.
+- **Git Ignore Safeguards:** Runtime error logs (`latest_error.json`), local records (`.workspace-data/`), and listing assets under all three `public/listings*` roots are ignored by Git.

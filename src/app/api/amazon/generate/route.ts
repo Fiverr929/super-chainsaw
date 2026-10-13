@@ -3,7 +3,7 @@ import fs from 'fs';
 import sharp from 'sharp';
 import { AMAZON_AI_DROPDOWN_OPTIONS, type AmazonAiDropdownField } from '@/lib/amazonAiConstants';
 import { resolvePublicAssetPath } from '@/lib/serverPaths';
-import { resolveGeminiApiKey, missingApiKeyResponse, callGeminiGenerateContent } from '@/lib/geminiApi';
+import { resolveGeminiApiKey, missingApiKeyResponse, callGeminiGenerateContent, DEFAULT_GEMINI_MODEL } from '@/lib/geminiApi';
 
 export const dynamic = 'force-dynamic';
 
@@ -63,7 +63,7 @@ export async function POST(request: Request) {
 
     const data = await callGeminiGenerateContent({
       apiKey,
-      model: 'gemini-2.5-flash',
+      model: ((body as Record<string, unknown>).model as string) || DEFAULT_GEMINI_MODEL,
       contents: [{ role: 'user', parts: [{ text: prompt }, ...imageParts] }],
       generationConfig: { temperature: 0.35, responseMimeType: 'application/json' }
     });

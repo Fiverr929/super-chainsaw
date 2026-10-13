@@ -6,7 +6,7 @@ async function test() {
   formData.append("resolution", "512");
   formData.append("aspectRatio", "1:1");
 
-  const res = await fetch("http://localhost:3000/api/image/extract", {
+  const res = await fetch("http://localhost:3001/api/image/extract", {
     method: "POST",
     body: formData
   });

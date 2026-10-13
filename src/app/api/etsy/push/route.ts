@@ -48,10 +48,10 @@ const TAXONOMY_MAP: Record<string, number> = {
 
 const VALUE_IDS_MAP: Record<number, Record<string, number>> = {
   200: {
-    "Beige": 1213, "Black": 1, "Blue": 2, "Bronze": 1216, "Brown": 3, "Clear": 1219, "Copper": 1218, "Gold": 1214, "Gray": 5, "Green": 4, "Orange": 6, "Pink": 7, "Purple": 8, "Rainbow": 1220, "Red": 9, "Rose gold": 1217, "Silver": 1215, "White": 10, "Yellow": 11
+    "Beige": 1213, "Black": 1, "Blue": 2, "Bronze": 1216, "Brown": 3, "Clear": 1219, "Copper": 1218, "Gold": 1214, "Gray": 5, "Green": 4, "Orange": 6, "Pepper": 5, "Pink": 7, "Purple": 8, "Rainbow": 1220, "Red": 9, "Rose gold": 1217, "Silver": 1215, "White": 10, "Yellow": 11
   },
   52047899002: {
-    "Beige": 1213, "Black": 1, "Blue": 2, "Bronze": 1216, "Brown": 3, "Clear": 1219, "Copper": 1218, "Gold": 1214, "Gray": 5, "Green": 4, "Orange": 6, "Pink": 7, "Purple": 8, "Rainbow": 1220, "Red": 9, "Rose gold": 1217, "Silver": 1215, "White": 10, "Yellow": 11
+    "Beige": 1213, "Black": 1, "Blue": 2, "Bronze": 1216, "Brown": 3, "Clear": 1219, "Copper": 1218, "Gold": 1214, "Gray": 5, "Green": 4, "Orange": 6, "Pepper": 5, "Pink": 7, "Purple": 8, "Rainbow": 1220, "Red": 9, "Rose gold": 1217, "Silver": 1215, "White": 10, "Yellow": 11
   },
   46803063641: {
     "1st birthday": 2773, "Anniversary": 12, "Baby shower": 13, "Bachelor party": 14, "Bachelorette party": 15, "Back to school": 16, "Baptism": 17, "Bar & Bat Mitzvah": 18, "Birthday": 19, "Bridal shower": 20, "Confirmation": 21, "Divorce & breakup": 26, "Engagement": 22, "First Communion": 23, "Graduation": 24, "Grief & mourning": 25, "House warming": 27, "LGBTQ pride": 2774, "Moving": 50, "Pet loss": 28, "Retirement": 31, "Wedding": 32
@@ -284,11 +284,37 @@ export async function POST(req: Request) {
       if (!Number.isInteger(payload.quantity) || (payload.quantity as number) < 0) {
         return NextResponse.json({ error: 'Failed to push to Etsy', details: 'Quantity must be a non-negative whole number.' }, { status: 400 });
       }
+
+      let productionPartnerId: number | undefined;
+      if (isPhysical && data.production_partner?.trim()) {
+        const selected = data.production_partner.trim();
+        const idMatch = selected.match(/(?:^\d+$|\(ID:\s*(\d+)\)$)/i);
+        const selectedId = /^\d+$/.test(selected) ? Number(selected) : idMatch?.[1] ? Number(idMatch[1]) : undefined;
+        const partnersRes = await axiosWithRetry({
+          url: `https://api.etsy.com/v3/application/shops/${shopId}/production-partners`,
+          method: 'GET',
+          headers
+        });
+        const partners = partnersRes.data.results || [];
+        const partner = partners.find((item: { production_partner_id: number; partner_name: string }) =>
+          selectedId !== undefined
+            ? item.production_partner_id === selectedId
+            : item.partner_name.toLowerCase() === selected.toLowerCase()
+        );
+        if (!partner) {
+          return NextResponse.json({
+            error: 'Failed to push to Etsy',
+            details: `Production partner "${selected}" is not available in this Etsy shop. Refresh the sheet and select a partner from the list.`
+          }, { status: 400 });
+        }
+        productionPartnerId = partner.production_partner_id;
+      }
       if (!Number.isFinite(payload.price) || (payload.price as number) <= 0) {
         return NextResponse.json({ error: 'Failed to push to Etsy', details: 'Price must be greater than zero.' }, { status: 400 });
       }
 
       if (isPhysical) {
+        if (productionPartnerId !== undefined) payload.production_partner_ids = [productionPartnerId];
         if (shippingProfileId !== undefined) {
           payload.shipping_profile_id = shippingProfileId;
         } else {
@@ -687,6 +713,7 @@ export async function POST(req: Request) {
     if (isPhysicalProduct && rawVariations && rawVariations.properties && rawVariations.properties.length > 0) {
       const variations = rawVariations;
       const enabledCombs = (variations.combinations || []).filter((c: any) => c.isEnabled);
+      const inventoryCombs = variations.combinations || [];
       
       if (enabledCombs.length > 0) {
         // Resolve Property IDs (handling deprecated 100 size ID and allocating custom IDs 513/514)
@@ -738,7 +765,9 @@ export async function POST(req: Request) {
 
           const productsPayload = [];
           
-          for (const comb of enabledCombs) {
+          // Etsy requires the complete matrix, including unavailable combinations.
+          // Keep those offerings disabled instead of omitting them from inventory.
+          for (const comb of inventoryCombs) {
             // Resolve SKU template
             let resolvedSku = "";
             if (comb.skuTemplate) {
@@ -752,7 +781,7 @@ export async function POST(req: Request) {
             // Resolve Price and Quantity
             const priceFloat = parseFloat(comb.price) || parseFloat(data.price) || 0.0;
             const quantitySource = String(comb.quantity ?? data.quantity ?? '').trim();
-            const qtyInt = quantitySource === '' ? 999 : Number.parseInt(quantitySource, 10);
+            const qtyInt = comb.isEnabled ? (quantitySource === '' ? 999 : Number.parseInt(quantitySource, 10)) : 0;
             if (!Number.isInteger(qtyInt) || qtyInt < 0) {
               throw new Error(`Variation ${Object.values(comb.values).join(' / ')} needs a non-negative whole-number quantity.`);
             }
@@ -776,7 +805,7 @@ export async function POST(req: Request) {
             const offering = {
               price: priceFloat,
               quantity: qtyInt,
-              is_enabled: true,
+              is_enabled: Boolean(comb.isEnabled),
               readiness_state_id: readinessStateId
             };
 

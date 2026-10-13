@@ -16,7 +16,7 @@ const data = JSON.stringify({
 
 const req = http.request({
   hostname: 'localhost',
-  port: 3000,
+  port: 3001,
   path: '/api/amazon/generate',
   method: 'POST',
   headers: {

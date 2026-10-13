@@ -15,7 +15,6 @@ import DataEditor, {
  CompactSelection
 } from"@glideapps/glide-data-grid";
 import { allCells } from"@glideapps/glide-data-grid-cells";
-import"@glideapps/glide-data-grid/dist/index.css";
 import {
  ETSY_DIGITAL_CATEGORIES,
  ETSY_PHYSICAL_CATEGORIES,
@@ -45,6 +44,7 @@ import { useEtsyPush } from"@/hooks/useEtsyPush";
 import { useAmazonPush } from"@/hooks/useAmazonPush";
 import { useAmazonAIPipeline } from"@/hooks/useAmazonAIPipeline";
 import { getAmazonPublishValidationError, planFolderImport } from"@/lib/listingWorkflow";
+import { mergeProductIntoListing, triggerListingCopy, type ListingPresetValues, type ProductChannel, type WorkspaceProduct } from '@/lib/workspaceProducts';
 import FolderImporterModal from"./FolderImporterModal";
 import { Theme as GlideTheme } from"@glideapps/glide-data-grid";
 import PresetManagerModal, { type Preset, PresetVariations, VariationCombination } from"./PresetManagerModal";
@@ -55,6 +55,7 @@ import { AMAZON_COLUMNS, AMAZON_STATUSES } from"@/lib/amazonConstants";
 
 const imageCache: Record<string, { absoluteUrlArray: string[], thumbnailUrls: string[] }> = {};
 const tagCache: Record<string, string[]> = {};
+const getSheetId = (ws: 'etsy' | 'amazon', sType: 'digital' | 'physical') => ws === 'amazon' ? 'amazon' : `etsy-${sType}`;
 
 const DIGITAL_COLUMNS: GridColumn[] = [
  { title:"Folder", id:"folder", width: 120 },
@@ -82,9 +83,11 @@ const PHYSICAL_COLUMNS: GridColumn[] = [
  { title:"Video", id:"video", width: 120 },
  { title:"Status", id:"status", width: 100 },
  { title:"Listing ID", id:"listing_id", width: 120 },
+ { title:"Printify Product ID", id:"printify_product_id", width: 190 },
  { title:"Context", id:"context", width: 200 },
  { title:"Shipping Profile", id:"shipping_profile", width: 180 },
  { title:"Processing Profile ID", id:"readiness_state_id", width: 150 },
+ { title:"Production Partner", id:"production_partner", width: 190 },
  { title:"Title", id:"title", width: 250 },
  { title:"Description", id:"description", width: 300 },
  { title:"Tags", id:"tags", width: 200 },
@@ -96,10 +99,14 @@ const PHYSICAL_COLUMNS: GridColumn[] = [
 ];
 
 export type RowData = {
+ local_listing_id?: string;
+ workspace_product_id?: string;
+ workspace_product_revision?: number;
  status: string;
  images?: string;
  video?: string;
  listing_id?: string;
+ printify_product_id?: string;
  context?: string;
  folder?: string;
  digital_file?: string;
@@ -123,6 +130,7 @@ export type RowData = {
  ai_tag_rules?: string;
  shipping_profile?: string;
  readiness_state_id?: string;
+ production_partner?: string;
  enable_pod?: boolean;
  pod_blueprint_id?: number;
  pod_print_provider_id?: number;
@@ -338,6 +346,7 @@ const emptyRowPhysical: RowData = {
  ai_desc_rules:"",
  ai_tag_rules:"",
  readiness_state_id:"",
+ production_partner:"",
  secondary_color:"",
  graphic:"",
  materials:"",
@@ -356,6 +365,8 @@ const emptyRowPhysical: RowData = {
 };
 
 const getAttributesSummary = (row: RowData) => {
+ const isEmptyRow = !row.folder && !row.title && !row.description && !row.workspace_product_id;
+ if (isEmptyRow) return "";
  const parts: string[] = [];
  if (row.primary_color) parts.push(`Color: ${row.primary_color}`);
  if (row.secondary_color) parts.push(`Sec Color: ${row.secondary_color}`);
@@ -386,7 +397,7 @@ const getAttributesSummary = (row: RowData) => {
  if (row.aspect_ratio) parts.push(`Aspect: ${row.aspect_ratio}`);
  }
  
- return parts.join("|");
+ return parts.join(" | ");
 };
 
 const ATTRIBUTE_KEYS = ["primary_color","secondary_color","materials","occasion","celebration","subject","sleeve_length","neckline","clothing_style","capacity","dishwasher_safe","microwave_safe","orientation","framing","aspect_ratio","graphic","room","home_style","can_be_personalized"
@@ -492,6 +503,8 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  const [showPresets, setShowPresets] = useState(false);
  const [isDataLoaded, setIsDataLoaded] = useState(false);
  const [loadedGridKey, setLoadedGridKey] = useState<string | null>(null);
+ const [worksheetLoadError, setWorksheetLoadError] = useState<string | null>(null);
+ const [conflictSheet, setConflictSheet] = useState<string | null>(null);
  
  // Task Queue State
  type QueueTask = { id: string; action: string; row: number; sheet:"digital"|"physical"};
@@ -502,6 +515,7 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  const [sections, setSections] = useState<string[]>([""]);
  const [shippingProfiles, setShippingProfiles] = useState<string[]>([""]);
  const [processingProfiles, setProcessingProfiles] = useState<string[]>([""]);
+ const [productionPartners, setProductionPartners] = useState<string[]>([""]);
 
  const fetchSections = useCallback(() => {
  return fetch('/api/etsy/sections')
@@ -551,11 +565,28 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  });
  }, []);
 
+ const fetchProductionPartners = useCallback(() => {
+ return fetch('/api/etsy/production-partners')
+ .then(res => res.json())
+ .then(data => {
+ if (Array.isArray(data.partners)) {
+ setProductionPartners(["", ...data.partners.map((partner: { id: number; name: string }) => `${partner.name} (ID: ${partner.id})`)]);
+ } else {
+ setProductionPartners([""]);
+ }
+ })
+ .catch(err => {
+ console.warn("Failed to load Etsy production partners:", err);
+ setProductionPartners([""]);
+ });
+ }, []);
+
  React.useEffect(() => {
  const init = async () => {
  await fetchSections();
  await fetchShippingProfiles();
  await fetchProcessingProfiles();
+ await fetchProductionPartners();
  };
  init();
  
@@ -563,11 +594,12 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  await fetchSections();
  await fetchShippingProfiles();
  await fetchProcessingProfiles();
+ await fetchProductionPartners();
  };
 
  window.addEventListener("etsy-store-changed", handleChanged);
  return () => window.removeEventListener("etsy-store-changed", handleChanged);
- }, [fetchSections, fetchShippingProfiles, fetchProcessingProfiles]);
+ }, [fetchSections, fetchShippingProfiles, fetchProcessingProfiles, fetchProductionPartners]);
 
  React.useEffect(() => {
  document.fonts.ready.then(() => {
@@ -591,16 +623,50 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  return Array.from({ length: 50 }).map(() => ({ ...(sheet ==="digital"? emptyRowDigital : emptyRowPhysical) }));
  });
 
- const getStorageKey = (ws:"etsy"|"amazon", sType:"digital"|"physical") => {
+  const saveQueue = React.useRef<Map<string, Promise<void>>>(new Map());
+  const sheetRevisions = React.useRef<Map<string, string>>(new Map());
+  const conflictRef = React.useRef<Set<string>>(new Set());
+  const persistWorksheet = useCallback((ws: 'etsy' | 'amazon', sType: 'digital' | 'physical', rows: RowData[]) => {
+    const id = getSheetId(ws, sType);
+    if (conflictRef.current.has(id)) return;
+    const previous = saveQueue.current.get(id) || Promise.resolve();
+    const task = previous.catch(() => undefined).then(async () => {
+      if (conflictRef.current.has(id)) return;
+      const response = await fetch(`/api/workspace/listings/${id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows, expectedRevision: sheetRevisions.current.get(id) || '0' }),
+      });
+      if (response.status === 409) {
+        conflictRef.current.add(id);
+        setConflictSheet(id);
+        return;
+      }
+      if (!response.ok) throw new Error(`Could not save ${id} worksheet to disk.`);
+      const result = await response.json();
+      sheetRevisions.current.set(id, result.revision);
+      try {
+        const key = ws === 'amazon' ? 'workstation_v2_grid_data_amazon' : `workstation_v2_grid_data_etsy_${sType}`;
+        const draft = JSON.parse(sessionStorage.getItem(`${key}_tab_draft`) || 'null');
+        if (draft && Array.isArray(draft.rows)) sessionStorage.setItem(`${key}_tab_draft`, JSON.stringify({ ...draft, baseRevision: result.revision }));
+      } catch { /* Disk save succeeded; browser recovery is optional. */ }
+    });
+    saveQueue.current.set(id, task);
+    void task.catch(error => { console.error(error); toast.error('Worksheet disk save failed. Browser copy remains available.'); });
+  }, []);
+
+  const getStorageKey = (ws:"etsy"|"amazon", sType:"digital"|"physical") => {
  if (ws ==="amazon") {
  return"workstation_v2_grid_data_amazon";
  }
  return sType ==="digital"?"workstation_v2_grid_data_etsy_digital":"workstation_v2_grid_data_etsy_physical";
  };
 
- React.useEffect(() => {
- setIsDataLoaded(false);
- setLoadedGridKey(null);
+  React.useEffect(() => {
+  setIsDataLoaded(false);
+  setLoadedGridKey(null);
+  setWorksheetLoadError(null);
+  setConflictSheet(null);
+  let cancelled = false;
  
  if (typeof window !=="undefined") {
  const oldDigital = localStorage.getItem("workstation_v2_grid_data");
@@ -616,41 +682,97 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  }
 
  const key = getStorageKey(workstation, sheet);
- const saved = localStorage.getItem(key);
- const createFreshData = () => Array.from({ length: 50 }).map(() => ({
- ...(workstation ==="amazon"? emptyRowAmazon : (sheet ==="digital"? emptyRowDigital : emptyRowPhysical))
- }));
- if (saved) {
- try {
- const parsed = JSON.parse(saved);
- if (Array.isArray(parsed) && parsed.length > 0) {
- const normalized = parsed.slice();
- while (normalized.length < 50) {
- normalized.push({
- ...(workstation ==="amazon"? emptyRowAmazon : (sheet ==="digital"? emptyRowDigital : emptyRowPhysical))
- });
- }
- setData(normalized);
- dataRef.current = normalized;
- } else {
- const freshData = createFreshData();
- setData(freshData);
- dataRef.current = freshData;
- }
- } catch (e) {
- console.error("Failed to parse local storage grid data", e);
- const freshData = createFreshData();
- setData(freshData);
- dataRef.current = freshData;
- }
- } else {
- const freshData = createFreshData();
- setData(freshData);
- dataRef.current = freshData;
- }
- setIsDataLoaded(true);
- setLoadedGridKey(`${workstation}-${sheet}`);
- }, [sheet, workstation]);
+  const createFreshData = () => Array.from({ length: 50 }).map(() => ({
+  ...(workstation ==="amazon"? emptyRowAmazon : (sheet ==="digital"? emptyRowDigital : emptyRowPhysical))
+  }));
+  void (async () => {
+    let rows: RowData[] | null = null;
+    let browserRowsSelected = false;
+    let browserBaseRevision: string | null = null;
+    let diskUpdatedAt = 0;
+    let selectedBrowserAt = 0;
+    let diskFailed = false;
+    let diskRevision = '0';
+    try {
+      const response = await fetch(`/api/workspace/listings/${getSheetId(workstation, sheet)}`, { cache: 'no-store' });
+      if (response.ok) {
+        const result = await response.json();
+        if (Array.isArray(result.rows)) rows = result.rows;
+        if (typeof result.updatedAt === 'number') diskUpdatedAt = result.updatedAt;
+        if (typeof result.revision === 'string') diskRevision = result.revision;
+      } else diskFailed = true;
+    } catch (error) { console.error('Could not load worksheet from disk:', error); diskFailed = true; }
+    try {
+      const saved = localStorage.getItem(key);
+      const parsed = saved ? JSON.parse(saved) : null;
+      const browserUpdatedAt = Number(localStorage.getItem(`${key}_saved_at`) || 0);
+      if (Array.isArray(parsed) && parsed.length && (!rows || browserUpdatedAt > diskUpdatedAt)) {
+        rows = parsed;
+        browserRowsSelected = true;
+        browserBaseRevision = localStorage.getItem(`${key}_base_revision`);
+        selectedBrowserAt = browserUpdatedAt;
+      }
+    } catch (error) { console.error('Failed to parse browser worksheet copy:', error); }
+    try {
+      const draft = JSON.parse(sessionStorage.getItem(`${key}_tab_draft`) || 'null') as { rows?: unknown; savedAt?: number; baseRevision?: string } | null;
+      if (draft && Array.isArray(draft.rows) && typeof draft.savedAt === 'number' && draft.savedAt > Math.max(diskUpdatedAt, selectedBrowserAt)) {
+        rows = draft.rows as RowData[];
+        browserRowsSelected = true;
+        browserBaseRevision = draft.baseRevision || null;
+      }
+    } catch (error) { console.error('Failed to parse this tab’s worksheet draft:', error); }
+    if (browserRowsSelected && !localStorage.getItem(`${key}_disk_backup_created`)) {
+      try {
+        const response = await fetch(`/api/workspace/listings/${getSheetId(workstation, sheet)}/backup`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(rows),
+        });
+        if (!response.ok) throw new Error('Could not back up the existing browser worksheet.');
+        localStorage.setItem(`${key}_disk_backup_created`, 'true');
+      } catch (error) {
+        if (!cancelled) setWorksheetLoadError(error instanceof Error ? error.message : 'Could not back up the existing browser worksheet.');
+        return;
+      }
+    }
+    if (!rows && diskFailed) {
+      if (!cancelled) setWorksheetLoadError('Could not load the worksheet from disk or browser storage. Refresh to retry.');
+      return;
+    }
+    const normalized = rows ? rows.slice() : createFreshData();
+    while (normalized.length < 50) normalized.push(createFreshData()[0]);
+    if (cancelled) return;
+    sheetRevisions.current.set(getSheetId(workstation, sheet), diskRevision);
+    if (browserRowsSelected && diskRevision !== '0' && browserBaseRevision !== diskRevision) conflictRef.current.add(getSheetId(workstation, sheet));
+    if (conflictRef.current.has(getSheetId(workstation, sheet))) setConflictSheet(getSheetId(workstation, sheet));
+    dataRef.current = normalized;
+    setData(normalized);
+    setIsDataLoaded(true);
+    setLoadedGridKey(`${workstation}-${sheet}`);
+  })();
+  return () => { cancelled = true; };
+  }, [sheet, workstation]);
+
+ const resolveWorksheetConflict = async (keepBrowser: boolean) => {
+   const id = getSheetId(workstation, sheet);
+   try {
+     const response = await fetch(`/api/workspace/listings/${id}`, { cache: 'no-store' });
+     if (!response.ok) throw new Error('Could not load the saved worksheet.');
+     const snapshot = await response.json();
+     sheetRevisions.current.set(id, snapshot.revision || '0');
+     if (!keepBrowser) {
+       const restored = Array.isArray(snapshot.rows) ? snapshot.rows as RowData[] : [];
+       const key = getStorageKey(workstation, sheet);
+       localStorage.setItem(key, JSON.stringify(restored));
+       localStorage.setItem(`${key}_saved_at`, String(snapshot.updatedAt || Date.now()));
+       localStorage.setItem(`${key}_base_revision`, snapshot.revision || '0');
+       sessionStorage.removeItem(`${key}_tab_draft`);
+       dataRef.current = restored;
+       setData(restored);
+     }
+     conflictRef.current.delete(id);
+     setConflictSheet(null);
+     if (keepBrowser) persistWorksheet(workstation, sheet, dataRef.current);
+   } catch (error) { toast.error(error instanceof Error ? error.message : 'Could not resolve worksheet conflict.'); }
+ };
 
  const dataRef = React.useRef(data);
  React.useEffect(() => {
@@ -660,9 +782,58 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  const sheetRef = React.useRef(sheet);
  React.useEffect(() => { sheetRef.current = sheet; }, [sheet]);
  const { triggerAIGeneration, triggerFolderAutomation } = useAIPipeline(dataRef, setData, sheet, sheetRef);
- const { triggerEtsyPush } = useEtsyPush(dataRef, setData, sheet, sheetRef);
+ const { triggerEtsyPush, triggerEtsySync } = useEtsyPush(dataRef, setData, sheet, sheetRef);
  const { triggerAmazonPush } = useAmazonPush(dataRef, setData);
  const { triggerAmazonAIGeneration } = useAmazonAIPipeline(dataRef, setData);
+ React.useEffect(() => {
+   if (!isDataLoaded || loadedGridKey !== `${workstation}-${sheet}` || (workstation === 'etsy' && sheet !== 'physical')) return;
+   let cancelled = false;
+   let timer: number | undefined;
+   void (async () => {
+     try {
+       const inbox = JSON.parse(localStorage.getItem('workspace_listing_inbox') || '[]');
+       if (!Array.isArray(inbox)) throw new Error('Invalid product inbox.');
+       const pending = inbox.filter(item => item.channel === workstation && (item.productId || item.product?.id));
+       if (!pending.length) return;
+       const imported: Array<{ channel: ProductChannel; product: WorkspaceProduct; listingPreset?: ListingPresetValues }> = [];
+       const storedPresets = JSON.parse(localStorage.getItem('workstation_v2_presets_physical') || '[]');
+       if (!Array.isArray(storedPresets)) throw new Error('Etsy listing presets are invalid.');
+       for (const item of pending) {
+         const id = item.productId || item.product.id;
+         const response = await fetch(`/api/workspace/products/${encodeURIComponent(id)}`, { cache: 'no-store' });
+         const result = await response.json();
+         if (!response.ok || !result.product) throw new Error(result.error || `Could not load product ${id}.`);
+         const listingPreset = storedPresets.find((preset: ListingPresetValues) => preset.id === item.listingPresetId);
+         if (item.channel === 'etsy' && !listingPreset) throw new Error(`Listing preset for ${result.product.name} was removed. Choose a preset and prepare the listing again.`);
+         imported.push({ channel: item.channel, product: result.product, listingPreset });
+       }
+       if (cancelled) return;
+       let rows = dataRef.current;
+       const existingProductIds = new Set(rows.map(row => row.workspace_product_id));
+       for (const item of imported) rows = mergeProductIntoListing(rows, item.product, item.listingPreset) as RowData[];
+       dataRef.current = rows;
+       setData(rows);
+       const newRows = imported.filter(item => !existingProductIds.has(item.product.id));
+       toast.success(`${imported.length} saved product(s) added with the selected listing preset. Review the generated copy before publishing.`);
+       for (const item of newRows) {
+         const rowIndex = rows.findIndex(row => row.workspace_product_id === item.product.id);
+         if (rowIndex >= 0) void triggerListingCopy(item.channel, rowIndex, { etsy: triggerAIGeneration, amazon: triggerAmazonAIGeneration });
+       }
+       // Let the existing 500ms grid debounce persist first. Retain the inbox on failure.
+       timer = window.setTimeout(() => {
+         try {
+           const persisted = JSON.parse(localStorage.getItem(getStorageKey(workstation, sheet)) || '[]') as RowData[];
+           const acknowledged = imported.filter(item => persisted.some(row => row.workspace_product_id === item.product.id && row.workspace_product_revision === item.product.revision));
+           const currentInbox = JSON.parse(localStorage.getItem('workspace_listing_inbox') || '[]');
+           if (Array.isArray(currentInbox)) localStorage.setItem('workspace_listing_inbox', JSON.stringify(currentInbox.filter(item => !acknowledged.some(ack => ack.channel === item.channel && ack.product.id === (item.productId || item.product?.id)))));
+         } catch { /* Leave pending products available to retry. */ }
+       }, 700);
+     } catch (error) {
+       if (!cancelled) toast.error(error instanceof Error ? error.message : 'Could not import product.');
+     }
+   })();
+   return () => { cancelled = true; if (timer !== undefined) window.clearTimeout(timer); };
+ }, [isDataLoaded, loadedGridKey, workstation, sheet, triggerAIGeneration, triggerAmazonAIGeneration]);
 
  const processBulkQueue = (action: string, rows: number[]) => {
  rows = rows.filter(row => dataRef.current[row]?.folder || dataRef.current[row]?.title || dataRef.current[row]?.context);
@@ -739,7 +910,8 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  await triggerEtsyPush(currentTask.row,"all");
  }
  } else if (currentTask.action ==="sync_status") {
- await triggerAmazonPush(currentTask.row, "sync");
+ if (workstation === 'amazon') await triggerAmazonPush(currentTask.row, "sync");
+ else await triggerEtsySync(currentTask.row);
  } else if (currentTask.action ==="update_offer") {
  await triggerAmazonPush(currentTask.row, "offer");
  } else if (currentTask.action ==="update_text") {
@@ -772,22 +944,40 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  };
 
  processNext();
- }, [taskQueue, triggerAIGeneration, triggerAmazonAIGeneration, triggerEtsyPush, triggerAmazonPush, sheet, workstation]);
+ }, [taskQueue, triggerAIGeneration, triggerAmazonAIGeneration, triggerEtsyPush, triggerEtsySync, triggerAmazonPush, sheet, workstation]);
 
  React.useEffect(() => {
- if (!isDataLoaded) return;
+  if (!isDataLoaded || loadedGridKey !== `${workstation}-${sheet}`) return;
  
- const handler = setTimeout(() => {
- const key = getStorageKey(workstation, sheet);
- localStorage.setItem(key, JSON.stringify(data));
- }, 500);
+  const handler = setTimeout(() => {
+  const identified = data.map(row => !row.local_listing_id && (row.folder || row.title || row.context || row.status || row.listing_id || row.sku)
+    ? { ...row, local_listing_id: crypto.randomUUID() } : row);
+  if (identified.some((row, index) => row !== data[index])) {
+    dataRef.current = identified;
+    setData(identified);
+    return;
+  }
+  const key = getStorageKey(workstation, sheet);
+  localStorage.setItem(key, JSON.stringify(data));
+  const savedAt = Date.now();
+  const baseRevision = sheetRevisions.current.get(getSheetId(workstation, sheet)) || '0';
+  localStorage.setItem(`${key}_saved_at`, String(savedAt));
+  localStorage.setItem(`${key}_base_revision`, baseRevision);
+  try { sessionStorage.setItem(`${key}_tab_draft`, JSON.stringify({ rows: data, savedAt, baseRevision })); } catch { /* Disk save continues. */ }
+  persistWorksheet(workstation, sheet, data);
+  }, 500);
  return () => clearTimeout(handler);
- }, [data, isDataLoaded, sheet, workstation]);
+ }, [data, isDataLoaded, loadedGridKey, sheet, workstation, persistWorksheet]);
 
  React.useEffect(() => {
  const handleBeforeUnload = () => {
  const key = getStorageKey(workstation, sheetRef.current);
  localStorage.setItem(key, JSON.stringify(dataRef.current));
+ const savedAt = Date.now();
+ const baseRevision = sheetRevisions.current.get(getSheetId(workstation, sheetRef.current)) || '0';
+ localStorage.setItem(`${key}_saved_at`, String(savedAt));
+ localStorage.setItem(`${key}_base_revision`, baseRevision);
+ try { sessionStorage.setItem(`${key}_tab_draft`, JSON.stringify({ rows: dataRef.current, savedAt, baseRevision })); } catch { /* Browser copy remains available. */ }
  };
  window.addEventListener("beforeunload", handleBeforeUnload);
  return () => window.removeEventListener("beforeunload", handleBeforeUnload);
@@ -797,9 +987,15 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  if (nextSheet === sheetRef.current) return;
  const currentKey = getStorageKey(workstation, sheetRef.current);
  localStorage.setItem(currentKey, JSON.stringify(dataRef.current));
+ const savedAt = Date.now();
+ const baseRevision = sheetRevisions.current.get(getSheetId(workstation, sheetRef.current)) || '0';
+ localStorage.setItem(`${currentKey}_saved_at`, String(savedAt));
+ localStorage.setItem(`${currentKey}_base_revision`, baseRevision);
+ try { sessionStorage.setItem(`${currentKey}_tab_draft`, JSON.stringify({ rows: dataRef.current, savedAt, baseRevision })); } catch { /* Browser copy remains available. */ }
+ persistWorksheet(workstation, sheetRef.current, dataRef.current);
  localStorage.setItem("workstation_v2_active_sheet", nextSheet);
  setSheet(nextSheet);
- }, [workstation]);
+ }, [workstation, persistWorksheet]);
 
  const getCellContent = useCallback(
  (cell: Item): GridCell => {
@@ -815,7 +1011,9 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  } as TextCell;
  }
  
- const dataRow = dataRef.current[row];
+ // Read from React state here. Glide caches canvas cells, so tying this callback
+ // to `data` gives it a fresh renderer whenever worksheet rows change.
+ const dataRow = data[row];
  const columnId = columnDef.id as keyof typeof dataRow;
 
  if (!dataRow) {
@@ -1134,6 +1332,15 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  } as GridCell;
  }
 
+ if (columnId ==="production_partner") {
+ return {
+ kind: GridCellKind.Custom,
+ allowOverlay: true,
+ copyData: value,
+ data: { kind:"dropdown-cell", allowedValues: productionPartners, value: value ||"" }
+ } as GridCell;
+ }
+
  if (columnId ==="subject") {
  const supported = !isActiveRow || categorySupportsSubject(dataRow.category ||"");
  if (!supported) return { kind: GridCellKind.Text, allowOverlay: false, readonly: true, data:"", displayData:"N/A", themeOverride: { bgCell:"#fafafa"} } as TextCell;
@@ -1301,7 +1508,9 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  displayData: value,
  } as TextCell;
  },
- [columns, sections, sheet, shippingProfiles, processingProfiles, workstation]
+ // Changing `data` gives Glide a new renderer and invalidates cached canvas cells
+ // after async imports, generation, or push-status updates.
+ [columns, data, sections, sheet, shippingProfiles, processingProfiles, productionPartners, workstation]
  );
 
  const getCellsForSelection = useCallback(
@@ -1461,7 +1670,7 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  return;
  }
  } else if (newValue.kind === GridCellKind.Custom) {
- const customColumns = ["status","category","section","primary_color","secondary_color","occasion","celebration","subject","graphic","shipping_profile","readiness_state_id"];
+ const customColumns = ["status","category","section","primary_color","secondary_color","occasion","celebration","subject","graphic","shipping_profile","readiness_state_id","production_partner"];
  if (customColumns.includes(columnId as string)) {
  newStringValue = (newValue.data as { value: string }).value;
  } else {
@@ -1550,6 +1759,9 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  if (columnId ==="readiness_state_id"&& pastedValue && !processingProfiles.includes(pastedValue)) {
  continue;
  }
+ if (columnId ==="production_partner"&& pastedValue && !productionPartners.includes(pastedValue)) {
+ continue;
+ }
  
  if (columnId ==="attributes") {
  const parsed = parseAttributesSummary(pastedValue);
@@ -1578,7 +1790,7 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
 
  return true;
  },
- [columns, triggerFolderAutomation, sheet, shippingProfiles, processingProfiles, workstation]
+ [columns, triggerFolderAutomation, sheet, shippingProfiles, processingProfiles, productionPartners, workstation]
  );
 
  const onFillPattern = useCallback(
@@ -1726,28 +1938,22 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  [columns, sheet, workstation]
  );
 
- const onWheel = useCallback((e: React.WheelEvent) => {
- if (e.ctrlKey || e.metaKey) {
- setZoom((prev) => {
- const newZoom = prev - e.deltaY * 0.005;
- return Math.min(Math.max(newZoom, 0.5), 3);
- });
- }
- }, []);
+ const gridContainerRef = useRef<HTMLDivElement>(null);
 
  React.useEffect(() => {
- const handleNativeWheel = (WheelEvent: WheelEvent) => {
- if (WheelEvent.ctrlKey || WheelEvent.metaKey) {
- WheelEvent.preventDefault();
+ const container = gridContainerRef.current;
+ if (!container) return;
+ const handleNativeWheel = (event: WheelEvent) => {
+ if (event.ctrlKey || event.metaKey) {
+ event.preventDefault();
  setZoom((prev) => {
- const newZoom = prev - WheelEvent.deltaY * 0.005;
+ const newZoom = prev - event.deltaY * 0.005;
  return Math.min(Math.max(newZoom, 0.5), 3);
  });
  }
  };
- 
- document.addEventListener("wheel", handleNativeWheel, { passive: false });
- return () => document.removeEventListener("wheel", handleNativeWheel);
+ container.addEventListener("wheel", handleNativeWheel, { passive: false });
+ return () => container.removeEventListener("wheel", handleNativeWheel);
  }, []);
 
  const selectedRowsList = React.useMemo(() => {
@@ -1756,6 +1962,11 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  ? gridSelection.rows.toArray() 
  : Array.from(gridSelection.rows);
  }, [gridSelection]);
+
+ const failedGenerationRows = React.useMemo(() => data.reduce<number[]>((rows, row, index) => {
+ if (row.status === 'Error' && (row.folder || row.context) && (!row.title || !row.description || !row.tags)) rows.push(index);
+ return rows;
+ }, []), [data]);
 
  const [showAmazonPresets, setShowAmazonPresets] = useState(false);
  const [isAmazonImporterOpen, setIsAmazonImporterOpen] = useState(false);
@@ -1787,7 +1998,7 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  }, [selectedRowsList, setData]);
 
  const handleAmazonImport = useCallback((selectedFolders: string[], preset: AmazonPreset | null) => {
- const newRows = selectedFolders.map(folderName => {
+ const newRows = selectedFolders.filter(folderName => !dataRef.current.some(row => row.folder === folderName || row.workspace_product_id === folderName.replace(/^product-/, ''))).map(folderName => {
  const row: RowData = {
  ...emptyRowAmazon,
  folder: folderName,
@@ -1823,7 +2034,9 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  if (rowIndex < updated.length) {
  updated[rowIndex] = {
  ...updated[rowIndex],
- images: assetData.images ||""
+ images: assetData.images ||"",
+ ...(assetData.workspace_product_id ? { workspace_product_id: assetData.workspace_product_id } : {}),
+ ...(assetData.workspace_product_revision ? { workspace_product_revision: assetData.workspace_product_revision } : {})
  };
  }
  dataRef.current = updated;
@@ -1845,7 +2058,7 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  }
 
  return (
- <div className="w-full h-full p-4 bg-white flex flex-col"onWheel={onWheel}>
+ <div ref={gridContainerRef} className="w-full h-full p-4 bg-white flex flex-col">
  <div className="flex-none mb-4 flex items-center justify-between border border-zinc-200 bg-zinc-50 p-2 px-4 rounded-none">
  <h2 className="text-sm font-semibold text-zinc-800 uppercase tracking-wider">
  {workstation ==="etsy"?"Spreadsheet Database":"Amazon Spreadsheet Planner"}
@@ -1879,8 +2092,19 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  </button>
  </div>
  </div>
+ {conflictSheet === getSheetId(workstation, sheet) && <div role="alert" className="flex flex-wrap items-center gap-2 border border-amber-300 bg-amber-50 p-3 text-xs text-amber-950">
+ <span className="min-w-0 flex-1">This worksheet changed in another window. Your edits are saved in this browser. Choose which version to keep.</span>
+ <button className="border border-amber-500 bg-white px-2 py-1" onClick={() => void resolveWorksheetConflict(false)}>Use disk version</button>
+ <button className="border border-amber-500 bg-white px-2 py-1" onClick={() => void resolveWorksheetConflict(true)}>Keep my edits</button>
+ </div>}
+ {failedGenerationRows.length > 0 && <div role="alert" className="mb-3 flex flex-wrap items-center gap-2 border border-red-200 bg-red-50 p-3 text-xs text-red-900">
+ <span className="min-w-0 flex-1">AI generation failed for {failedGenerationRows.length === 1 ? `row ${failedGenerationRows[0] + 1}${data[failedGenerationRows[0]].folder ? ` (${data[failedGenerationRows[0]].folder})` : ''}` : `${failedGenerationRows.length} rows`}. Check your Google AI Studio key in Settings if it is not configured.</span>
+ <button type="button" className="border border-red-300 bg-white px-3 py-1.5 font-medium hover:bg-red-100 disabled:opacity-50" disabled={taskQueue.length > 0} onClick={() => processBulkQueue('generate', failedGenerationRows)}>Retry AI generation</button>
+ </div>}
  <div className="flex-1 w-full border border-zinc-200 rounded-none overflow-hidden relative">
  <div style={{ position:'absolute', inset: 0, width:'100%', height:'100%'}}>
+ {!fontsLoaded && <p role="status" className="p-4 text-xs text-zinc-500">Loading worksheet fonts…</p>}
+ {fontsLoaded && (!isDataLoaded || loadedGridKey !== `${workstation}-${sheet}`) && <p role={worksheetLoadError ? 'alert' : 'status'} className="p-4 text-xs text-zinc-500">{worksheetLoadError || 'Loading worksheet data…'}</p>}
  {fontsLoaded && isDataLoaded && loadedGridKey === `${workstation}-${sheet}` && (
  <DataEditor
  key={`${workstation}-${sheet}`}
@@ -2018,7 +2242,7 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  onClose={() => setIsImporterOpen(false)}
  onImport={(selectedFolders, selectedPreset) => {
  const preset = selectedPreset as Preset | null;
- const newRows = selectedFolders.map(folderName => {
+ const newRows = selectedFolders.filter(folderName => !dataRef.current.some(row => row.folder === folderName || row.workspace_product_id === folderName.replace(/^product-/, ''))).map(folderName => {
  const row: RowData = { ...(sheet ==="digital"? emptyRowDigital : emptyRowPhysical), folder: folderName };
  if (preset) {
  row.category = preset.category || (sheet ==="digital"?"Store Graphics":"");
@@ -2040,6 +2264,7 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  row.ai_tag_rules = preset.ai_tag_rules ||"";
  row.shipping_profile = preset.shipping_profile ||"";
  row.readiness_state_id = preset.readiness_state_id ||"";
+ row.production_partner = preset.production_partner ||"";
  row.materials = preset.materials ||"";
  row.sleeve_length = preset.sleeve_length ||"";
  row.neckline = preset.neckline ||"";
@@ -2134,6 +2359,7 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  {showUpdateMenu && (
  <div className="absolute bottom-full left-0 mb-3 bg-[#2b52d6] border border-blue-500 shadow-xl flex flex-col p-1 min-w-[200px] animate-in slide-in-from-bottom-2 fade-in duration-200">
  <span className="text-xs font-bold text-blue-200 px-3 py-1.5 uppercase tracking-wider">Update Options</span>
+ <button onClick={() => processBulkQueue('sync_status', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700 transition-colors">Sync Status</button>
  <button onClick={() => processBulkQueue('update_text', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700 transition-colors">Text & SEO</button>
  <button onClick={() => processBulkQueue('update_images', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700 transition-colors">Images Only</button>
  <button onClick={() => processBulkQueue('update_video', selectedRowsList)} className="text-left px-3 py-2 text-sm hover:bg-blue-700 transition-colors">Video Only</button>
@@ -2198,6 +2424,7 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
   columns: CompactSelection.empty(),
   rows: selectedRowsList.reduce((selection, rowIndex) => selection.add(rowIndex), CompactSelection.empty()),
   };
+
  onDelete(fakeSelection);
  setGridSelection(undefined);
  }} className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium hover:bg-red-600 transition-colors"title="Delete Selected Rows">

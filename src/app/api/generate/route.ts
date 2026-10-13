@@ -4,7 +4,7 @@ import sharp from 'sharp';
 import { categorySupportsOccasion, categorySupportsCelebration, categorySupportsSubject, categorySupportsGraphic } from '@/lib/etsyConstants';
 import { buildGeneratedMetadataResponse } from '@/lib/listingWorkflow';
 import { resolvePublicAssetPath } from '@/lib/serverPaths';
-import { resolveGeminiApiKey, missingApiKeyResponse, callGeminiGenerateContent } from '@/lib/geminiApi';
+import { resolveGeminiApiKey, missingApiKeyResponse, callGeminiGenerateContent, DEFAULT_GEMINI_MODEL } from '@/lib/geminiApi';
 
 export const dynamic = 'force-dynamic';
 
@@ -21,25 +21,30 @@ export async function POST(request: Request) {
 
     // Resolve and read local images
     const imageParts: { inlineData: { mimeType: string; data: string } }[] = [];
-    for (const fileUrl of imagePaths) {
+    const validImagePaths = Array.isArray(imagePaths) ? imagePaths : [];
+    for (const fileUrl of validImagePaths) {
+       if (typeof fileUrl !== 'string') continue;
        const absolutePath = resolvePublicAssetPath(fileUrl);
        if (absolutePath && fs.existsSync(absolutePath)) {
-          const fileBuffer = fs.readFileSync(absolutePath);
-          
-          // Compress the image to speed up AI payload
-          const compressedBuffer = await sharp(fileBuffer)
-            .resize(512) // Resize to max width 512px
-            .jpeg({ quality: 80 }) // Force JPEG to save space
-            .toBuffer();
-            
-          const mimeType = 'image/jpeg'; // Since we forced JPEG
-          
-          imageParts.push({
-             inlineData: {
-                mimeType,
-                data: compressedBuffer.toString("base64")
-             }
-          });
+          try {
+            const fileBuffer = fs.readFileSync(absolutePath);
+
+            // Compress the image to speed up AI payload. A single damaged image
+            // should not prevent metadata generation for the rest of the folder.
+            const compressedBuffer = await sharp(fileBuffer)
+              .resize(512) // Resize to max width 512px
+              .jpeg({ quality: 80 }) // Force JPEG to save space
+              .toBuffer();
+
+            imageParts.push({
+               inlineData: {
+                  mimeType: 'image/jpeg', // Since we forced JPEG
+                  data: compressedBuffer.toString("base64")
+               }
+            });
+          } catch (imageError) {
+            console.warn(`Skipping unreadable listing image: ${fileUrl}`, imageError);
+          }
        }
     }
 
@@ -117,7 +122,7 @@ Format example: { "title": "...", "primary_color": "...", "secondary_color": "..
 
     const data = await callGeminiGenerateContent({
       apiKey,
-      model: 'gemini-2.5-flash',
+      model: (body.model as string) || DEFAULT_GEMINI_MODEL,
       contents: [
         { 
           role: "user",
@@ -180,6 +185,10 @@ Format example: { "title": "...", "primary_color": "...", "secondary_color": "..
 
   } catch (error) {
     console.error('Error generating AI metadata:', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return NextResponse.json(
+      { error: `AI generation could not be completed: ${message}` },
+      { status: 502 }
+    );
   }
 }

@@ -41,10 +41,15 @@ yarn-error.log*
 next-env.d.ts
 
 public/listings/*
+public/listings-physical/*
+public/listings-amazon/*
 
 # local runtime logs
 latest_error.json
 supabase_upload_cache.json
+.workspace-data/
+public/workspace-products/
+public/workspace-assets/
 
 # etsy tokens
 tokens.json

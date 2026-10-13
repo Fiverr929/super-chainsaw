@@ -3,6 +3,7 @@
 import React, { useState } from"react";
 import { X, Plus, Trash2, Save, Star } from"lucide-react";
 import toast from"react-hot-toast";
+import { DEFAULT_EXTRACTION_PROMPT } from '@/lib/designExtraction';
 
 export type ImagePreset = {
  id: string;
@@ -16,10 +17,10 @@ export type ImagePreset = {
 export const DEFAULT_IMAGE_PRESET: ImagePreset = {
  id:"default-graphic-extractor",
  name:"Graphic Extractor",
- prompt:"",
+ prompt: DEFAULT_EXTRACTION_PROMPT,
  resolution:"1K",
  aspectRatio:"Auto",
- thinkingLevel:"High"
+ thinkingLevel:"Minimal"
 };
 
 interface ImagePresetManagerModalProps {
@@ -63,17 +64,17 @@ export default function ImagePresetManagerModal({ onClose, onSelectDefault }: Im
  setEditForm({
  id:"preset-"+ Date.now(),
  name:"New Preset",
- prompt:"",
+ prompt: DEFAULT_EXTRACTION_PROMPT,
  resolution:"1K",
  aspectRatio:"Auto",
- thinkingLevel:"High"
+ thinkingLevel:"Minimal"
  });
  };
 
  const handleEdit = (preset: ImagePreset) => {
  setEditingId(preset.id);
  setIsCreatingNew(false);
- setEditForm({ ...preset });
+ setEditForm({ ...preset, resolution: '1K' });
  };
 
  const handleDelete = (id: string) => {
@@ -138,7 +139,7 @@ export default function ImagePresetManagerModal({ onClose, onSelectDefault }: Im
  
  {/* Header */}
  <div className="flex items-center justify-between p-4 border-b border-zinc-300 bg-zinc-50">
- <h2 className="text-base font-bold text-zinc-800">Listing Presets</h2>
+ <h2 className="text-base font-bold text-zinc-800">Design Extraction Presets</h2>
  <button onClick={onClose} className="p-1 hover:bg-zinc-200 text-zinc-500 rounded">
  <X size={18} />
  </button>
@@ -224,21 +225,6 @@ export default function ImagePresetManagerModal({ onClose, onSelectDefault }: Im
  </div>
 
  <div className="grid grid-cols-2 gap-4">
- <div>
- <label className="block text-xs font-medium text-zinc-700 mb-1">
- Resolution
- </label>
- <select 
- value={editForm.resolution}
- onChange={e => setEditForm({ ...editForm, resolution: e.target.value })}
- className="w-full px-3 py-2 text-sm rounded-none border border-zinc-300 bg-white text-zinc-900 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
- >
- <option value="512">512</option>
- <option value="1K">1K</option>
- <option value="2K">2K</option>
- <option value="4K">4K</option>
- </select>
- </div>
  <div>
  <label className="block text-xs font-medium text-zinc-700 mb-1">
  Aspect Ratio

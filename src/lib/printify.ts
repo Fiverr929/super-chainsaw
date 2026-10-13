@@ -29,6 +29,7 @@ export interface PrintifyVariant {
 export interface PrintifyProduct {
   id: string;
   title: string;
+  external?: { id: string; handle?: string } | { id: string; handle?: string }[] | null;
   variants: {
     id: number;
     sku: string;
@@ -115,7 +116,9 @@ export async function createPrintifyProduct(
   providerId: number,
   variantIds: number[],
   imageId: string,
-  position: 'top' | 'center' | 'bottom'
+  position: 'top' | 'center' | 'bottom',
+  backImageId?: string,
+  details?: { description?: string; tags?: string[]; prices?: Record<number, number> }
 ): Promise<PrintifyProduct> {
 
   let yPos = 0.5; // Center
@@ -124,10 +127,11 @@ export async function createPrintifyProduct(
 
   const productData = {
     title: title,
-    description: "Created via API Workstation",
+    description: details?.description || title,
+    tags: details?.tags || [],
     blueprint_id: blueprintId,
     print_provider_id: providerId,
-    variants: variantIds.map(id => ({ id, price: 2000, is_enabled: true })), // Default price, etsy manages actual price
+    variants: variantIds.map(id => ({ id, price: details?.prices?.[id] ?? 2000, is_enabled: true })),
     print_areas: [
       {
         variant_ids: variantIds,
@@ -143,7 +147,8 @@ export async function createPrintifyProduct(
                 angle: 0
               }
             ]
-          }
+          },
+          ...(backImageId ? [{ position: 'back', images: [{ id: backImageId, x: 0.5, y: 0.5, scale: 1, angle: 0 }] }] : []),
         ]
       }
     ]
@@ -161,4 +166,24 @@ export async function createPrintifyProduct(
   }
 
   return res.json();
+}
+
+export async function publishPrintifyProduct(shopId: number, productId: string): Promise<void> {
+  const res = await fetch(`https://api.printify.com/v1/shops/${shopId}/products/${productId}/publish.json`, {
+    method: 'POST',
+    headers: getHeaders(),
+    body: JSON.stringify({ title: true, description: true, images: true, variants: true, tags: true, keyFeatures: true, shipping_template: true })
+  });
+  if (!res.ok) throw new Error(`Printify publish failed: ${await res.text()}`);
+}
+
+export async function getPrintifyProduct(shopId: number, productId: string): Promise<PrintifyProduct> {
+  const res = await fetch(`https://api.printify.com/v1/shops/${shopId}/products/${productId}.json`, { headers: getHeaders(), cache: 'no-store' });
+  if (!res.ok) throw new Error(`Printify product lookup failed: ${await res.text()}`);
+  return res.json();
+}
+
+export function printifyExternalListingId(product: PrintifyProduct): string | undefined {
+  const external = Array.isArray(product.external) ? product.external[0] : product.external;
+  return external?.id ? String(external.id) : undefined;
 }

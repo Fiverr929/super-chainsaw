@@ -28,7 +28,16 @@ export async function GET(request: Request) {
     
     // Filter for directories only
     const folders = entries
-      .filter(entry => entry.isDirectory())
+      .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))
+      .filter(entry => {
+        if (!entry.name.startsWith('product-')) return true;
+        try {
+          const manifest = JSON.parse(fs.readFileSync(path.join(listingsDir, entry.name, 'manifest.json'), 'utf8')) as { productId?: unknown; channel?: unknown; productRevision?: unknown };
+          const id = entry.name.slice('product-'.length);
+          const expectedChannel = type === 'amazon' ? 'amazon' : 'etsy';
+          return manifest.productId === id && manifest.channel === expectedChannel && typeof manifest.productRevision === 'number';
+        } catch { return false; }
+      })
       .map(entry => entry.name);
 
     return NextResponse.json({ folders });

@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { isSupabaseStorageConfigured, uploadPublicAssetToSupabase } from '@/lib/supabaseStorage';
-import { resolveGeminiApiKey, callGeminiGenerateContent } from '@/lib/geminiApi';
+import { resolveGeminiApiKey, callGeminiGenerateContent, DEFAULT_GEMINI_MODEL } from '@/lib/geminiApi';
 
 export const dynamic = 'force-dynamic';
 type AmazonStringField =
@@ -1342,7 +1342,7 @@ Separate each bullet point by a newline. Do not include bullet characters like '
         try {
           const data = await callGeminiGenerateContent({
             apiKey,
-            model: 'gemini-2.5-flash',
+            model: DEFAULT_GEMINI_MODEL,
             contents: [{ role: 'user', parts: [{ text: prompt }] }],
             generationConfig: { temperature: 0.7 }
           });

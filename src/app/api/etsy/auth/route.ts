@@ -19,7 +19,7 @@ export async function GET(request: Request) {
   }
 
   // Determine redirect URI based on the request host
-  const host = request.headers.get('host') || 'localhost:3000';
+  const host = request.headers.get('host') || 'localhost:3001';
   const protocol = host.includes('localhost') ? 'http' : 'https';
   const redirectUri = `${protocol}://${host}/api/etsy/callback`;
 

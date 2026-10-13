@@ -9,7 +9,7 @@ export async function GET(request: Request) {
   const folderName = searchParams.get('folder');
   const type = searchParams.get('type') || 'digital';
 
-  if (!folderName || folderName.includes('..')) {
+  if (!folderName || folderName === '.' || folderName === '..' || /[\\/\u0000]/.test(folderName) || folderName.includes('..')) {
     return NextResponse.json({ error: 'Invalid folder name' }, { status: 400 });
   }
 
@@ -28,20 +28,34 @@ export async function GET(request: Request) {
 
   try {
     const files = fs.readdirSync(listingsDir);
+    let productId: string | undefined;
+    let productRevision: number | undefined;
+    let manifestMedia: string[] | undefined;
+    let manifestDigital: string[] | undefined;
+    const manifestPath = path.join(listingsDir, 'manifest.json');
+    if (fs.existsSync(manifestPath)) {
+      const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as { productId?: unknown; productRevision?: unknown; media?: unknown; digitalFiles?: unknown };
+      if (typeof manifest.productId === 'string' && /^[0-9a-f]{8}-[0-9a-f-]{27}$/i.test(manifest.productId)) productId = manifest.productId;
+      if (typeof manifest.productRevision === 'number' && Number.isSafeInteger(manifest.productRevision) && manifest.productRevision > 0) productRevision = manifest.productRevision;
+      const safeNames = (value: unknown): value is string[] => Array.isArray(value) && value.every(name => typeof name === 'string' && /^[a-zA-Z0-9._-]+$/.test(name) && !name.includes('..'));
+      if (safeNames(manifest.media)) manifestMedia = manifest.media;
+      if (safeNames(manifest.digitalFiles)) manifestDigital = manifest.digitalFiles;
+    }
 
     // Arrays to hold the detected files
     const images: string[] = [];
     let video = '';
     let digitalFile = '';
 
-    files.forEach(file => {
+    (manifestMedia || files).forEach(file => {
+      if (!fs.existsSync(path.join(listingsDir, file))) return;
       const ext = path.extname(file).toLowerCase();
       // Serve relative paths so the browser can access them via the public directory
       const relativeUrl = `/${baseDir}/${folderName}/${file}`;
 
-      if (['.png', '.jpg', '.jpeg'].includes(ext)) {
+      if (['.png', '.jpg', '.jpeg', '.webp'].includes(ext)) {
         images.push(relativeUrl);
-      } else if (['.mp4', '.mov', '.avi'].includes(ext)) {
+      } else if (['.mp4', '.mov', '.avi', '.webm'].includes(ext)) {
         video = relativeUrl; // Assuming 1 promo video per folder
       }
     });
@@ -49,8 +63,8 @@ export async function GET(request: Request) {
     // Check for a 'digital' subfolder for digital delivery files
     const digitalDirPath = path.join(listingsDir, 'digital');
     if (fs.existsSync(digitalDirPath) && fs.statSync(digitalDirPath).isDirectory()) {
-      const dFiles = fs.readdirSync(digitalDirPath);
-      digitalFile = dFiles.map(f => `/${baseDir}/${folderName}/digital/${f}`).join(',');
+      const dFiles = manifestDigital || fs.readdirSync(digitalDirPath);
+      digitalFile = dFiles.filter(f => fs.existsSync(path.join(digitalDirPath, f))).map(f => `/${baseDir}/${folderName}/digital/${f}`).join(',');
     }
 
     // Sort images numerically/alphabetically (e.g., 1_main.png before 2_back.png)
@@ -59,7 +73,9 @@ export async function GET(request: Request) {
     return NextResponse.json({
       images: images.join(','),
       video,
-      digital_file: digitalFile
+      digital_file: digitalFile,
+      ...(productId ? { workspace_product_id: productId } : {}),
+      ...(productRevision ? { workspace_product_revision: productRevision } : {})
     });
 
   } catch (error) {

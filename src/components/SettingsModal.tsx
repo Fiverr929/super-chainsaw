@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { X, ShoppingBag, ShoppingCart, ChevronDown, ChevronUp, Check, Loader2, Sparkles, Eye, EyeOff, ExternalLink, Trash2 } from "lucide-react";
+import { X, ShoppingBag, ShoppingCart, Printer, ChevronDown, ChevronUp, Check, Loader2, Sparkles, Eye, EyeOff, ExternalLink, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { getStoredGeminiApiKey, setStoredGeminiApiKey, removeStoredGeminiApiKey } from "@/lib/clientApiKey";
 
@@ -12,6 +12,8 @@ type Store = {
   refreshToken?: string;
   region?: string;
 };
+
+type PrintifyShop = { id: number; title: string; sales_channel: string };
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -36,6 +38,9 @@ export default function SettingsModal({
 }: SettingsModalProps) {
   const [isConnectingEtsy, setIsConnectingEtsy] = useState(false);
   const [isConnectingAmazon, setIsConnectingAmazon] = useState(false);
+  const [printifyShops, setPrintifyShops] = useState<PrintifyShop[]>([]);
+  const [selectedPrintifyShopId, setSelectedPrintifyShopId] = useState('');
+  const [printifyError, setPrintifyError] = useState('');
 
   // Accordion toggle states
   const [etsyOpen, setEtsyOpen] = useState(false);
@@ -52,6 +57,18 @@ export default function SettingsModal({
       const stored = getStoredGeminiApiKey();
       setGeminiKey(stored);
       setHasSavedKey(Boolean(stored));
+      setSelectedPrintifyShopId(localStorage.getItem('workstation_printify_shop_id') || '');
+      fetch('/api/printify/shops')
+        .then(async response => {
+          const result = await response.json();
+          if (!response.ok) throw new Error(result.error || 'Could not load Printify shops');
+          setPrintifyShops(result.shops || []);
+          setPrintifyError('');
+        })
+        .catch(error => {
+          setPrintifyShops([]);
+          setPrintifyError(error instanceof Error ? error.message : 'Could not load Printify shops');
+        });
     }
   }, [isOpen]);
 
@@ -150,7 +167,7 @@ export default function SettingsModal({
       if (res.ok && data.valid) {
         setStoredGeminiApiKey(keyToTest);
         setHasSavedKey(true);
-        toast.success(`Connection verified! Model: ${data.model || 'gemini-2.5-flash'}`);
+        toast.success(`Connection verified! Model: ${data.model || 'gemini-3.1-flash-lite'}`);
       } else {
         toast.error(data.error || "Verification failed. Check your API key.");
       }
@@ -236,7 +253,7 @@ export default function SettingsModal({
               </div>
 
               <p className="text-xs text-zinc-500 mt-3">
-                Powers AI titles, bullet points, tags, and design extraction with Gemini 2.5 Flash. Your key stays stored in your browser.
+                Powers AI titles, bullet points, tags, and design extraction with Gemini 3.1 Flash-Lite. Your key stays stored in your browser.
               </p>
 
               {/* API Key Input Field */}
@@ -371,6 +388,40 @@ export default function SettingsModal({
                   )}
                 </div>
               )}
+            </div>
+
+            {/* Printify Row */}
+            <div className="flex flex-col border-t border-zinc-100 pt-6">
+              <div className="flex items-start gap-3">
+                <div className="p-2.5 bg-green-50 text-green-700 shrink-0"><Printer size={20} /></div>
+                <div className="flex-1 min-w-0">
+                  <span className="font-semibold text-zinc-900 text-sm">Printify</span>
+                  <p className="text-xs text-zinc-500 mt-0.5">
+                    {printifyError || (printifyShops.length ? 'API connected. Choose the shop for new products.' : 'Checking connection…')}
+                  </p>
+                  {printifyShops.length > 0 && (
+                    <>
+                    <select
+                      aria-label="Printify shop for new products"
+                      value={selectedPrintifyShopId}
+                      onChange={event => {
+                        const id = event.target.value;
+                        setSelectedPrintifyShopId(id);
+                        if (id) localStorage.setItem('workstation_printify_shop_id', id);
+                        else localStorage.removeItem('workstation_printify_shop_id');
+                      }}
+                      className="w-full mt-3 px-3 py-2 text-sm border border-zinc-300 bg-white text-zinc-900"
+                    >
+                      <option value="">Select a Printify shop</option>
+                      {printifyShops.map(shop => (
+                        <option key={shop.id} value={shop.id}>{shop.title} ({shop.sales_channel})</option>
+                      ))}
+                    </select>
+                    <p className="mt-2 text-xs text-zinc-500">New POD listings publish from Printify to the selected Etsy shop. Existing Etsy listings still need Printify migration.</p>
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* Amazon Row */}

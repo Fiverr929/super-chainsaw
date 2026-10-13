@@ -8,14 +8,14 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: Arial, Helvetica, sans-serif;
+  --font-sans: system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-mono: "Courier New", Courier, monospace;
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
 /* Hide all scrollbars globally for a sleek, infinite-canvas aesthetic */
@@ -25,4 +25,22 @@ body {
 * {
   -ms-overflow-style: none;  /* IE and Edge */
   scrollbar-width: none;  /* Firefox */
+}
+
+.workspace-shell, .workspace-shell * {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+.workspace-shell *::-webkit-scrollbar {
+  display: block;
+  width: 7px;
+  height: 7px;
+}
+.workspace-shell *::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 0;
+}
+
+.workspace-mode *, .workspace-mode *::before, .workspace-mode *::after {
+  border-radius: 0 !important;
 }

@@ -53,6 +53,7 @@ export type Preset = {
  celebration: string;
  shipping_profile?: string;
  readiness_state_id?: string;
+ production_partner?: string;
  ai_title_rules: string;
  ai_desc_rules: string;
  ai_tag_rules: string;
@@ -74,6 +75,7 @@ export type Preset = {
 };
 
 export const PREDEFINED_BLUEPRINTS = [
+ { id: 706, name:"Unisex Garment-Dyed T-shirt (Comfort Colors 1717)"},
  { id: 12, name:"Unisex Heavy Cotton Tee (Gildan 5000)"},
  { id: 10, name:"Unisex Heavy Blend Crewneck Sweatshirt (Gildan 18000)"},
  { id: 144, name:"Unisex Heavy Blend Hooded Sweatshirt (Gildan 18500)"},
@@ -81,13 +83,16 @@ export const PREDEFINED_BLUEPRINTS = [
 ];
 
 export const PRINT_PROVIDERS = [
- { id: 99, name:"Monster Digital"},
- { id: 16, name:"SwiftPOD"},
- { id: 29, name:"Printify Choice"},
+ { id: 39, name:"SwiftPOD"},
+ { id: 29, name:"Monster Digital"},
+ { id: 99, name:"Printify Choice"},
+ { id: 61, name:"Dimona Tee"},
+ { id: 27, name:"Print Geek"},
+ { id: 217, name:"Fulfill Engine"},
+ { id: 52, name:"Stakes Manufacturing"},
  { id: 26, name:"Awkward Styles"},
- { id: 3, name:"Dimona Tee"},
- { id: 39, name:"MyLocker"},
- { id: 10, name:"Print Geek"}
+ { id: 410, name:"Printful"},
+ { id: 16, name:"SwiftPOD (Legacy)"}
 ];
 
 export const DEFAULT_PRESET: Preset = {
@@ -110,6 +115,7 @@ export const DEFAULT_PRESET: Preset = {
  shipping_profile:"",
  variations: { properties: [], combinations: [], priceOnProperty: [], quantityOnProperty: [], skuOnProperty: [] },
  readiness_state_id:"",
+ production_partner:"",
  ai_title_rules:"MUST be exactly 140 characters or less including spaces",
  ai_desc_rules:"Under 100 words total. One short punchy intro sentence, followed entirely by a scannable bullet-point list of the essential features/specs. NO FLUFF. No conclusion paragraphs.",
  ai_tag_rules:"EXACTLY 13 Etsy Tags as a comma-separated string. Each individual tag MUST be 20 characters or less.",
@@ -146,6 +152,7 @@ export const DEFAULT_PHYSICAL_PRESET: Preset = {
  shipping_profile:"",
  variations: { properties: [], combinations: [], priceOnProperty: [], quantityOnProperty: [], skuOnProperty: [] },
  readiness_state_id:"",
+ production_partner:"",
  ai_title_rules:"MUST be exactly 140 characters or less including spaces",
  ai_desc_rules:"Under 100 words total. One short punchy intro sentence, followed entirely by a scannable bullet-point list of the essential features/specs. NO FLUFF. No conclusion paragraphs.",
  ai_tag_rules:"EXACTLY 13 Etsy Tags as a comma-separated string. Each individual tag MUST be 20 characters or less.",
@@ -178,6 +185,7 @@ export default function PresetManagerModal({ onClose, sheetType }: PresetManager
  const [sections, setSections] = useState<string[]>([""]);
  const [shippingProfiles, setShippingProfiles] = useState<string[]>([""]);
  const [processingProfiles, setProcessingProfiles] = useState<string[]>([""]);
+ const [productionPartners, setProductionPartners] = useState<string[]>([""]);
  const [isMaterialsOpen, setIsMaterialsOpen] = useState(false);
  const [isSubjectOpen, setIsSubjectOpen] = useState(false);
  const [activeTab, setActiveTab] = useState<'core'|'options'|'attributes'|'variations'|'ai'|'pod'>('core');
@@ -346,6 +354,15 @@ export default function PresetManagerModal({ onClose, sheetType }: PresetManager
  .catch(() => {
  setProcessingProfiles([""]);
  });
+
+ fetch('/api/etsy/production-partners')
+ .then(res => res.json())
+ .then(data => {
+ setProductionPartners(Array.isArray(data.partners)
+ ? ["", ...data.partners.map((partner: { id: number; name: string }) => `${partner.name} (ID: ${partner.id})`)]
+ : [""]);
+ })
+ .catch(() => setProductionPartners([""]));
  }
  }, [sheetType]);
 
@@ -367,6 +384,7 @@ export default function PresetManagerModal({ onClose, sheetType }: PresetManager
  celebration:"Auto",
  shipping_profile:"",
  readiness_state_id:"",
+ production_partner:"",
  ai_title_rules:"MUST be exactly 140 characters or less including spaces",
  ai_desc_rules:"Under 100 words total. One short punchy intro sentence, followed entirely by a scannable bullet-point list of the essential features/specs. NO FLUFF. No conclusion paragraphs.",
  ai_tag_rules:"EXACTLY 13 Etsy Tags as a comma-separated string. Each individual tag MUST be 20 characters or less.",
@@ -408,6 +426,12 @@ export default function PresetManagerModal({ onClose, sheetType }: PresetManager
  }
 
  const finalForm = { ...editForm };
+ if (sheetType === "physical" && finalForm.enable_pod) {
+   // Persist the selections represented by the POD controls so imports always
+   // carry real Printify identifiers instead of only displaying UI defaults.
+   finalForm.pod_blueprint_id ??= 706;
+   finalForm.pod_print_provider_id ??= 99;
+ }
  if (!categorySupportsOccasion(finalForm.category)) finalForm.occasion ="";
  if (!categorySupportsCelebration(finalForm.category)) finalForm.celebration ="";
  if (!categorySupportsSubject(finalForm.category)) finalForm.subject ="";
@@ -1505,6 +1529,21 @@ const handleDelete = (id: string) => {
  </details>
  </div>
  )}
+ {sheetType ==="physical"&& (
+ <div>
+ <label className="block text-xs font-medium text-zinc-700 mb-1">Production Partner</label>
+ <select
+ value={editForm.production_partner ||""}
+ onChange={e => setEditForm({ ...editForm, production_partner: e.target.value })}
+ className="w-full px-3 py-2 text-sm rounded-none border border-zinc-300 bg-white text-zinc-900 focus:outline-none focus:ring-2 focus:ring-blue-500/50"
+ >
+ {productionPartners.map(partner => <option key={partner} value={partner}>{partner ||"None"}</option>)}
+ </select>
+ {productionPartners.length === 1 && (
+ <p className="mt-1 text-xs text-amber-700">The connected Etsy shop has not returned any production partners.</p>
+ )}
+ </div>
+ )}
  {activeTab ==='pod'&& sheetType ==="physical"&& (
  <div className="p-6 space-y-6">
  <div className="bg-blue-50/50 border border-blue-100 p-4 rounded-sm">
@@ -1537,7 +1576,7 @@ const handleDelete = (id: string) => {
  </label>
  <div className="relative">
  <select
- value={editForm.pod_blueprint_id || 12}
+ value={editForm.pod_blueprint_id ?? 706}
  onChange={(e) => setEditForm({ ...editForm, pod_blueprint_id: Number(e.target.value) })}
  className="w-full appearance-none px-3 py-2 text-sm border border-zinc-300 bg-white text-zinc-900 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded-sm"
  >
@@ -1555,7 +1594,7 @@ const handleDelete = (id: string) => {
  </label>
  <div className="relative">
  <select
- value={editForm.pod_print_provider_id || 99}
+ value={editForm.pod_print_provider_id ?? 99}
  onChange={(e) => setEditForm({ ...editForm, pod_print_provider_id: Number(e.target.value) })}
  className="w-full appearance-none px-3 py-2 text-sm border border-zinc-300 bg-white text-zinc-900 focus:outline-none focus:ring-1 focus:ring-blue-500 rounded-sm"
  >

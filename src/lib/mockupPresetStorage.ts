@@ -21,6 +21,7 @@ function openDatabase(): Promise<IDBDatabase> {
 }
 
 export async function loadMockupPresets(): Promise<unknown> {
+  await saveQueue;
   const database = await openDatabase();
 
   try {

@@ -8,13 +8,13 @@ export const ETSY_SUBJECTS = ["Auto", "None", "Abstract & geometric", "Animal", 
 
 export const ETSY_SECTIONS = ["", "Comfort Colors 1717", "Gilden 5000", "Digital Prints"];
 
-export const ETSY_COLORS = ["Auto", "None", "Beige", "Black", "Blue", "Bronze", "Brown", "Clear", "Copper", "Gold", "Gray", "Green", "Orange", "Pink", "Purple", "Rainbow", "Red", "Rose gold", "Silver", "White", "Yellow"];
+export const ETSY_COLORS = ["Auto", "None", "Beige", "Black", "Blue", "Bronze", "Brown", "Clear", "Copper", "Gold", "Gray", "Green", "Orange", "Pepper", "Pink", "Purple", "Rainbow", "Red", "Rose gold", "Silver", "White", "Yellow"];
 
 export const ETSY_OCCASIONS = ["Auto", "None", "1st birthday", "Anniversary", "Baby shower", "Back to school", "Baptism", "Bar & Bat Mitzvah", "Birthday", "Bridal shower", "Confirmation", "Divorce & breakup", "Engagement", "First Communion", "Graduation", "Grief & mourning", "House warming", "LGBTQ pride", "Moving", "Pet loss", "Retirement", "Wedding"];
 
 export const ETSY_CELEBRATIONS = ["Auto", "None", "Christmas", "Cinco de Mayo", "Easter", "Eid", "Father's Day", "Halloween", "Hanukkah", "Holi", "Independence Day", "Kwanzaa", "Lunar New Year", "Mother's Day", "New Year's", "Passover", "Ramadan", "St Patrick's Day", "Thanksgiving", "Valentine's Day", "Veterans Day"];
 
-export const ETSY_STATUSES = ["Draft", "Generating...", "Review", "Pushing...", "Published", "Error"];
+export const ETSY_STATUSES = ["Draft", "Generating...", "Review", "Pushing...", "Publishing", "Published", "Inactive", "Error"];
 
 export const categorySupportsOccasion = (cat: string) => {
   if (!cat) return true;
@@ -77,11 +77,13 @@ export type VariationPropertyDef = {
 export const ETSY_VARIATION_PROPERTY_DEFS: Record<string, VariationPropertyDef[]> = {
   "T-Shirts": [
     { name: "Size", propertyId: 513, options: ["S", "M", "L", "XL", "2XL", "3XL"] },
-    { name: "Primary color", propertyId: 200, options: ["Beige", "Black", "Blue", "Bronze", "Brown", "Clear", "Copper", "Gold", "Gray", "Green", "Orange", "Pink", "Purple", "Rainbow", "Red", "Rose gold", "Silver", "White", "Yellow"] }
+    { name: "Primary color", propertyId: 200, options: ["Beige", "Black", "Blue", "Bronze", "Brown", "Clear", "Copper", "Gold", "Gray", "Green", "Orange", "Pepper", "Pink", "Purple", "Rainbow", "Red", "Rose gold", "Silver", "White", "Yellow"] },
+    { name: "Color", propertyId: 0, options: ["Pepper", "Black", "White", "Ivory", "Dark Grey", "Navy", "Chambray", "Bay", "Terracotta", "Clay", "Crimson", "Moss", "Yam", "Flo Blue", "Lagoon", "Sandstone"] }
   ],
   "Sweatshirts & Hoodies": [
     { name: "Size", propertyId: 513, options: ["S", "M", "L", "XL", "2XL", "3XL"] },
-    { name: "Primary color", propertyId: 200, options: ["Beige", "Black", "Blue", "Bronze", "Brown", "Clear", "Copper", "Gold", "Gray", "Green", "Orange", "Pink", "Purple", "Rainbow", "Red", "Rose gold", "Silver", "White", "Yellow"] }
+    { name: "Primary color", propertyId: 200, options: ["Beige", "Black", "Blue", "Bronze", "Brown", "Clear", "Copper", "Gold", "Gray", "Green", "Orange", "Pepper", "Pink", "Purple", "Rainbow", "Red", "Rose gold", "Silver", "White", "Yellow"] },
+    { name: "Color", propertyId: 0, options: ["Pepper", "Black", "White", "Ivory", "Dark Grey", "Navy", "Crimson", "Moss"] }
   ],
   "Mugs & Drinkware": [
     { name: "Capacity", propertyId: 52047898162, options: ["11 oz", "15 oz", "20 oz", "30 oz"] }

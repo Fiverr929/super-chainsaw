@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Toaster } from "react-hot-toast";
 import "./globals.css";
+import "@glideapps/glide-data-grid/dist/index.css";
 
 
 export const metadata: Metadata = {

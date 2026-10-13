@@ -1,18 +1,19 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import {
-  ChevronLeft, 
-  ChevronRight, 
-  ShoppingBag, 
-  ShoppingCart,
-  Check, 
-  ChevronDown, 
+  Check,
+  ChevronLeft,
+  ChevronRight,
   ChevronUp,
-  LayoutGrid, 
+  FileText,
   Image as ImageIcon,
+  Images,
+  LayoutGrid,
+  Package,
   Settings,
-  FileText
+  ShoppingBag,
+  ShoppingCart,
 } from "lucide-react";
 import SettingsModal from "./SettingsModal";
 
@@ -22,48 +23,43 @@ type Store = {
   sellerId?: string;
 };
 
+type View = "assets" | "spreadsheet" | "image" | "pdf" | "products" | "creator";
+type Workstation = "etsy" | "amazon" | "workspace";
+
 interface SidebarProps {
-  activeView?: "spreadsheet" | "image" | "pdf";
-  setActiveView?: (view: "spreadsheet" | "image" | "pdf") => void;
-  workstation?: "etsy" | "amazon" | "workspace";
-  setWorkstation?: (ws: "etsy" | "amazon" | "workspace") => void;
+  activeView?: View;
+  setActiveView?: (view: View) => void;
+  workstation?: Workstation;
+  setWorkstation?: (ws: Workstation) => void;
 }
 
-export default function Sidebar({ 
-  activeView = "spreadsheet", 
+const navButton = "group flex w-full items-center gap-3 px-3 py-2 text-left text-[13px] transition-colors";
+const selectedNav = "bg-blue-50 font-medium text-blue-700";
+const idleNav = "text-zinc-600 hover:bg-zinc-100 hover:text-zinc-950";
+
+export default function Sidebar({
+  activeView = "spreadsheet",
   setActiveView,
   workstation = "etsy",
-  setWorkstation
+  setWorkstation,
 }: SidebarProps) {
   const [isOpen, setIsOpen] = useState(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("workstation_sidebar_open") === "true";
-    }
+    if (typeof window !== "undefined") return localStorage.getItem("workstation_sidebar_open") === "true";
     return false;
   });
+  const [stores, setStores] = useState<Store[]>([]);
+  const [activeStoreId, setActiveStoreId] = useState<string | null>(null);
+  const [amazonStores, setAmazonStores] = useState<Store[]>([]);
+  const [activeAmazonStoreId, setActiveAmazonStoreId] = useState<string | null>(null);
+  const [storeDropdownOpen, setStoreDropdownOpen] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
 
   const handleSetIsOpen = (open: boolean) => {
     setIsOpen(open);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("workstation_sidebar_open", String(open));
-    }
+    localStorage.setItem("workstation_sidebar_open", String(open));
   };
 
-  // Etsy Store States
-  const [stores, setStores] = useState<Store[]>([]);
-  const [activeStoreId, setActiveStoreId] = useState<string | null>(null);
-
-  // Amazon Store States
-  const [amazonStores, setAmazonStores] = useState<Store[]>([]);
-  const [activeAmazonStoreId, setActiveAmazonStoreId] = useState<string | null>(null);
-  
-  const [storeDropdownOpen, setStoreDropdownOpen] = useState(false);
-  const [workstationDropdownOpen, setWorkstationDropdownOpen] = useState(false);
-  const [showSettingsModal, setShowSettingsModal] = useState(false);
-
-  // Load stores from local storage
   useEffect(() => {
-    // Etsy stores
     const savedStores = localStorage.getItem("workstation_etsy_stores");
     const savedActiveId = localStorage.getItem("workstation_etsy_active_store_id");
     if (savedStores) {
@@ -71,16 +67,27 @@ export default function Sidebar({
         const parsed = JSON.parse(savedStores);
         if (Array.isArray(parsed)) {
           setStores(parsed);
-          if (savedActiveId && parsed.some((s) => s.id === savedActiveId)) {
-            setActiveStoreId(savedActiveId);
-          } else if (parsed.length > 0) {
-            setActiveStoreId(parsed[0].id);
-          }
+          if (savedActiveId && parsed.some((store) => store.id === savedActiveId)) setActiveStoreId(savedActiveId);
+          else if (parsed.length) setActiveStoreId(parsed[0].id);
         }
-      } catch {}
+      } catch { /* Ignore invalid browser store data and keep the workspace usable. */ }
     }
 
-    // Amazon stores
+    if (!savedStores || savedStores === "[]") {
+      fetch("/api/etsy/shop")
+        .then((response) => response.ok ? response.json() : null)
+        .then((data) => {
+          if (!data?.shop_name) return;
+          const store = { id: String(Date.now()), name: data.shop_name };
+          setStores([store]);
+          setActiveStoreId(store.id);
+          localStorage.setItem("workstation_etsy_stores", JSON.stringify([store]));
+          localStorage.setItem("workstation_etsy_active_store_id", store.id);
+          window.dispatchEvent(new Event("etsy-store-changed"));
+        })
+        .catch(() => {});
+    }
+
     const savedAmazonStores = localStorage.getItem("workstation_amazon_stores");
     const savedActiveAmazonId = localStorage.getItem("workstation_amazon_active_store_id");
     if (savedAmazonStores) {
@@ -88,390 +95,163 @@ export default function Sidebar({
         const parsed = JSON.parse(savedAmazonStores);
         if (Array.isArray(parsed)) {
           setAmazonStores(parsed);
-          if (savedActiveAmazonId && parsed.some((s) => s.id === savedActiveAmazonId)) {
-            setActiveAmazonStoreId(savedActiveAmazonId);
-          } else if (parsed.length > 0) {
-            setActiveAmazonStoreId(parsed[0].id);
-          }
+          if (savedActiveAmazonId && parsed.some((store) => store.id === savedActiveAmazonId)) setActiveAmazonStoreId(savedActiveAmazonId);
+          else if (parsed.length) setActiveAmazonStoreId(parsed[0].id);
         }
-      } catch {}
+      } catch { /* Ignore invalid browser store data and keep the workspace usable. */ }
     }
-    
-    // Check if we just completed Etsy OAuth
+
     if (window.location.search.includes("etsy_connected=true")) {
       fetch("/api/etsy/shop")
-        .then(res => res.json())
-        .then(data => {
+        .then((response) => response.json())
+        .then((data) => {
           if (data.shop_name) {
-            const newStore = { id: String(Date.now()), name: data.shop_name };
-            
-            // We need the current parsed stores
-            const currentParsed = savedStores ? JSON.parse(savedStores) : [];
-            if (!currentParsed.some((s: Store) => s.name === data.shop_name)) {
-              const updatedStores = [...currentParsed, newStore];
-              setStores(updatedStores);
-              setActiveStoreId(newStore.id);
-              localStorage.setItem("workstation_etsy_stores", JSON.stringify(updatedStores));
-              localStorage.setItem("workstation_etsy_active_store_id", newStore.id);
+            const store = { id: String(Date.now()), name: data.shop_name };
+            const current = savedStores ? JSON.parse(savedStores) : [];
+            if (!current.some((item: Store) => item.name === data.shop_name)) {
+              const updated = [...current, store];
+              setStores(updated);
+              setActiveStoreId(store.id);
+              localStorage.setItem("workstation_etsy_stores", JSON.stringify(updated));
+              localStorage.setItem("workstation_etsy_active_store_id", store.id);
             }
           }
-          // Clean up URL
           window.history.replaceState({}, document.title, window.location.pathname);
         })
         .catch(console.error);
     }
   }, []);
 
-  const saveStores = (newStores: Store[], newActiveId: string | null) => {
-    setStores(newStores);
-    setActiveStoreId(newActiveId);
-    localStorage.setItem("workstation_etsy_stores", JSON.stringify(newStores));
-    if (newActiveId) {
-      localStorage.setItem("workstation_etsy_active_store_id", newActiveId);
-    } else {
-      localStorage.removeItem("workstation_etsy_active_store_id");
-    }
+  const saveStores = (nextStores: Store[], nextActiveId: string | null) => {
+    setStores(nextStores);
+    setActiveStoreId(nextActiveId);
+    localStorage.setItem("workstation_etsy_stores", JSON.stringify(nextStores));
+    if (nextActiveId) localStorage.setItem("workstation_etsy_active_store_id", nextActiveId);
+    else localStorage.removeItem("workstation_etsy_active_store_id");
     window.dispatchEvent(new Event("etsy-store-changed"));
   };
 
-  const saveAmazonStores = (newStores: Store[], newActiveId: string | null) => {
-    setAmazonStores(newStores);
-    setActiveAmazonStoreId(newActiveId);
-    localStorage.setItem("workstation_amazon_stores", JSON.stringify(newStores));
-    if (newActiveId) {
-      localStorage.setItem("workstation_amazon_active_store_id", newActiveId);
-    } else {
-      localStorage.removeItem("workstation_amazon_active_store_id");
-    }
+  const saveAmazonStores = (nextStores: Store[], nextActiveId: string | null) => {
+    setAmazonStores(nextStores);
+    setActiveAmazonStoreId(nextActiveId);
+    localStorage.setItem("workstation_amazon_stores", JSON.stringify(nextStores));
+    if (nextActiveId) localStorage.setItem("workstation_amazon_active_store_id", nextActiveId);
+    else localStorage.removeItem("workstation_amazon_active_store_id");
     window.dispatchEvent(new Event("amazon-store-changed"));
   };
 
-  // Etsy Active Store details
-  const activeStore = stores.find(s => s.id === activeStoreId);
-  const hasStores = stores.length > 0;
+  const activeStore = stores.find((store) => store.id === activeStoreId);
+  const activeAmazonStore = amazonStores.find((store) => store.id === activeAmazonStoreId);
+  const isWorkspace = workstation === "workspace";
 
-  // Amazon Active Store details
-  const activeAmazonStore = amazonStores.find(s => s.id === activeAmazonStoreId);
-  const hasAmazonStores = amazonStores.length > 0;
+  const openWorkspaceView = (view: View) => {
+    if (workstation !== "workspace") setWorkstation?.("workspace");
+    setActiveView?.(view);
+  };
 
-  // Collapsed Sidebar View
-  if (!isOpen) {
-    return (
-      <div 
-        className="w-12 h-full border-r border-zinc-200 bg-white flex flex-col items-center py-4 transition-all duration-300 relative z-10"
-      >
-        <button 
-          onClick={() => handleSetIsOpen(true)}
-          className="p-1.5 rounded-none hover:bg-zinc-100 text-zinc-500 mb-4"
-          title="Expand sidebar"
-        >
-          <ChevronRight size={18} />
-        </button>
+  const openChannel = (channel: "etsy" | "amazon") => {
+    setWorkstation?.(channel);
+    setActiveView?.("spreadsheet");
+  };
 
-        <div className="space-y-4 flex-1 flex flex-col items-center w-full">
-          {workstation === "etsy" ? (
-            <button 
-              onClick={() => handleSetIsOpen(true)}
-              className={`p-2 rounded-none transition-colors ${hasStores ? 'text-blue-500 bg-blue-50' : 'text-zinc-400 hover:bg-zinc-100'}`}
-              title={hasStores ? `Etsy: ${activeStore?.name}` : "No Etsy Store"}
-            >
-              <ShoppingBag size={18} />
-            </button>
-          ) : workstation === "amazon" ? (
-            <button 
-              onClick={() => handleSetIsOpen(true)}
-              className={`p-2 rounded-none transition-colors ${hasAmazonStores ? 'text-blue-500 bg-blue-50' : 'text-zinc-400 hover:bg-zinc-100'}`}
-              title={hasAmazonStores ? `Amazon: ${activeAmazonStore?.name}` : "No Amazon Store"}
-            >
-              <ShoppingCart size={18} />
-            </button>
-          ) : (
-            <button 
-              onClick={() => handleSetIsOpen(true)}
-              className="p-2 rounded-none transition-colors text-blue-500 bg-blue-50"
-              title="Workspace"
-            >
-              <FileText size={18} />
-            </button>
-          )}
+  const viewItems = [
+    { view: "assets" as const, label: "Assets", hint: "Source media by listing", icon: Images, step: "01" },
+    { view: "image" as const, label: "Design", hint: "Create or open artwork", icon: ImageIcon, step: "02" },
+    { view: "creator" as const, label: "Mockups", hint: "Place artwork on a product", icon: LayoutGrid, step: "03" },
+    { view: "products" as const, label: "Products", hint: "Review saved product drafts", icon: Package, step: "04" },
+  ];
+
+  const renderStoreCard = () => {
+    if (workstation === "workspace") {
+      return <div className="border border-zinc-200 bg-zinc-50 px-3 py-3"><p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">Next step</p><p className="mt-1 text-xs leading-5 text-zinc-600">Choose Etsy or Amazon when a product is ready for a listing.</p></div>;
+    }
+
+    const isEtsy = workstation === "etsy";
+    const active = isEtsy ? activeStore : activeAmazonStore;
+    const connectedStores = isEtsy ? stores : amazonStores;
+    const activeId = isEtsy ? activeStoreId : activeAmazonStoreId;
+    const Icon = isEtsy ? ShoppingBag : ShoppingCart;
+
+    if (!active) {
+      return <div className="flex items-center gap-2 border border-dashed border-zinc-300 bg-zinc-50 px-2.5 py-2">
+        <Icon size={15} className="shrink-0 text-zinc-500" />
+        <p className="min-w-0 flex-1 text-[11px] font-medium leading-4 text-zinc-700">{isEtsy ? "Etsy not connected" : "Amazon not connected"}</p>
+        <button aria-label={`Connect ${isEtsy ? "Etsy" : "Amazon"} store`} onClick={() => isEtsy ? window.location.assign("/api/etsy/auth") : setShowSettingsModal(true)} className="shrink-0 bg-blue-600 px-2 py-1.5 text-[10px] font-medium text-white hover:bg-blue-700">Connect</button>
+      </div>;
+    }
+
+    return <div className="relative">
+      <button onClick={() => setStoreDropdownOpen((open) => !open)} aria-expanded={storeDropdownOpen} className="flex w-full items-center gap-2 border border-zinc-200 bg-white px-3 py-2.5 text-left hover:border-blue-200 hover:bg-blue-50/50">
+        <Icon size={15} className="shrink-0 text-blue-600" />
+        <span className="min-w-0 flex-1"><span className="block text-[10px] uppercase tracking-wide text-zinc-400">Connected store</span><span className="block truncate text-xs font-medium text-zinc-800">{active.name}</span></span>
+        <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" />
+        <ChevronUp size={13} className={`shrink-0 text-zinc-400 transition-transform ${storeDropdownOpen ? "rotate-180" : ""}`} />
+      </button>
+      {storeDropdownOpen && <>
+        <button aria-label="Close store menu" className="fixed inset-0 z-40 cursor-default" onClick={() => setStoreDropdownOpen(false)} />
+        <div className="absolute bottom-full left-0 right-0 z-50 mb-1 border border-zinc-200 bg-white py-1 shadow-lg">
+          {connectedStores.map((store) => <button key={store.id} onClick={() => { setStoreDropdownOpen(false); if (isEtsy) saveStores(stores, store.id); else saveAmazonStores(amazonStores, store.id); }} className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs hover:bg-blue-50">
+            <Check size={12} className={store.id === activeId ? "text-blue-600" : "text-transparent"} /><span className="truncate text-zinc-700">{store.name}</span>
+          </button>)}
+          <div className="mt-1 border-t border-zinc-100 pt-1"><button className="flex w-full items-center gap-2 px-3 py-2 text-xs text-blue-700 hover:bg-blue-50" onClick={() => { setStoreDropdownOpen(false); setShowSettingsModal(true); }}><Settings size={12} /> Manage stores</button></div>
         </div>
+      </>}
+    </div>;
+  };
 
-        {/* Collapsed Sidebar Settings Button */}
-        <button
-          onClick={() => setShowSettingsModal(true)}
-          className="p-2 text-zinc-400 hover:bg-zinc-100 hover:text-zinc-700 transition-colors mt-auto"
-          title="Settings"
-        >
-          <Settings size={18} />
-        </button>
-
-        <SettingsModal
-          isOpen={showSettingsModal}
-          onClose={() => setShowSettingsModal(false)}
-          etsyStores={stores}
-          activeEtsyStoreId={activeStoreId}
-          onEtsyStoresChange={saveStores}
-          amazonStores={amazonStores}
-          activeAmazonStoreId={activeAmazonStoreId}
-          onAmazonStoresChange={saveAmazonStores}
-        />
-      </div>
-    );
-  }
-
-  // Expanded Sidebar View
-  return (
-    <>
-      <div className="w-64 h-full border-r border-zinc-200 bg-white flex flex-col transition-all duration-300 relative z-10">
-        
-        {/* Workstation Selection Header */}
-        <div className="relative flex items-center justify-between p-3 border-b border-zinc-200">
-          <div className="flex-1">
-            <button
-              onClick={() => setWorkstationDropdownOpen((o) => !o)}
-              className="flex items-center gap-1.5 text-[15px] font-bold text-zinc-900 hover:text-blue-600 transition-colors tracking-tight outline-none"
-            >
-              <span>{workstation === "etsy" ? "Etsy Manager" : workstation === "amazon" ? "Amazon Manager" : "Workspace"}</span>
-              <ChevronDown size={14} className={`transition-transform duration-200 ${workstationDropdownOpen ? 'rotate-180' : ''}`} />
-            </button>
-          </div>
-          <button 
-            onClick={() => handleSetIsOpen(false)}
-            className="p-1.5 rounded-none hover:bg-zinc-100 text-zinc-500"
-          >
-            <ChevronLeft size={16} />
-          </button>
-          
-          {workstationDropdownOpen && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setWorkstationDropdownOpen(false)} />
-              <div className="absolute left-0 right-0 top-full z-50 bg-white border-b border-zinc-200 py-1 w-full animate-in fade-in slide-in-from-top-1 duration-200 rounded-none">
-                <button
-                  onClick={() => {
-                    setWorkstation?.("workspace");
-                    setWorkstationDropdownOpen(false);
-                  }}
-                  className={`w-full text-left px-3 py-2 text-sm transition-colors ${workstation === "workspace" ? "bg-blue-50/50 text-blue-700 font-medium" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"}`}
-                >
-                  Workspace
-                </button>
-                <button
-                  onClick={() => {
-                    setWorkstation?.("etsy");
-                    setWorkstationDropdownOpen(false);
-                  }}
-                  className={`w-full text-left px-3 py-2 text-sm transition-colors ${workstation === "etsy" ? "bg-blue-50/50 text-blue-700 font-medium" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"}`}
-                >
-                  Etsy Manager
-                </button>
-                <button
-                  onClick={() => {
-                    setWorkstation?.("amazon");
-                    setWorkstationDropdownOpen(false);
-                  }}
-                  className={`w-full text-left px-3 py-2 text-sm transition-colors ${workstation === "amazon" ? "bg-blue-50/50 text-blue-700 font-medium" : "text-zinc-600 hover:bg-zinc-50 hover:text-zinc-900"}`}
-                >
-                  Amazon Manager
-                </button>
-              </div>
-            </>
-          )}
+  return <>
+    <aside aria-label="Main navigation" className={`${isOpen ? "w-64" : "w-[68px]"} relative z-10 flex h-full shrink-0 flex-col border-r border-zinc-200 bg-white transition-[width] duration-200`}>
+      <header className={`flex h-14 shrink-0 items-center border-b border-zinc-200 ${isOpen ? "justify-between px-4" : "justify-center px-2"}`}>
+        <div className={`min-w-0 ${!isOpen ? "hidden" : ""}`}>
+          <span className="block text-[15px] font-semibold tracking-tight text-zinc-900">Workstation</span>
         </div>
+        <button type="button" onClick={() => handleSetIsOpen(!isOpen)} aria-label={isOpen ? "Collapse sidebar" : "Expand sidebar"} title={isOpen ? "Collapse sidebar" : "Expand sidebar"} className="grid h-8 w-8 shrink-0 place-items-center text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900">
+          {isOpen ? <ChevronLeft size={17} /> : <ChevronRight size={17} />}
+        </button>
+      </header>
 
-        {/* View selection tabs */}
-        <div className="px-3 py-2 border-b border-zinc-200">
+      <nav className={`${isOpen ? "flex-1 space-y-6 overflow-y-auto px-3 py-5" : "flex-1 space-y-2 overflow-y-auto px-2 py-4"}`}>
+        <section aria-label="Product studio">
+          {isOpen && <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">Product studio</p>}
           <div className="space-y-1">
-            {(workstation === "etsy" || workstation === "amazon") && (
-              <button
-                onClick={() => setActiveView?.('spreadsheet')}
-                className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-none text-sm transition-colors bg-blue-50 text-blue-600 font-medium`}
-              >
-                <LayoutGrid size={16} />
-                Spreadsheet
-              </button>
-            )}
-
-            {workstation === "workspace" && (
-              <>
-                <button
-                  onClick={() => setActiveView?.('pdf')}
-                  className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-none text-sm transition-colors ${activeView === 'pdf' || activeView !== 'image' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-zinc-600 hover:bg-zinc-100'}`}
-                >
-                  <FileText size={16} />
-                  PDF Manager
-                </button>
-                <button
-                  onClick={() => setActiveView?.('image')}
-                  className={`w-full flex items-center gap-2 px-2.5 py-1.5 rounded-none text-sm transition-colors ${activeView === 'image' ? 'bg-blue-50 text-blue-600 font-medium' : 'text-zinc-600 hover:bg-zinc-100'}`}
-                >
-                  <ImageIcon size={16} />
-                  Design Setup
-                </button>
-              </>
-            )}
+            {viewItems.map(({ view, label, hint, icon: Icon, step }) => {
+              const active = isWorkspace && activeView === view;
+              return <button key={view} type="button" onClick={() => openWorkspaceView(view)} aria-current={active ? "page" : undefined} aria-label={label} title={!isOpen ? label : undefined} className={`${navButton} ${isOpen ? "" : "justify-center px-0"} ${active ? selectedNav : idleNav}`}>
+                <Icon size={17} className="shrink-0" />
+                {isOpen && <><span className="min-w-0 flex-1"><span className="block">{label}</span><span className={`mt-0.5 block text-[10px] font-normal ${active ? "text-blue-600/70" : "text-zinc-400"}`}>{hint}</span></span><span className={`text-[10px] tabular-nums ${active ? "text-blue-500" : "text-zinc-300"}`}>{step}</span></>}
+              </button>;
+            })}
           </div>
-        </div>
-        
-        {/* Stores Panel */}
-        <div className="flex-1 overflow-y-auto p-3 flex flex-col justify-end">
-          {workstation === "etsy" ? (
-            hasStores && activeStore ? (
-              <div className="mb-1">
-                <div className="relative mb-1">
-                  <button
-                    onClick={() => setStoreDropdownOpen((o) => !o)}
-                    className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-none border text-xs font-medium transition-colors ${
-                      storeDropdownOpen
-                        ? "bg-blue-50 border-blue-200 text-blue-700"
-                        : "bg-white border-zinc-200 text-zinc-700 hover:border-blue-200 hover:bg-blue-50"
-                    }`}
-                  >
-                    <ShoppingBag size={12} className="text-blue-500 shrink-0" />
-                    <span className="flex-1 text-left truncate">
-                      {activeStore.name}
-                    </span>
-                    <div className="w-1.5 h-1.5 bg-green-500 shrink-0" />
-                    <ChevronUp size={11} className={`text-zinc-400 shrink-0 transition-transform ${storeDropdownOpen ? "rotate-180" : ""}`} />
-                  </button>
+        </section>
 
-                  {storeDropdownOpen && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setStoreDropdownOpen(false)} />
-                      <div className="absolute left-0 right-0 bottom-full mb-1 z-50 bg-white border border-zinc-200 rounded-none py-1 overflow-hidden">
-                        {stores.map((store) => (
-                          <div
-                            key={store.id}
-                            className="group/item flex items-center gap-2 px-3 py-2 text-xs hover:bg-blue-50 cursor-pointer"
-                            onClick={() => {
-                              setStoreDropdownOpen(false);
-                              saveStores(stores, store.id);
-                            }}
-                          >
-                            <Check size={11} className={`shrink-0 ${store.id === activeStoreId ? "text-blue-500" : "text-transparent"}`} />
-                            <span className="flex-1 truncate text-zinc-700">{store.name}</span>
-                          </div>
-                        ))}
-                        <div className="border-t border-zinc-100 mt-1 pt-1">
-                          <button
-                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-blue-500 hover:bg-blue-50"
-                            onClick={() => { setStoreDropdownOpen(false); setShowSettingsModal(true); }}
-                          >
-                            <Settings size={11} /> Manage Etsy Stores
-                          </button>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="mb-1 rounded-none border border-dashed border-zinc-200 p-4 text-center">
-                <ShoppingBag size={20} className="text-zinc-300 mx-auto mb-2" />
-                <p className="text-xs font-medium text-zinc-600 mb-1">No Etsy store connected</p>
-                <p className="text-[11px] text-zinc-400 mb-3 leading-tight">Connect your store to enable automated publishing</p>
-                <button
-                  onClick={() => window.location.href = '/api/etsy/auth'}
-                  className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs bg-blue-600 text-white rounded-none hover:bg-blue-700 font-medium transition-colors"
-                >
-                  Connect Etsy
-                </button>
-              </div>
-            )
-          ) : workstation === "amazon" ? (
-            // Amazon Workstation store selection
-            hasAmazonStores && activeAmazonStore ? (
-              <div className="mb-1">
-                <div className="relative mb-1">
-                  <button
-                    onClick={() => setStoreDropdownOpen((o) => !o)}
-                    className={`w-full flex items-center gap-2 px-2.5 py-2 rounded-none border text-xs font-medium transition-colors ${
-                      storeDropdownOpen
-                        ? "bg-blue-50 border-blue-200 text-blue-700"
-                        : "bg-white border-zinc-200 text-zinc-700 hover:border-blue-200 hover:bg-blue-50"
-                    }`}
-                  >
-                    <ShoppingCart size={12} className="text-blue-500 shrink-0" />
-                    <span className="flex-1 text-left truncate">
-                      {activeAmazonStore.name}
-                    </span>
-                    <div className="w-1.5 h-1.5 bg-green-500 shrink-0" />
-                    <ChevronUp size={11} className={`text-zinc-400 shrink-0 transition-transform ${storeDropdownOpen ? "rotate-180" : ""}`} />
-                  </button>
+        <section aria-label="Listing channels">
+          {isOpen && <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">Listing channels</p>}
+          <div className="space-y-1">
+            <button type="button" onClick={() => openChannel("etsy")} aria-current={workstation === "etsy" ? "page" : undefined} aria-label="Etsy worksheet" title={!isOpen ? "Etsy worksheet" : undefined} className={`${navButton} ${isOpen ? "" : "justify-center px-0"} ${workstation === "etsy" ? selectedNav : idleNav}`}>
+              <ShoppingBag size={17} className="shrink-0" />{isOpen && <><span className="flex-1">Etsy</span><span className={`h-1.5 w-1.5 rounded-full ${stores.length ? "bg-emerald-500" : "bg-zinc-300"}`} /></>}
+            </button>
+            <button type="button" onClick={() => openChannel("amazon")} aria-current={workstation === "amazon" ? "page" : undefined} aria-label="Amazon worksheet" title={!isOpen ? "Amazon worksheet" : undefined} className={`${navButton} ${isOpen ? "" : "justify-center px-0"} ${workstation === "amazon" ? selectedNav : idleNav}`}>
+              <ShoppingCart size={17} className="shrink-0" />{isOpen && <><span className="flex-1">Amazon</span><span className={`h-1.5 w-1.5 rounded-full ${amazonStores.length ? "bg-emerald-500" : "bg-zinc-300"}`} /></>}
+            </button>
+          </div>
+        </section>
 
-                  {storeDropdownOpen && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setStoreDropdownOpen(false)} />
-                      <div className="absolute left-0 right-0 bottom-full mb-1 z-50 bg-white border border-zinc-200 rounded-none py-1 overflow-hidden">
-                        {amazonStores.map((store) => (
-                          <div
-                            key={store.id}
-                            className="group/item flex items-center gap-2 px-3 py-2 text-xs hover:bg-blue-50 cursor-pointer"
-                            onClick={() => {
-                              setStoreDropdownOpen(false);
-                              saveAmazonStores(amazonStores, store.id);
-                            }}
-                          >
-                            <Check size={11} className={`shrink-0 ${store.id === activeAmazonStoreId ? "text-blue-500" : "text-transparent"}`} />
-                            <span className="flex-1 truncate text-zinc-700">{store.name}</span>
-                          </div>
-                        ))}
-                        <div className="border-t border-zinc-100 mt-1 pt-1">
-                          <button
-                            className="w-full flex items-center gap-2 px-3 py-2 text-xs text-blue-500 hover:bg-blue-50"
-                            onClick={() => { setStoreDropdownOpen(false); setShowSettingsModal(true); }}
-                          >
-                            <Settings size={11} /> Manage Amazon Stores
-                          </button>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-            ) : (
-              <div className="mb-1 rounded-none border border-dashed border-zinc-200 p-4 text-center">
-                <ShoppingCart size={20} className="text-zinc-300 mx-auto mb-2" />
-                <p className="text-xs font-medium text-zinc-600 mb-1">No Amazon store connected</p>
-                <p className="text-[11px] text-zinc-400 mb-3 leading-tight">Connect your store to map product category presets</p>
-                <button
-                  onClick={() => setShowSettingsModal(true)}
-                  className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs bg-blue-600 text-white rounded-none hover:bg-blue-700 font-medium transition-colors"
-                >
-                  Connect Amazon
-                </button>
-              </div>
-            )
-          ) : (
-            <div className="mb-1 rounded-none border border-dashed border-zinc-200 p-4 text-center">
-              <FileText size={20} className="text-zinc-300 mx-auto mb-2" />
-              <p className="text-xs font-medium text-zinc-600 mb-1">Workspace</p>
-              <p className="text-[11px] text-zinc-400 mb-3 leading-tight">Merge, split, and edit PDF files.</p>
-            </div>
-          )}
-        </div>
-
-        {/* Expanded Sidebar Settings Button */}
-        <div className="flex-none p-3 border-t border-zinc-200 bg-white">
-          <button
-            onClick={() => setShowSettingsModal(true)}
-            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-none text-xs font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-800 transition-colors"
-          >
-            <Settings size={14} className="text-zinc-400" />
-            <span>Settings</span>
+        <section aria-label="Tools">
+          {isOpen && <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">Tools</p>}
+          <button type="button" onClick={() => openWorkspaceView("pdf")} aria-current={isWorkspace && activeView === "pdf" ? "page" : undefined} aria-label="PDF Manager" title={!isOpen ? "PDF Manager" : undefined} className={`${navButton} ${isOpen ? "" : "justify-center px-0"} ${isWorkspace && activeView === "pdf" ? selectedNav : idleNav}`}>
+            <FileText size={17} className="shrink-0" />{isOpen && <span className="flex-1">PDF Manager</span>}
           </button>
-        </div>
-      </div>
+        </section>
+      </nav>
 
-      <SettingsModal
-        isOpen={showSettingsModal}
-        onClose={() => setShowSettingsModal(false)}
-        etsyStores={stores}
-        activeEtsyStoreId={activeStoreId}
-        onEtsyStoresChange={saveStores}
-        amazonStores={amazonStores}
-        activeAmazonStoreId={activeAmazonStoreId}
-        onAmazonStoresChange={saveAmazonStores}
-      />
-    </>
-  );
+      <footer className="shrink-0 border-t border-zinc-200 p-3">
+        {isOpen && <div className="mb-3">{renderStoreCard()}</div>}
+        <button type="button" onClick={() => setShowSettingsModal(true)} aria-label="Settings" title={!isOpen ? "Settings" : undefined} className={`${navButton} ${isOpen ? "px-2" : "justify-center px-0"} text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900`}>
+          <Settings size={16} className="shrink-0" />{isOpen && <span>Settings</span>}
+        </button>
+      </footer>
+    </aside>
+
+    <SettingsModal isOpen={showSettingsModal} onClose={() => setShowSettingsModal(false)} etsyStores={stores} activeEtsyStoreId={activeStoreId} onEtsyStoresChange={saveStores} amazonStores={amazonStores} activeAmazonStoreId={activeAmazonStoreId} onAmazonStoresChange={saveAmazonStores} />
+  </>;
 }
