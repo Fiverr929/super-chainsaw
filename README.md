@@ -63,7 +63,7 @@ workstation-v2/
 │   └── lib/
 │       └── etsyConstants.ts  # Registry for categories, colors, occasions, and subjects
 ├── public/
-│   └── listings/             # Storefront asset sources (Blink 182, Dexter, skull-shirt)
+│   └── listings/             # Local storefront asset sources (ignored by Git)
 ├── package.json
 └── tsconfig.json
 ```

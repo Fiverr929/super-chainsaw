@@ -2,12 +2,13 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import os from 'node:os';
 import { randomUUID } from 'node:crypto';
 import sharp from 'sharp';
 import { deleteListingAssetFolder, listListingAssets, saveListingAssets } from '../src/lib/workspaceAssets.ts';
 
 test('Etsy images stay ordered and repeated imports preserve earlier files', async () => {
-  const cwd = await fs.mkdtemp(path.join(process.cwd(), 'scratch', 'workstation-assets-'));
+  const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'workstation-assets-'));
   try {
     const bytes = await sharp({ create: { width: 2, height: 2, channels: 3, background: '#e11d48' } }).jpeg().toBuffer();
     const image = (position: number) => ({ position, sourceUrl: `https://i.etsystatic.com/123/il_fullxfull.${position}.jpg`, file: new File([new Uint8Array(bytes)], `${position}.jpg`, { type: 'image/jpeg' }) });
@@ -32,7 +33,7 @@ test('Etsy images stay ordered and repeated imports preserve earlier files', asy
 });
 
 test('bulk deletion removes listing files but protects assets linked to saved products', async () => {
-  const cwd = await fs.mkdtemp(path.join(process.cwd(), 'scratch', 'workstation-assets-delete-'));
+  const cwd = await fs.mkdtemp(path.join(os.tmpdir(), 'workstation-assets-delete-'));
   try {
     const bytes = await sharp({ create: { width: 2, height: 2, channels: 3, background: '#e11d48' } }).jpeg().toBuffer();
     const folder = await saveListingAssets({ id: '4503518677', sourceUrl: 'https://www.etsy.com/listing/4503518677/example', title: 'Example', images: [{ position: 1, sourceUrl: 'https://i.etsystatic.com/123/il_fullxfull.1.jpg', file: new File([new Uint8Array(bytes)], '1.jpg', { type: 'image/jpeg' }) }] }, cwd);
