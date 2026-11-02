@@ -2,8 +2,13 @@ import handler from 'vinext/server/app-router-entry';
 import { createCloudWorkspaceFs, CloudStorageConflict, type CloudBucket, type CloudDatabase } from '../src/lib/cloudWorkspaceFs';
 import { withWorkspaceStorage } from '../src/lib/workspaceFs';
 import path from 'node:path';
+import { authenticateSession } from '../src/lib/manualAuth';
+import { manualAuthRoute } from '../src/lib/manualAuthRoutes';
+import { loginResponse } from '../src/lib/loginPage';
 
 interface Env {
+  WORKSTATION_SETUP_TOKEN_HASH?: string;
+  WORKSTATION_SETUP_EXPIRES_AT?: string;
   DB: CloudDatabase;
   BUCKET: CloudBucket;
   IMAGES: unknown;
@@ -16,18 +21,31 @@ const MIME: Record<string,string> = { png:'image/png', jpg:'image/jpeg', jpeg:'i
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
-    const protectedRoute = url.pathname === '/' || url.pathname.startsWith('/api/') || MEDIA.test(url.pathname);
-    const userId = request.headers.get('oai-authenticated-user-id');
-    if (protectedRoute && !userId) {
-      if (url.pathname === '/') return new Response('<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Workstation</title><body style="margin:0;background:#fafafa;color:#18181b;font:16px system-ui;display:grid;place-items:center;min-height:100vh"><main style="max-width:420px;padding:40px"><h1>Workstation</h1><p>Sign in to open your workspace and save designs, products, and listings.</p><a href="/signin-with-chatgpt?return_to=%2F" target="_top" style="display:inline-block;padding:12px 18px;background:#18181b;color:white;text-decoration:none;border-radius:8px">Sign in with ChatGPT</a></main></body></html>', { headers: { 'Content-Type':'text/html; charset=utf-8', 'Cache-Control':'no-store' } });
+    if(url.pathname==='/setup' || url.pathname.startsWith('/auth/')) {
+      if(!env.DB)return Response.json({error:'Account storage is unavailable.'},{status:503});
+      const authResponse=await manualAuthRoute(request,env.DB,{setupTokenHash:env.WORKSTATION_SETUP_TOKEN_HASH,setupExpiresAt:env.WORKSTATION_SETUP_EXPIRES_AT});
+      return authResponse ?? new Response(null,{status:404});
+    }
+    const pageRoute = url.pathname === '/' || url.pathname === '/login';
+    // Guard every request reaching the app router, including encoded paths and
+    // framework server-rendering endpoints. Built static assets contain no data.
+    if (!env.DB || !env.BUCKET) return Response.json({ error:'Cloud workspace storage is not configured.' }, { status:503 });
+    const account=await authenticateSession(env.DB,request);
+    if (!account) {
+      if (pageRoute) return loginResponse();
       return Response.json({ error:'Sign in to access your workspace.' }, { status:401, headers:{ 'Cache-Control':'no-store' } });
     }
-    if (!protectedRoute) return handler.fetch(request, env, ctx);
+    const userId=account.ownerId;
+    if (url.pathname === '/login') return Response.redirect(new URL('/',url),302);
     if (!['GET','HEAD','OPTIONS'].includes(request.method)) {
       const origin = request.headers.get('origin');
       if ((origin && origin !== url.origin) || request.headers.get('sec-fetch-site') === 'cross-site') return Response.json({ error:'Use this workspace to make changes.' },{status:403});
     }
-    if (!env.DB || !env.BUCKET) return Response.json({ error:'Cloud workspace storage is not configured.' }, { status:503 });
+    // Browser-provided or Sites identity headers never grant manual-account access.
+    const authenticatedHeaders=new Headers(request.headers);
+    authenticatedHeaders.set('oai-authenticated-user-id',userId);
+    authenticatedHeaders.delete('oai-authenticated-user-email');
+    request=new Request(request,{headers:authenticatedHeaders});
     const storage = createCloudWorkspaceFs(env.DB, env.BUCKET, userId!);
     return withWorkspaceStorage({ fs:storage, userId:userId!, images:env.IMAGES }, async () => {
       try {

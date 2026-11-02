@@ -8,6 +8,13 @@
       "when": 1793586269699,
       "tag": "0000_busy_night_thrasher",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1793588607483,
+      "tag": "0001_perpetual_rogue",
+      "breakpoints": true
     }
   ]
 }

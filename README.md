@@ -72,7 +72,9 @@ workstation-v2/
 
 ## Local Development
 
-The live Sites build uses Cloudflare Workers, D1 for saved records, and R2 for media. Sign in with ChatGPT to open an account-scoped cloud workspace. This deployment starts fresh: local records, listing folders, media, browser caches, tokens, and environment files are not imported. Only built-in mockup templates are bundled. Local development continues to save to disk.
+The live Sites build uses Cloudflare Workers, D1 for saved records, and R2 for media. The hosted workspace permits one username/password account, created through a private, expiring setup link. Further account creation is blocked in both the application and database. Passwords are salted and hashed; server-side sessions use secure, HTTP-only cookies and can be revoked by signing out. Local development continues to save to disk.
+
+The cloud workspace starts fresh: local records, listing folders, media, browser caches, tokens, and environment files are not imported. Only built-in mockup templates are bundled. Setup requires the Sites runtime secrets `WORKSTATION_SETUP_TOKEN_HASH` and `WORKSTATION_SETUP_EXPIRES_AT`. The raw setup token belongs only in the private setup link’s fragment and is never committed. Once the account exists, the setup endpoint stays closed even if its original link has not expired.
 
 `npm run build` builds the Sites Worker. Use `npm run build:local` for a local Next.js production build, followed by `npm start`. The existing `npm run dev` command runs the local disk-backed workstation.
 
