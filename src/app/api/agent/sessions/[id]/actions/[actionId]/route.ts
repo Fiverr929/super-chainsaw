@@ -1,3 +1,4 @@
+import { cloudStorageErrorResponse } from '@/lib/workspaceFs';
 import { NextResponse } from 'next/server';
 import { AgentStoreError, claimBrowserAction, completeBrowserAction, readAgentSession } from '@/lib/agent/store';
 import { updateAgentSession } from '@/lib/agent/store';
@@ -11,13 +12,13 @@ function response(error: unknown) { const status = error instanceof AgentStoreEr
 export async function GET(_request: Request, { params }: Context) {
   const denied = rejectNonLocalAgentRequest(_request); if (denied) return denied;
   try { const { id, actionId } = await params; const session = await readAgentSession(id); const action = session.actions.find(item => item.id === actionId); if (!action) return NextResponse.json({ error: 'Action not found.' }, { status: 404 }); return NextResponse.json({ action }, { headers: { 'Cache-Control': 'no-store' } }); }
-  catch (error) { return response(error); }
+  catch (error) { const storageError = cloudStorageErrorResponse(error); if (storageError) return storageError; return response(error); }
 }
 
 export async function POST(_request: Request, { params }: Context) {
   const denied = rejectNonLocalAgentRequest(_request); if (denied) return denied;
   try { const { id, actionId } = await params; const result = await claimBrowserAction(id, actionId); return NextResponse.json({ action: result.result }, { headers: { 'Cache-Control': 'no-store' } }); }
-  catch (error) { return response(error); }
+  catch (error) { const storageError = cloudStorageErrorResponse(error); if (storageError) return storageError; return response(error); }
 }
 
 export async function PUT(request: Request, { params }: Context) {
@@ -47,5 +48,5 @@ export async function PUT(request: Request, { params }: Context) {
     });
     const nextActionId = actionId.replace(/^[0-9a-f]/i, first => ((parseInt(first,16)+1)%16).toString(16));
     return NextResponse.json({ action: result.result, resumeCommandId: nextActionId }, { headers: { 'Cache-Control': 'no-store' } });
-  } catch (error) { return response(error); }
+  } catch (error) { const storageError = cloudStorageErrorResponse(error); if (storageError) return storageError; return response(error); }
 }

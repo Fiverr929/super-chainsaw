@@ -1,4 +1,6 @@
 'use client';
+import { browserStorage } from '../lib/browserStorage.ts';
+
 
 import React, { useState, useEffect, useCallback } from'react';
 import { X, Folder, CheckSquare, Square, RefreshCw, Upload } from'lucide-react';
@@ -52,7 +54,7 @@ export default function FolderImporterModal({ sheetType, onClose, onImport }: Fo
  defaultPreset = DEFAULT_AMAZON_PRESET;
  }
 
- const saved = localStorage.getItem(key);
+ const saved = browserStorage.getItem(key);
  if (saved) {
  try {
  const parsed: unknown = JSON.parse(saved);

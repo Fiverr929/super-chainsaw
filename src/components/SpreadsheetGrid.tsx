@@ -1,4 +1,6 @@
 "use client";
+import { browserStorage, browserStorageKey } from '../lib/browserStorage.ts';
+
 
 import React, { useCallback, useState, useRef } from"react";
 import Image from"next/image";
@@ -483,7 +485,7 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  const [sheet, setSheet] = useState<"digital"|"physical">("digital");
 
  React.useEffect(() => {
- const savedSheet = localStorage.getItem("workstation_v2_active_sheet");
+ const savedSheet = browserStorage.getItem("workstation_v2_active_sheet");
  if (savedSheet ==="digital"|| savedSheet ==="physical") {
  setSheet(savedSheet);
  }
@@ -504,7 +506,7 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  React.useEffect(() => {
    if (workstation !== 'etsy' || sessionStorage.getItem('workstation_open_physical_presets') !== '1') return;
    sessionStorage.removeItem('workstation_open_physical_presets');
-   localStorage.setItem('workstation_v2_active_sheet', 'physical');
+   browserStorage.setItem('workstation_v2_active_sheet', 'physical');
    setSheet('physical');
    setShowPresets(true);
  }, [workstation]);
@@ -646,7 +648,7 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
       if (response.status === 409) {
         conflictRef.current.add(id);
         const dirtyKey = ws === 'amazon' ? 'workstation_v2_grid_data_amazon_dirty' : `workstation_v2_grid_data_etsy_${sType}_dirty`;
-        localStorage.setItem(dirtyKey, 'true');
+        browserStorage.setItem(dirtyKey, 'true');
         setConflictSheet(id);
         return;
       }
@@ -655,9 +657,9 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
       sheetRevisions.current.set(id, result.revision);
       try {
         const key = ws === 'amazon' ? 'workstation_v2_grid_data_amazon' : `workstation_v2_grid_data_etsy_${sType}`;
-        if (JSON.stringify(JSON.parse(localStorage.getItem(key) || 'null')) === JSON.stringify(rows)) {
-          localStorage.setItem(`${key}_base_revision`, result.revision);
-          localStorage.setItem(`${key}_dirty`, 'false');
+        if (JSON.stringify(JSON.parse(browserStorage.getItem(key) || 'null')) === JSON.stringify(rows)) {
+          browserStorage.setItem(`${key}_base_revision`, result.revision);
+          browserStorage.setItem(`${key}_dirty`, 'false');
         }
         const draft = JSON.parse(sessionStorage.getItem(`${key}_tab_draft`) || 'null');
         if (draft && Array.isArray(draft.rows)) sessionStorage.setItem(`${key}_tab_draft`, JSON.stringify({ ...draft, baseRevision: result.revision }));
@@ -682,15 +684,15 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
   let cancelled = false;
  
  if (typeof window !=="undefined") {
- const oldDigital = localStorage.getItem("workstation_v2_grid_data");
- const oldPhysical = localStorage.getItem("workstation_v2_grid_data_physical");
- const newDigital = localStorage.getItem("workstation_v2_grid_data_etsy_digital");
- const newPhysical = localStorage.getItem("workstation_v2_grid_data_etsy_physical");
+ const oldDigital = browserStorage.getItem("workstation_v2_grid_data");
+ const oldPhysical = browserStorage.getItem("workstation_v2_grid_data_physical");
+ const newDigital = browserStorage.getItem("workstation_v2_grid_data_etsy_digital");
+ const newPhysical = browserStorage.getItem("workstation_v2_grid_data_etsy_physical");
  if (oldDigital && !newDigital) {
- localStorage.setItem("workstation_v2_grid_data_etsy_digital", oldDigital);
+ browserStorage.setItem("workstation_v2_grid_data_etsy_digital", oldDigital);
  }
  if (oldPhysical && !newPhysical) {
- localStorage.setItem("workstation_v2_grid_data_etsy_physical", oldPhysical);
+ browserStorage.setItem("workstation_v2_grid_data_etsy_physical", oldPhysical);
  }
  }
 
@@ -717,13 +719,13 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
       } else diskFailed = true;
     } catch (error) { console.error('Could not load worksheet from disk:', error); diskFailed = true; }
     try {
-      const saved = localStorage.getItem(key);
+      const saved = browserStorage.getItem(key);
       const parsed = saved ? JSON.parse(saved) : null;
-      const browserUpdatedAt = Number(localStorage.getItem(`${key}_saved_at`) || 0);
+      const browserUpdatedAt = Number(browserStorage.getItem(`${key}_saved_at`) || 0);
       if (Array.isArray(parsed) && parsed.length && (!rows || browserUpdatedAt > diskUpdatedAt)) {
         rows = parsed;
         browserRowsSelected = true;
-        browserBaseRevision = localStorage.getItem(`${key}_base_revision`);
+        browserBaseRevision = browserStorage.getItem(`${key}_base_revision`);
         selectedBrowserAt = browserUpdatedAt;
       }
     } catch (error) { console.error('Failed to parse browser worksheet copy:', error); }
@@ -735,23 +737,23 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
         browserBaseRevision = draft.baseRevision || null;
       }
     } catch (error) { console.error('Failed to parse this tab’s worksheet draft:', error); }
-    if (browserRowsSelected && latestDiskRows && browserBaseRevision !== diskRevision && localStorage.getItem(`${key}_dirty`) === 'false') {
+    if (browserRowsSelected && latestDiskRows && browserBaseRevision !== diskRevision && browserStorage.getItem(`${key}_dirty`) === 'false') {
       rows = latestDiskRows;
       browserRowsSelected = false;
       browserBaseRevision = diskRevision;
-      localStorage.setItem(key, JSON.stringify(latestDiskRows));
-      localStorage.setItem(`${key}_saved_at`, String(Date.now()));
-      localStorage.setItem(`${key}_base_revision`, diskRevision);
-      localStorage.setItem(`${key}_dirty`, 'false');
+      browserStorage.setItem(key, JSON.stringify(latestDiskRows));
+      browserStorage.setItem(`${key}_saved_at`, String(Date.now()));
+      browserStorage.setItem(`${key}_base_revision`, diskRevision);
+      browserStorage.setItem(`${key}_dirty`, 'false');
       try { sessionStorage.removeItem(`${key}_tab_draft`); } catch { /* The current disk snapshot remains usable. */ }
     }
-    if (browserRowsSelected && !localStorage.getItem(`${key}_disk_backup_created`)) {
+    if (browserRowsSelected && !browserStorage.getItem(`${key}_disk_backup_created`)) {
       try {
         const response = await fetch(`/api/workspace/listings/${getSheetId(workstation, sheet)}/backup`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(rows),
         });
         if (!response.ok) throw new Error('Could not back up the existing browser worksheet.');
-        localStorage.setItem(`${key}_disk_backup_created`, 'true');
+        browserStorage.setItem(`${key}_disk_backup_created`, 'true');
       } catch (error) {
         if (!cancelled) setWorksheetLoadError(error instanceof Error ? error.message : 'Could not back up the existing browser worksheet.');
         return;
@@ -785,17 +787,17 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
      if (!keepBrowser) {
        const restored = Array.isArray(snapshot.rows) ? snapshot.rows as RowData[] : [];
        const key = getStorageKey(workstation, sheet);
-       localStorage.setItem(key, JSON.stringify(restored));
-       localStorage.setItem(`${key}_saved_at`, String(snapshot.updatedAt || Date.now()));
-       localStorage.setItem(`${key}_base_revision`, snapshot.revision || '0');
-       localStorage.setItem(`${key}_dirty`, 'false');
+       browserStorage.setItem(key, JSON.stringify(restored));
+       browserStorage.setItem(`${key}_saved_at`, String(snapshot.updatedAt || Date.now()));
+       browserStorage.setItem(`${key}_base_revision`, snapshot.revision || '0');
+       browserStorage.setItem(`${key}_dirty`, 'false');
        sessionStorage.removeItem(`${key}_tab_draft`);
        dataRef.current = restored;
        setData(restored);
      }
      conflictRef.current.delete(id);
      setConflictSheet(null);
-     if (keepBrowser) { localStorage.setItem(`${getStorageKey(workstation,sheet)}_dirty`,'true'); persistWorksheet(workstation, sheet, dataRef.current); }
+     if (keepBrowser) { browserStorage.setItem(`${getStorageKey(workstation,sheet)}_dirty`,'true'); persistWorksheet(workstation, sheet, dataRef.current); }
    } catch (error) { toast.error(error instanceof Error ? error.message : 'Could not resolve worksheet conflict.'); }
  };
 
@@ -810,9 +812,9 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
      if (!isDataLoaded || loadedGridKey !== `${workstation}-${sheet}`) return;
      const key=getStorageKey(workstation,sheet);const rows=dataRef.current;const savedAt=Date.now();const baseRevision=revisionMap.get(getSheetId(workstation,sheet))||'0';
      try {
-       const previous=JSON.parse(localStorage.getItem(key)||'null');
-       if(JSON.stringify(previous)!==JSON.stringify(rows)) localStorage.setItem(`${key}_dirty`,'true');
-       localStorage.setItem(key,JSON.stringify(rows));localStorage.setItem(`${key}_saved_at`,String(savedAt));localStorage.setItem(`${key}_base_revision`,baseRevision);
+       const previous=JSON.parse(browserStorage.getItem(key)||'null');
+       if(JSON.stringify(previous)!==JSON.stringify(rows)) browserStorage.setItem(`${key}_dirty`,'true');
+       browserStorage.setItem(key,JSON.stringify(rows));browserStorage.setItem(`${key}_saved_at`,String(savedAt));browserStorage.setItem(`${key}_base_revision`,baseRevision);
        sessionStorage.setItem(`${key}_tab_draft`,JSON.stringify({rows,savedAt,baseRevision}));
      }catch{/* Revision checks protect worksheet data when browser recovery is unavailable. */}
    };
@@ -824,13 +826,13 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
      try{
        const id=getSheetId(workstation,sheet);const response=await fetch(`/api/workspace/listings/${id}`,{cache:'no-store'});if(!response.ok)return;
        const snapshot=await response.json();if(typeof snapshot.revision!=='string'||snapshot.revision===sheetRevisions.current.get(id))return;
-       const key=getStorageKey(workstation,sheet);const saved=JSON.parse(localStorage.getItem(key)||'null');const editedInMemory=JSON.stringify(saved)!==JSON.stringify(dataRef.current);const dirty=localStorage.getItem(`${key}_dirty`)==='true'||editedInMemory;
+       const key=getStorageKey(workstation,sheet);const saved=JSON.parse(browserStorage.getItem(key)||'null');const editedInMemory=JSON.stringify(saved)!==JSON.stringify(dataRef.current);const dirty=browserStorage.getItem(`${key}_dirty`)==='true'||editedInMemory;
        if(dirty){conflictRef.current.add(id);setConflictSheet(id);return;}
        const rows=Array.isArray(snapshot.rows)?snapshot.rows as RowData[]:[];while(rows.length<50)rows.push({...(workstation==='amazon'?emptyRowAmazon:sheet==='digital'?emptyRowDigital:emptyRowPhysical)} as RowData);
-       sheetRevisions.current.set(id,snapshot.revision);localStorage.setItem(key,JSON.stringify(rows));localStorage.setItem(`${key}_saved_at`,String(snapshot.updatedAt||Date.now()));localStorage.setItem(`${key}_base_revision`,snapshot.revision);localStorage.setItem(`${key}_dirty`,'false');sessionStorage.removeItem(`${key}_tab_draft`);dataRef.current=rows;setData(rows);conflictRef.current.delete(id);setConflictSheet(null);
+       sheetRevisions.current.set(id,snapshot.revision);browserStorage.setItem(key,JSON.stringify(rows));browserStorage.setItem(`${key}_saved_at`,String(snapshot.updatedAt||Date.now()));browserStorage.setItem(`${key}_base_revision`,snapshot.revision);browserStorage.setItem(`${key}_dirty`,'false');sessionStorage.removeItem(`${key}_tab_draft`);dataRef.current=rows;setData(rows);conflictRef.current.delete(id);setConflictSheet(null);
      }catch{/* Keep the current worksheet usable; regular saves still use revision checks. */}
    })();};
-   const storageChanged=(event:StorageEvent)=>{if(event.key==='workstation_agent_etsy_physical_revision')refreshIfClean();};
+   const storageChanged=(event:StorageEvent)=>{if(event.key===browserStorageKey('workstation_agent_etsy_physical_revision'))refreshIfClean();};
    window.addEventListener('focus',refreshIfClean);window.addEventListener('workstation-worksheet-changed',refreshIfClean);window.addEventListener('storage',storageChanged);
    return()=>{window.removeEventListener('focus',refreshIfClean);window.removeEventListener('workstation-worksheet-changed',refreshIfClean);window.removeEventListener('storage',storageChanged);};
  },[isDataLoaded,loadedGridKey,sheet,workstation]);
@@ -866,12 +868,12 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
    let timer: number | undefined;
    void (async () => {
      try {
-       const inbox = JSON.parse(localStorage.getItem('workspace_listing_inbox') || '[]');
+       const inbox = JSON.parse(browserStorage.getItem('workspace_listing_inbox') || '[]');
        if (!Array.isArray(inbox)) throw new Error('Invalid product inbox.');
        const pending = inbox.filter(item => item.channel === workstation && (item.productId || item.product?.id));
        if (!pending.length) return;
        const imported: Array<{ channel: ProductChannel; product: WorkspaceProduct; listingPreset?: ListingPresetValues; updateOnly: boolean }> = [];
-       const storedPresets = JSON.parse(localStorage.getItem('workstation_v2_presets_physical') || '[]');
+       const storedPresets = JSON.parse(browserStorage.getItem('workstation_v2_presets_physical') || '[]');
        if (!Array.isArray(storedPresets)) throw new Error('Etsy listing presets are invalid.');
        for (const item of pending) {
          const id = item.productId || item.product.id;
@@ -899,10 +901,10 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
        // Let the existing 500ms grid debounce persist first. Retain the inbox on failure.
        timer = window.setTimeout(() => {
          try {
-           const persisted = JSON.parse(localStorage.getItem(getStorageKey(workstation, sheet)) || '[]') as RowData[];
+           const persisted = JSON.parse(browserStorage.getItem(getStorageKey(workstation, sheet)) || '[]') as RowData[];
            const acknowledged = imported.filter(item => persisted.some(row => row.workspace_product_id === item.product.id && row.workspace_product_revision === item.product.revision));
-           const currentInbox = JSON.parse(localStorage.getItem('workspace_listing_inbox') || '[]');
-           if (Array.isArray(currentInbox)) localStorage.setItem('workspace_listing_inbox', JSON.stringify(currentInbox.filter(item => !acknowledged.some(ack => ack.channel === item.channel && ack.product.id === (item.productId || item.product?.id)))));
+           const currentInbox = JSON.parse(browserStorage.getItem('workspace_listing_inbox') || '[]');
+           if (Array.isArray(currentInbox)) browserStorage.setItem('workspace_listing_inbox', JSON.stringify(currentInbox.filter(item => !acknowledged.some(ack => ack.channel === item.channel && ack.product.id === (item.productId || item.product?.id)))));
          } catch { /* Leave pending products available to retry. */ }
        }, 700);
      } catch (error) {
@@ -1035,12 +1037,12 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
     return;
   }
   const key = getStorageKey(workstation, sheet);
-  localStorage.setItem(key, JSON.stringify(data));
-  localStorage.setItem(`${key}_dirty`, 'true');
+  browserStorage.setItem(key, JSON.stringify(data));
+  browserStorage.setItem(`${key}_dirty`, 'true');
   const savedAt = Date.now();
   const baseRevision = sheetRevisions.current.get(getSheetId(workstation, sheet)) || '0';
-  localStorage.setItem(`${key}_saved_at`, String(savedAt));
-  localStorage.setItem(`${key}_base_revision`, baseRevision);
+  browserStorage.setItem(`${key}_saved_at`, String(savedAt));
+  browserStorage.setItem(`${key}_base_revision`, baseRevision);
   try { sessionStorage.setItem(`${key}_tab_draft`, JSON.stringify({ rows: data, savedAt, baseRevision })); } catch { /* Disk save continues. */ }
   persistWorksheet(workstation, sheet, data);
   }, 500);
@@ -1050,11 +1052,11 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  React.useEffect(() => {
  const handleBeforeUnload = () => {
  const key = getStorageKey(workstation, sheetRef.current);
- localStorage.setItem(key, JSON.stringify(dataRef.current));
+ browserStorage.setItem(key, JSON.stringify(dataRef.current));
  const savedAt = Date.now();
  const baseRevision = sheetRevisions.current.get(getSheetId(workstation, sheetRef.current)) || '0';
- localStorage.setItem(`${key}_saved_at`, String(savedAt));
- localStorage.setItem(`${key}_base_revision`, baseRevision);
+ browserStorage.setItem(`${key}_saved_at`, String(savedAt));
+ browserStorage.setItem(`${key}_base_revision`, baseRevision);
  try { sessionStorage.setItem(`${key}_tab_draft`, JSON.stringify({ rows: dataRef.current, savedAt, baseRevision })); } catch { /* Browser copy remains available. */ }
  };
  window.addEventListener("beforeunload", handleBeforeUnload);
@@ -1064,14 +1066,14 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  const changeEtsySheet = useCallback((nextSheet: "digital" | "physical") => {
  if (nextSheet === sheetRef.current) return;
  const currentKey = getStorageKey(workstation, sheetRef.current);
- localStorage.setItem(currentKey, JSON.stringify(dataRef.current));
+ browserStorage.setItem(currentKey, JSON.stringify(dataRef.current));
  const savedAt = Date.now();
  const baseRevision = sheetRevisions.current.get(getSheetId(workstation, sheetRef.current)) || '0';
- localStorage.setItem(`${currentKey}_saved_at`, String(savedAt));
- localStorage.setItem(`${currentKey}_base_revision`, baseRevision);
+ browserStorage.setItem(`${currentKey}_saved_at`, String(savedAt));
+ browserStorage.setItem(`${currentKey}_base_revision`, baseRevision);
  try { sessionStorage.setItem(`${currentKey}_tab_draft`, JSON.stringify({ rows: dataRef.current, savedAt, baseRevision })); } catch { /* Browser copy remains available. */ }
  persistWorksheet(workstation, sheetRef.current, dataRef.current);
- localStorage.setItem("workstation_v2_active_sheet", nextSheet);
+ browserStorage.setItem("workstation_v2_active_sheet", nextSheet);
  setSheet(nextSheet);
  }, [workstation, persistWorksheet]);
 

@@ -1,3 +1,4 @@
+import { cloudStorageErrorResponse } from '@/lib/workspaceFs';
 import { exportProductFolder, ProductStoreError } from '@/lib/workspaceProductStore';
 
 export const dynamic = 'force-dynamic';
@@ -10,7 +11,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   catch { return Response.json({ error: 'Invalid request.' }, { status: 400 }); }
   if (channel !== 'etsy' && channel !== 'amazon') return Response.json({ error: 'Invalid listing channel.' }, { status: 400 });
   try { return Response.json(await exportProductFolder(id, channel)); }
-  catch (error) {
+  catch (error) { const storageError = cloudStorageErrorResponse(error); if (storageError) return storageError;
     console.error('Product folder export failed:', error);
     return Response.json({ error: error instanceof Error ? error.message : 'Could not save listing folder.' }, { status: error instanceof ProductStoreError ? error.status : 500 });
   }

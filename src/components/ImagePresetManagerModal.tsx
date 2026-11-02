@@ -1,4 +1,6 @@
 "use client";
+import { browserStorage } from '../lib/browserStorage.ts';
+
 
 import React, { useState } from"react";
 import { X, Plus, Trash2, Save, Star } from"lucide-react";
@@ -31,7 +33,7 @@ interface ImagePresetManagerModalProps {
 export default function ImagePresetManagerModal({ onClose, onSelectDefault }: ImagePresetManagerModalProps) {
  const [presets, setPresets] = useState<ImagePreset[]>(() => {
  if (typeof window !=="undefined") {
- const saved = localStorage.getItem("workstation_image_presets");
+ const saved = browserStorage.getItem("workstation_image_presets");
  if (saved) {
  try {
  const parsed = JSON.parse(saved);
@@ -44,7 +46,7 @@ export default function ImagePresetManagerModal({ onClose, onSelectDefault }: Im
 
  const [defaultPresetId, setDefaultPresetId] = useState<string>(() => {
  if (typeof window !=="undefined") {
- return localStorage.getItem("workstation_default_image_preset") ||"default-graphic-extractor";
+ return browserStorage.getItem("workstation_default_image_preset") ||"default-graphic-extractor";
  }
  return"default-graphic-extractor";
  });
@@ -55,7 +57,7 @@ export default function ImagePresetManagerModal({ onClose, onSelectDefault }: Im
 
  const savePresets = (newPresets: ImagePreset[]) => {
  setPresets(newPresets);
- localStorage.setItem("workstation_image_presets", JSON.stringify(newPresets));
+ browserStorage.setItem("workstation_image_presets", JSON.stringify(newPresets));
  };
 
  const handleCreateNew = () => {
@@ -125,7 +127,7 @@ export default function ImagePresetManagerModal({ onClose, onSelectDefault }: Im
 
  const setDefaultPreset = (id: string) => {
  setDefaultPresetId(id);
- localStorage.setItem("workstation_default_image_preset", id);
+ browserStorage.setItem("workstation_default_image_preset", id);
  const preset = presets.find(p => p.id === id);
  if (preset) {
  onSelectDefault(preset);

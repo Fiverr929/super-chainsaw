@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextResponse } from 'next/server';
 import axios from 'axios';
-import fs from 'fs';
+import fs from '../../../../lib/workspaceFs.ts';
 import path from 'path';
 import { resolvePublicAssetPath } from '@/lib/serverPaths';
 import sharp from 'sharp';
@@ -123,14 +123,14 @@ const resolveMaterialId = (matName: string): number | null => {
   return null;
 };
 
-function parseLocalAssetList(value: string | undefined, label: string, maxFiles: number): string[] {
+async function parseLocalAssetList(value: string | undefined, label: string, maxFiles: number): Promise<string[]> {
   const assets = (value || '').split(',').map(item => item.trim()).filter(Boolean);
   if (assets.length > maxFiles) {
     throw new Error(`${label} supports at most ${maxFiles} files.`);
   }
   for (const asset of assets) {
     const absolutePath = resolvePublicAssetPath(asset);
-    if (!absolutePath || !fs.existsSync(absolutePath)) {
+    if (!absolutePath || !await exists(absolutePath)) {
       throw new Error(`${label} file was not found in public assets: ${asset}`);
     }
   }
@@ -150,8 +150,8 @@ export async function POST(req: Request) {
     
     const apiKey = process.env.ETSY_API_KEY;
     const sharedSecret = process.env.ETSY_SHARED_SECRET;
-    const refreshToken = getEtsyRefreshToken();
-    shopId = getEtsyShopId() || process.env.ETSY_SHOP_ID || '';
+    const refreshToken = await getEtsyRefreshToken();
+    shopId = await getEtsyShopId() || process.env.ETSY_SHOP_ID || '';
 
     if (!apiKey || !sharedSecret || !refreshToken || !shopId) {
       return NextResponse.json({ error: 'Missing Etsy API credentials in .env.local' }, { status: 400 });
@@ -172,7 +172,7 @@ export async function POST(req: Request) {
     const accessToken = tokenRes.data.access_token;
     const newRefreshToken = tokenRes.data.refresh_token;
     if (newRefreshToken) {
-      saveEtsyRefreshToken(newRefreshToken);
+      await saveEtsyRefreshToken(newRefreshToken);
     }
 
     headers = {
@@ -187,13 +187,13 @@ export async function POST(req: Request) {
     // Validate replacement assets before creating a draft or deleting anything
     // from an existing Etsy listing.
     const imageAssets = data.updateType === "all" || data.updateType === "images"
-      ? parseLocalAssetList(data.images, 'Etsy images', 10)
+      ? await parseLocalAssetList(data.images, 'Etsy images', 10)
       : [];
     const digitalAssets = data.listingType !== 'physical' && (data.updateType === "all" || data.updateType === "files")
-      ? parseLocalAssetList(data.digital_file, 'Etsy digital downloads', 5)
+      ? await parseLocalAssetList(data.digital_file, 'Etsy digital downloads', 5)
       : [];
     if ((data.updateType === "all" || data.updateType === "video") && data.video) {
-      parseLocalAssetList(data.video, 'Etsy video', 1);
+      await parseLocalAssetList(data.video, 'Etsy video', 1);
     }
 
     if (data.updateType === "all" || data.updateType === "text") {
@@ -540,8 +540,8 @@ export async function POST(req: Request) {
         let rank = 1;
         for (const imgUrl of imageUrls) {
           const absolutePath = resolvePublicAssetPath(imgUrl);
-          if (absolutePath && fs.existsSync(absolutePath)) {
-            let finalBuffer: Buffer = fs.readFileSync(absolutePath);
+          if (absolutePath && await exists(absolutePath)) {
+            let finalBuffer: Buffer = await fs.readFile(absolutePath);
             let ext = path.extname(absolutePath).toLowerCase();
             let mimeType = ext === '.png' ? 'image/png' : 'image/jpeg';
             let fileName = path.basename(absolutePath);
@@ -600,7 +600,7 @@ export async function POST(req: Request) {
       // 6. Upload Promo Video
       if (data.video) {
         const absoluteVideoPath = resolvePublicAssetPath(data.video);
-        if (absoluteVideoPath && fs.existsSync(absoluteVideoPath)) {
+        if (absoluteVideoPath && await exists(absoluteVideoPath)) {
           // Delete existing video(s)
           try {
             const existingVideosRes = await axiosWithRetry({
@@ -625,7 +625,7 @@ export async function POST(req: Request) {
           }
 
           // Upload new video file
-          const videoBuffer = fs.readFileSync(absoluteVideoPath);
+          const videoBuffer = await fs.readFile(absoluteVideoPath);
           const videoBlob = new Blob([new Uint8Array(videoBuffer)], { type: 'video/mp4' });
           const videoFormData = new FormData();
           videoFormData.append("video", videoBlob, path.basename(absoluteVideoPath));
@@ -676,8 +676,8 @@ export async function POST(req: Request) {
         const files = digitalAssets;
         for (const fileUrl of files) {
           const absolutePath = resolvePublicAssetPath(fileUrl);
-          if (absolutePath && fs.existsSync(absolutePath)) {
-            const fileBuffer = fs.readFileSync(absolutePath);
+          if (absolutePath && await exists(absolutePath)) {
+            const fileBuffer = await fs.readFile(absolutePath);
             const ext = path.extname(absolutePath).toLowerCase();
             let mimeType = 'application/octet-stream';
             if (ext === '.zip') mimeType = 'application/zip';
@@ -958,7 +958,7 @@ export async function POST(req: Request) {
 
     // Save to file for debugging
     try {
-      fs.writeFileSync(path.join(process.cwd(), 'latest_error.json'), JSON.stringify({
+      await fs.writeFile(path.join(process.cwd(), 'latest_error.json'), JSON.stringify({
         timestamp: new Date().toISOString(),
         requestBody: data,
         error: errorDetails
@@ -970,3 +970,5 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'Failed to push to Etsy', details: errorDetails }, { status: 500 });
   }
 }
+
+async function exists(file: string) { try { await fs.access(file); return true; } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false; throw error; } }

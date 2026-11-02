@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs';
+import fs from '../../../../lib/workspaceFs.ts';
 import path from 'path';
 
 export const dynamic = 'force-dynamic';
@@ -19,26 +19,24 @@ export async function GET(request: Request) {
     const listingsDir = path.join(/*turbopackIgnore: true*/ process.cwd(), 'public', baseDir);
     
     // Create the directory if it doesn't exist yet
-    if (!fs.existsSync(listingsDir)) {
-      fs.mkdirSync(listingsDir, { recursive: true });
+    if (!await exists(listingsDir)) {
+      await fs.mkdir(listingsDir, { recursive: true });
       return NextResponse.json({ folders: [] });
     }
 
-    const entries = fs.readdirSync(listingsDir, { withFileTypes: true });
+    const entries = await fs.readdir(listingsDir, { withFileTypes: true });
     
     // Filter for directories only
-    const folders = entries
-      .filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))
-      .filter(entry => {
-        if (!entry.name.startsWith('product-')) return true;
+    const folders: string[] = [];
+    for (const entry of entries.filter(entry => entry.isDirectory() && !entry.name.startsWith('.'))) {
+        if (!entry.name.startsWith('product-')) { folders.push(entry.name); continue; }
         try {
-          const manifest = JSON.parse(fs.readFileSync(path.join(listingsDir, entry.name, 'manifest.json'), 'utf8')) as { productId?: unknown; channel?: unknown; productRevision?: unknown };
+          const manifest = JSON.parse(await fs.readFile(path.join(listingsDir, entry.name, 'manifest.json'), 'utf8')) as { productId?: unknown; channel?: unknown; productRevision?: unknown };
           const id = entry.name.slice('product-'.length);
           const expectedChannel = type === 'amazon' ? 'amazon' : 'etsy';
-          return manifest.productId === id && manifest.channel === expectedChannel && typeof manifest.productRevision === 'number';
-        } catch { return false; }
-      })
-      .map(entry => entry.name);
+          if (manifest.productId === id && manifest.channel === expectedChannel && typeof manifest.productRevision === 'number') folders.push(entry.name);
+        } catch { /* Ignore incomplete exports. */ }
+    }
 
     return NextResponse.json({ folders });
   } catch (error) {
@@ -46,3 +44,5 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Failed to scan directory' }, { status: 500 });
   }
 }
+
+async function exists(file: string) { try { await fs.access(file); return true; } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false; throw error; } }

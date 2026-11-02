@@ -1,4 +1,6 @@
 "use client";
+import { browserStorage } from '../lib/browserStorage.ts';
+
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
@@ -23,7 +25,7 @@ const PdfEditor = dynamic(() => import("@/components/PdfEditor"), {
 export default function ClientLayout() {
   const [workstation, setWorkstation] = useState<"etsy" | "amazon" | "workspace">(() => {
     if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("active_workstation");
+      const saved = browserStorage.getItem("active_workstation");
       if (saved === "etsy" || saved === "amazon" || saved === "workspace") return saved as "etsy" | "amazon" | "workspace";
     }
     return "workspace";
@@ -35,7 +37,7 @@ export default function ClientLayout() {
   const [sourcePresetId, setSourcePresetId] = useState<string | null>(null);
   const [activeView, setActiveView] = useState<"assets" | "spreadsheet" | "image" | "design-tools" | "pdf" | "products" | "creator" | "agent">(() => {
     if (typeof window !== "undefined") {
-      const saved = localStorage.getItem("workstation_active_view");
+      const saved = browserStorage.getItem("workstation_active_view");
       if (saved === "assets" || saved === "image" || saved === "design-tools" || saved === "spreadsheet" || saved === "pdf" || saved === "products" || saved === "creator" || saved === "agent") return saved;
     }
     return "image";
@@ -45,7 +47,7 @@ export default function ClientLayout() {
     if (view === 'creator') { setMockupSubview('choose'); setSourcePresetId(presetId || null); }
     setActiveView(view);
     if (typeof window !== "undefined") {
-      localStorage.setItem("workstation_active_view", view);
+      browserStorage.setItem("workstation_active_view", view);
     }
   };
 
@@ -53,7 +55,7 @@ export default function ClientLayout() {
     setWorkstation(ws);
     if (ws === "workspace" && activeView === "spreadsheet") handleSetActiveView("image");
     if (typeof window !== "undefined") {
-      localStorage.setItem("active_workstation", ws);
+      browserStorage.setItem("active_workstation", ws);
     }
   };
 

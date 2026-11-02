@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs';
+import fs from '../../../../lib/workspaceFs.ts';
 import path from 'path';
 import { getEtsyRefreshToken, getEtsyShopId, saveEtsyRefreshToken } from '@/lib/etsyTokenStore';
 
@@ -9,8 +9,8 @@ export async function GET() {
   try {
     const apiKey = process.env.ETSY_API_KEY;
     const sharedSecret = process.env.ETSY_SHARED_SECRET;
-    const refreshToken = getEtsyRefreshToken();
-    const shopId = getEtsyShopId() || process.env.ETSY_SHOP_ID;
+    const refreshToken = await getEtsyRefreshToken();
+    const shopId = await getEtsyShopId() || process.env.ETSY_SHOP_ID;
     if (!apiKey || !sharedSecret || !refreshToken || !shopId) {
       return NextResponse.json({ error: 'Etsy shop is not connected' }, { status: 400 });
     }
@@ -23,7 +23,7 @@ export async function GET() {
     });
     const token = await tokenResponse.json();
     if (!tokenResponse.ok) throw new Error(token.error || 'Could not refresh Etsy access');
-    if (token.refresh_token) saveEtsyRefreshToken(token.refresh_token);
+    if (token.refresh_token) await saveEtsyRefreshToken(token.refresh_token);
 
     const response = await fetch(`https://api.etsy.com/v3/application/shops/${shopId}/production-partners`, {
       headers: { 'x-api-key': `${apiKey}:${sharedSecret}`, Authorization: `Bearer ${token.access_token}` },
@@ -42,7 +42,7 @@ export async function GET() {
     console.error('Etsy production partners API error:', error);
     const message = error instanceof Error ? error.message : 'Unknown Etsy API error';
     try {
-      fs.writeFileSync(path.join(process.cwd(), 'latest_error.json'), JSON.stringify({
+      await fs.writeFile(path.join(process.cwd(), 'latest_error.json'), JSON.stringify({
         route: '/api/etsy/production-partners',
         timestamp: new Date().toISOString(),
         error: message

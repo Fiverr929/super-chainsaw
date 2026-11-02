@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import fs from 'node:fs/promises';
+import fs from '../../../../lib/workspaceFs.ts';
 import path from 'node:path';
 import sharp from 'sharp';
 import { callGeminiGenerateContent, missingApiKeyResponse, resolveGeminiApiKey } from '@/lib/geminiApi';

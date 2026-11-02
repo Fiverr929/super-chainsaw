@@ -1,3 +1,4 @@
+import { browserStorageKey } from './browserStorage.ts';
 const DATABASE_NAME = "workstation-v2";
 const DATABASE_VERSION = 1;
 const STORE_NAME = "mockup-presets";
@@ -6,7 +7,7 @@ let saveQueue: Promise<void> = Promise.resolve();
 
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = window.indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
+    const request = window.indexedDB.open(browserStorageKey(DATABASE_NAME), DATABASE_VERSION);
 
     request.onupgradeneeded = () => {
       const database = request.result;

@@ -1,4 +1,5 @@
-import fs from 'node:fs/promises';
+import { cloudStorageErrorResponse } from '@/lib/workspaceFs';
+import fs from '../../../../lib/workspaceFs.ts';
 import path from 'node:path';
 import { NextResponse } from 'next/server';
 import { createAgentSession, AgentStoreError } from '@/lib/agent/store';
@@ -20,11 +21,11 @@ export async function GET(request: Request) {
       } catch { return null; }
     }));
     return NextResponse.json({ sessions: sessions.filter(Boolean).sort((a, b) => b!.updatedAt.localeCompare(a!.updatedAt)).slice(0,30) }, { headers: { 'Cache-Control': 'no-store' } });
-  } catch (error) { console.error('Agent session list failed:', error); return NextResponse.json({ error: 'Could not load Agent sessions.' }, { status: 500 }); }
+  } catch (error) { const storageError = cloudStorageErrorResponse(error); if (storageError) return storageError; console.error('Agent session list failed:', error); return NextResponse.json({ error: 'Could not load Agent sessions.' }, { status: 500 }); }
 }
 
 export async function POST(request: Request) {
   const denied = rejectNonLocalAgentRequest(request); if (denied) return denied;
   try { return NextResponse.json({ session: await createAgentSession() }, { status: 201, headers: { 'Cache-Control': 'no-store' } }); }
-  catch (error) { return NextResponse.json({ error: error instanceof AgentStoreError ? error.message : 'Could not start an Agent session.' }, { status: error instanceof AgentStoreError ? error.status : 500 }); }
+  catch (error) { const storageError = cloudStorageErrorResponse(error); if (storageError) return storageError; return NextResponse.json({ error: error instanceof AgentStoreError ? error.message : 'Could not start an Agent session.' }, { status: error instanceof AgentStoreError ? error.status : 500 }); }
 }

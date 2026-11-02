@@ -1,4 +1,6 @@
 "use client";
+import { browserStorage } from '../lib/browserStorage.ts';
+
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
@@ -142,7 +144,7 @@ export default function WorkspaceProducts({ onOpenListings, incomingArtwork, onA
       const available = [...presets, ...CC1717_PRESETS, ...VINTAGE_FRONT_PRESETS].filter((preset, index, all) => all.findIndex(item => item.id === preset.id) === index);
       setTemplates(available);
       setTemplateId(current => {
-        const preferred = initialTemplateId || current || localStorage.getItem('workspace_default_template') || '';
+        const preferred = initialTemplateId || current || browserStorage.getItem('workspace_default_template') || '';
         const next = available.some(p => p.id === preferred) ? preferred : CC1717_PRESETS[0].id;
         const source = next.startsWith('cc1717-') || next.startsWith('vintage-front-2k-') ? 'app' : 'user';
         setTemplateSource(source);
@@ -153,13 +155,13 @@ export default function WorkspaceProducts({ onOpenListings, incomingArtwork, onA
     } catch { toast.error('Could not load recipes. Reload Products to retry.'); }
   }, [initialTemplateId]);
 
-  useEffect(() => { const handlePresetChanges=()=>{void loadTemplates();};void load(); void loadTemplates(); setAutoRender(localStorage.getItem('workspace_auto_render') !== 'false');window.addEventListener('agent-presets-changed',handlePresetChanges);return()=>window.removeEventListener('agent-presets-changed',handlePresetChanges); }, [load, loadTemplates]);
+  useEffect(() => { const handlePresetChanges=()=>{void loadTemplates();};void load(); void loadTemplates(); setAutoRender(browserStorage.getItem('workspace_auto_render') !== 'false');window.addEventListener('agent-presets-changed',handlePresetChanges);return()=>window.removeEventListener('agent-presets-changed',handlePresetChanges); }, [load, loadTemplates]);
   useEffect(() => {
     const readPresets=()=>{try {
-      const saved = JSON.parse(localStorage.getItem('workstation_v2_presets_physical') || '[]');
+      const saved = JSON.parse(browserStorage.getItem('workstation_v2_presets_physical') || '[]');
       const presets = Array.isArray(saved) ? saved.filter((item): item is ListingPresetValues => item && typeof item.id === 'string' && typeof item.name === 'string') : [];
       setListingPresets(presets);
-      setListingPresetId(current => current || (presets.some(item=>item.id===localStorage.getItem('workspace_default_listing_preset'))?localStorage.getItem('workspace_default_listing_preset')!:presets.length === 1 ? presets[0].id : ''));
+      setListingPresetId(current => current || (presets.some(item=>item.id===browserStorage.getItem('workspace_default_listing_preset'))?browserStorage.getItem('workspace_default_listing_preset')!:presets.length === 1 ? presets[0].id : ''));
     } catch { setListingPresets([]); }};
     readPresets();window.addEventListener('agent-presets-changed',readPresets);return()=>window.removeEventListener('agent-presets-changed',readPresets);
   }, []);
@@ -188,7 +190,7 @@ export default function WorkspaceProducts({ onOpenListings, incomingArtwork, onA
   }, [loadChannels]);
 
   const openChannelListing = (record: ListingRecord) => {
-    if (record.channel === 'etsy') localStorage.setItem('workstation_v2_active_sheet', record.sheet === 'etsy-digital' ? 'digital' : 'physical');
+    if (record.channel === 'etsy') browserStorage.setItem('workstation_v2_active_sheet', record.sheet === 'etsy-digital' ? 'digital' : 'physical');
     sessionStorage.setItem('workspace_listing_target', JSON.stringify({ channel: record.channel, sheet: record.sheet, productId: record.productId, listingId: record.id, createdAt: Date.now() }));
     onOpenListings(record.channel);
   };
@@ -285,12 +287,12 @@ export default function WorkspaceProducts({ onOpenListings, incomingArtwork, onA
       });
       const exported = await exportResponse.json();
       if (!exportResponse.ok) throw new Error(exported.error || 'Could not prepare the listing folder.');
-      const pending = JSON.parse(localStorage.getItem('workspace_listing_inbox') || '[]');
+      const pending = JSON.parse(browserStorage.getItem('workspace_listing_inbox') || '[]');
       if (!Array.isArray(pending)) throw new Error('Listing inbox is invalid.');
       const next = pending.filter(item => !(item.channel === channel && (item.productId === product.id || item.product?.id === product.id)));
       next.push({ channel, productId: product.id, updateOnly, ...(channel === 'etsy' && !updateOnly ? { listingPresetId } : {}) });
-      localStorage.setItem('workspace_listing_inbox', JSON.stringify(next));
-      if (channel === 'etsy') localStorage.setItem('workstation_v2_active_sheet', 'physical');
+      browserStorage.setItem('workspace_listing_inbox', JSON.stringify(next));
+      if (channel === 'etsy') browserStorage.setItem('workstation_v2_active_sheet', 'physical');
       sessionStorage.setItem('workspace_listing_target', JSON.stringify({ channel, sheet: channel === 'etsy' ? 'etsy-physical' : 'amazon', productId: product.id, createdAt: Date.now() }));
       onOpenListings(channel);
     });
@@ -300,7 +302,7 @@ export default function WorkspaceProducts({ onOpenListings, incomingArtwork, onA
     setTemplateId(id);
     setTemplateSource(id.startsWith('cc1717-') || id.startsWith('vintage-front-2k-') ? 'app' : 'user');
     if (!templates.find(preset => preset.id === id)?.frames.some(frame => frame.role === 'Back')) setBackFile(null);
-    localStorage.setItem('workspace_default_template', id);
+    browserStorage.setItem('workspace_default_template', id);
   };
 
   const galleryForEditing = (product: WorkspaceProduct) => {
@@ -446,7 +448,7 @@ export default function WorkspaceProducts({ onOpenListings, incomingArtwork, onA
             <label className="block space-y-2 text-xs text-zinc-600"><span>Design placement</span><select aria-label="Design placement" disabled={!!busy} value={placementChoice} onChange={e => setPlacementChoice(e.target.value as typeof placementChoice)} className="w-full border border-zinc-200 bg-white p-2 text-sm"><option value="template">Use template placement (100%)</option><option value="top-center">Top center · Full size (100%)</option><option value="pocket">Pocket · Small (35%)</option><option value="both">Both placements — two products per design</option></select></label>
             <p className="text-xs text-zinc-500">Template placement keeps the saved print size. Front and back artwork stay separate from the customer-facing mockups.</p>
             {selectedTemplate?.frames.some(frame => frame.role === 'Back') && <div className="space-y-2 border-t border-zinc-200 pt-3"><input ref={backInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={event => setBackFile(event.target.files?.[0] || null)} /><button type="button" className={button} onClick={() => backInputRef.current?.click()}>{backFile ? `Back artwork: ${backFile.name}` : 'Add back artwork (optional)'}</button><p className="text-xs text-zinc-500">Without a back file, the back shirt stays blank until you add artwork in the product editor.</p></div>}
-            <label className="flex items-center gap-2 text-xs text-zinc-600"><input type="checkbox" disabled={!!busy} checked={autoRender} onChange={e => { setAutoRender(e.target.checked); localStorage.setItem('workspace_auto_render', String(e.target.checked)); }} /> Generate product images automatically</label>
+            <label className="flex items-center gap-2 text-xs text-zinc-600"><input type="checkbox" disabled={!!busy} checked={autoRender} onChange={e => { setAutoRender(e.target.checked); browserStorage.setItem('workspace_auto_render', String(e.target.checked)); }} /> Generate product images automatically</label>
             </div></details>
           </div>
           <div className="self-start space-y-3">

@@ -1,4 +1,6 @@
 "use client";
+import { browserStorage } from '../lib/browserStorage.ts';
+
 
 import React, { useState, useEffect } from "react";
 import { X, ShoppingBag, ShoppingCart, Printer, ChevronDown, ChevronUp, Check, Loader2, Sparkles, Eye, EyeOff, ExternalLink, Trash2 } from "lucide-react";
@@ -65,7 +67,7 @@ export default function SettingsModal({
       const storedOpenRouterKey = getStoredOpenRouterApiKey();
       setOpenRouterKey(storedOpenRouterKey);
       setHasOpenRouterKey(Boolean(storedOpenRouterKey));
-      setSelectedPrintifyShopId(localStorage.getItem('workstation_printify_shop_id') || '');
+      setSelectedPrintifyShopId(browserStorage.getItem('workstation_printify_shop_id') || '');
       fetch('/api/printify/shops')
         .then(async response => {
           const result = await response.json();
@@ -465,8 +467,8 @@ export default function SettingsModal({
                       onChange={event => {
                         const id = event.target.value;
                         setSelectedPrintifyShopId(id);
-                        if (id) localStorage.setItem('workstation_printify_shop_id', id);
-                        else localStorage.removeItem('workstation_printify_shop_id');
+                        if (id) browserStorage.setItem('workstation_printify_shop_id', id);
+                        else browserStorage.removeItem('workstation_printify_shop_id');
                       }}
                       className="w-full mt-3 px-3 py-2 text-sm border border-zinc-300 bg-white text-zinc-900"
                     >

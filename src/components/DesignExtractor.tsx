@@ -1,4 +1,6 @@
 "use client";
+import { browserStorage } from '../lib/browserStorage.ts';
+
 
 import { useEffect, useState } from 'react';
 import BulkBackgroundRemover from './BulkBackgroundRemover';
@@ -13,8 +15,8 @@ export default function DesignExtractor({ onCreateProduct, incomingAsset }: { on
   const [researchDirection, setResearchDirection] = useState<{ id: string; prompt: string; imageUrl: string } | null>(null);
 
   useEffect(() => {
-    const savedPresets = localStorage.getItem('workstation_image_presets');
-    const defaultId = localStorage.getItem('workstation_default_image_preset') || DEFAULT_IMAGE_PRESET.id;
+    const savedPresets = browserStorage.getItem('workstation_image_presets');
+    const defaultId = browserStorage.getItem('workstation_default_image_preset') || DEFAULT_IMAGE_PRESET.id;
     if (!savedPresets) return;
     try {
       const parsed: unknown = JSON.parse(savedPresets);

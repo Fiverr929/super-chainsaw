@@ -1,4 +1,6 @@
-import fs from 'fs';
+import fs from './workspaceFs.ts';
+import { workspaceStorageContext } from './workspaceFs.ts';
+import { createHash } from 'node:crypto';
 import path from 'path';
 import sharp from 'sharp';
 
@@ -78,31 +80,33 @@ function buildStorageObjectPath(fileUrl: string, namespace: string, targetExt: s
   const fileName = sanitizePathSegment(parsed.name) + targetExt;
   const namespacedFolder = sanitizePathSegment(namespace);
 
-  return [getSupabaseStorageConfig()?.prefix, namespacedFolder, folderPath, fileName]
+  const owner = workspaceStorageContext()?.userId;
+  const ownerPrefix = owner ? createHash('sha256').update(owner).digest('hex') : null;
+  return [getSupabaseStorageConfig()?.prefix, ownerPrefix, namespacedFolder, folderPath, fileName]
     .filter(Boolean)
     .join('/');
 }
 
-function getFileFingerprint(localPath: string): { size: number; mtimeMs: number } {
-  const stat = fs.statSync(localPath);
+async function getFileFingerprint(localPath: string): Promise<{ size: number; mtimeMs: number }> {
+  const stat = await fs.stat(localPath);
   return {
     size: stat.size,
     mtimeMs: Math.trunc(stat.mtimeMs),
   };
 }
 
-function readUploadCache(): UploadCache {
+async function readUploadCache(): Promise<UploadCache> {
   try {
-    if (!fs.existsSync(UPLOAD_CACHE_FILE)) return {};
-    return JSON.parse(fs.readFileSync(UPLOAD_CACHE_FILE, 'utf-8')) as UploadCache;
+    if (!await exists(UPLOAD_CACHE_FILE)) return {};
+    return JSON.parse(await fs.readFile(UPLOAD_CACHE_FILE, 'utf-8')) as UploadCache;
   } catch {
     return {};
   }
 }
 
-function writeUploadCache(cache: UploadCache): void {
+async function writeUploadCache(cache: UploadCache): Promise<void> {
   try {
-    fs.writeFileSync(UPLOAD_CACHE_FILE, JSON.stringify(cache, null, 2), 'utf-8');
+    await fs.writeFile(UPLOAD_CACHE_FILE, JSON.stringify(cache, null, 2), 'utf-8');
   } catch (error) {
     console.warn('Failed to write Supabase upload cache:', error);
   }
@@ -124,7 +128,7 @@ async function assertPublicUrlReadable(publicUrl: string, fileUrl: string): Prom
 }
 
 async function buildAmazonReadyImage(localPath: string): Promise<Buffer> {
-  return sharp(localPath)
+  return sharp(await fs.readFile(localPath))
     .rotate()
     .resize(2000, 2000, { fit: 'inside', withoutEnlargement: true })
     .flatten({ background: '#ffffff' })
@@ -139,7 +143,7 @@ export async function uploadPublicAssetToSupabase(fileUrl: string, namespace: st
   }
 
   const localPath = resolvePublicAssetPath(fileUrl);
-  if (!localPath || !fs.existsSync(localPath)) {
+  if (!localPath || !await exists(localPath)) {
     throw new Error(`Local image file not found for Supabase upload: ${fileUrl}`);
   }
 
@@ -151,8 +155,8 @@ export async function uploadPublicAssetToSupabase(fileUrl: string, namespace: st
 
   const objectPath = buildStorageObjectPath(fileUrl, namespace, '.jpg');
   const publicUrl = `${config.url}/storage/v1/object/public/${encodeURIComponent(config.bucket)}/${encodeObjectPath(objectPath)}`;
-  const fingerprint = getFileFingerprint(localPath);
-  const cache = readUploadCache();
+  const fingerprint = await getFileFingerprint(localPath);
+  const cache = await readUploadCache();
   const cacheKey = getCacheKey(config, objectPath);
   const cached = cache[cacheKey];
 
@@ -201,7 +205,9 @@ export async function uploadPublicAssetToSupabase(fileUrl: string, namespace: st
     publicUrl,
     transformVersion: AMAZON_IMAGE_TRANSFORM_VERSION,
   };
-  writeUploadCache(cache);
+  await writeUploadCache(cache);
 
   return publicUrl;
 }
+
+async function exists(file: string) { try { await fs.access(file); return true; } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false; throw error; } }

@@ -1,3 +1,4 @@
+import { cloudStorageErrorResponse } from '@/lib/workspaceFs';
 import { AssetStoreError, deleteListingAssetFolder } from '@/lib/workspaceAssets';
 
 export const dynamic = 'force-dynamic';
@@ -15,7 +16,7 @@ export async function POST(request: Request) {
   const failed: { id: string; error: string }[] = [];
   for (const id of body.ids as string[]) {
     try { await deleteListingAssetFolder(id); deleted.push(id); }
-    catch (error) { failed.push({ id, error: error instanceof AssetStoreError ? error.message : 'Could not delete this asset folder.' }); }
+    catch (error) { const storageError = cloudStorageErrorResponse(error); if (storageError) return storageError; failed.push({ id, error: error instanceof AssetStoreError ? error.message : 'Could not delete this asset folder.' }); }
   }
   return Response.json({ deleted, failed }, { headers: { 'Cache-Control': 'no-store' } });
 }

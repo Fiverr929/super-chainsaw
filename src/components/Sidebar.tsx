@@ -1,4 +1,6 @@
 "use client";
+import { browserStorage } from '../lib/browserStorage.ts';
+
 
 import React, { useEffect, useState } from "react";
 import {
@@ -45,7 +47,7 @@ export default function Sidebar({
   setWorkstation,
 }: SidebarProps) {
   const [isOpen, setIsOpen] = useState(() => {
-    if (typeof window !== "undefined") return window.innerWidth >= 640 && localStorage.getItem("workstation_sidebar_open") === "true";
+    if (typeof window !== "undefined") return window.innerWidth >= 640 && browserStorage.getItem("workstation_sidebar_open") === "true";
     return false;
   });
   const [stores, setStores] = useState<Store[]>([]);
@@ -57,12 +59,12 @@ export default function Sidebar({
 
   const handleSetIsOpen = (open: boolean) => {
     setIsOpen(open);
-    localStorage.setItem("workstation_sidebar_open", String(open));
+    browserStorage.setItem("workstation_sidebar_open", String(open));
   };
 
   useEffect(() => {
-    const savedStores = localStorage.getItem("workstation_etsy_stores");
-    const savedActiveId = localStorage.getItem("workstation_etsy_active_store_id");
+    const savedStores = browserStorage.getItem("workstation_etsy_stores");
+    const savedActiveId = browserStorage.getItem("workstation_etsy_active_store_id");
     if (savedStores) {
       try {
         const parsed = JSON.parse(savedStores);
@@ -82,15 +84,15 @@ export default function Sidebar({
           const store = { id: String(Date.now()), name: data.shop_name };
           setStores([store]);
           setActiveStoreId(store.id);
-          localStorage.setItem("workstation_etsy_stores", JSON.stringify([store]));
-          localStorage.setItem("workstation_etsy_active_store_id", store.id);
+          browserStorage.setItem("workstation_etsy_stores", JSON.stringify([store]));
+          browserStorage.setItem("workstation_etsy_active_store_id", store.id);
           window.dispatchEvent(new Event("etsy-store-changed"));
         })
         .catch(() => {});
     }
 
-    const savedAmazonStores = localStorage.getItem("workstation_amazon_stores");
-    const savedActiveAmazonId = localStorage.getItem("workstation_amazon_active_store_id");
+    const savedAmazonStores = browserStorage.getItem("workstation_amazon_stores");
+    const savedActiveAmazonId = browserStorage.getItem("workstation_amazon_active_store_id");
     if (savedAmazonStores) {
       try {
         const parsed = JSON.parse(savedAmazonStores);
@@ -113,8 +115,8 @@ export default function Sidebar({
               const updated = [...current, store];
               setStores(updated);
               setActiveStoreId(store.id);
-              localStorage.setItem("workstation_etsy_stores", JSON.stringify(updated));
-              localStorage.setItem("workstation_etsy_active_store_id", store.id);
+              browserStorage.setItem("workstation_etsy_stores", JSON.stringify(updated));
+              browserStorage.setItem("workstation_etsy_active_store_id", store.id);
             }
           }
           window.history.replaceState({}, document.title, window.location.pathname);
@@ -126,18 +128,18 @@ export default function Sidebar({
   const saveStores = (nextStores: Store[], nextActiveId: string | null) => {
     setStores(nextStores);
     setActiveStoreId(nextActiveId);
-    localStorage.setItem("workstation_etsy_stores", JSON.stringify(nextStores));
-    if (nextActiveId) localStorage.setItem("workstation_etsy_active_store_id", nextActiveId);
-    else localStorage.removeItem("workstation_etsy_active_store_id");
+    browserStorage.setItem("workstation_etsy_stores", JSON.stringify(nextStores));
+    if (nextActiveId) browserStorage.setItem("workstation_etsy_active_store_id", nextActiveId);
+    else browserStorage.removeItem("workstation_etsy_active_store_id");
     window.dispatchEvent(new Event("etsy-store-changed"));
   };
 
   const saveAmazonStores = (nextStores: Store[], nextActiveId: string | null) => {
     setAmazonStores(nextStores);
     setActiveAmazonStoreId(nextActiveId);
-    localStorage.setItem("workstation_amazon_stores", JSON.stringify(nextStores));
-    if (nextActiveId) localStorage.setItem("workstation_amazon_active_store_id", nextActiveId);
-    else localStorage.removeItem("workstation_amazon_active_store_id");
+    browserStorage.setItem("workstation_amazon_stores", JSON.stringify(nextStores));
+    if (nextActiveId) browserStorage.setItem("workstation_amazon_active_store_id", nextActiveId);
+    else browserStorage.removeItem("workstation_amazon_active_store_id");
     window.dispatchEvent(new Event("amazon-store-changed"));
   };
 

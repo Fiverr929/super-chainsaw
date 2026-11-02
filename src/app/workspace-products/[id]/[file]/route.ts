@@ -1,4 +1,4 @@
-import fs from 'node:fs/promises';
+import fs from '../../../../lib/workspaceFs.ts';
 import path from 'node:path';
 import { assertProductId } from '@/lib/workspaceProductStore';
 

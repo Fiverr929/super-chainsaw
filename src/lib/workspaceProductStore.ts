@@ -1,4 +1,4 @@
-import fs from 'node:fs/promises';
+import fs from './workspaceFs.ts';
 import path from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import sharp from 'sharp';

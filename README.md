@@ -72,6 +72,10 @@ workstation-v2/
 
 ## Local Development
 
+The live Sites build uses Cloudflare Workers, D1 for saved records, and R2 for media. Sign in with ChatGPT to open an account-scoped cloud workspace. This deployment starts fresh: local records, listing folders, media, browser caches, tokens, and environment files are not imported. Only built-in mockup templates are bundled. Local development continues to save to disk.
+
+`npm run build` builds the Sites Worker. Use `npm run build:local` for a local Next.js production build, followed by `npm start`. The existing `npm run dev` command runs the local disk-backed workstation.
+
 1. **Install Dependencies:**
    ```bash
    npm install

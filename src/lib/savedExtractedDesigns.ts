@@ -1,3 +1,4 @@
+import { browserStorageKey } from './browserStorage.ts';
 const DATABASE_NAME = 'workstation-extracted-designs';
 const STORE_NAME = 'extractions';
 
@@ -11,7 +12,7 @@ export type SavedExtractedDesign = {
 
 function openDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const request = indexedDB.open(DATABASE_NAME, 1);
+    const request = indexedDB.open(browserStorageKey(DATABASE_NAME), 1);
     request.onupgradeneeded = () => request.result.createObjectStore(STORE_NAME, { keyPath: 'id' });
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error ?? new Error('Could not open saved designs.'));

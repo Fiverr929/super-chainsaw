@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs';
+import fs from '../../../../lib/workspaceFs.ts';
 import sharp from 'sharp';
 import { AMAZON_AI_DROPDOWN_OPTIONS, type AmazonAiDropdownField } from '@/lib/amazonAiConstants';
 import { resolvePublicAssetPath } from '@/lib/serverPaths';
@@ -27,8 +27,8 @@ export async function POST(request: Request) {
     const imageParts: { inlineData: { mimeType: string; data: string } }[] = [];
     for (const fileUrl of body.imagePaths || []) {
       const absolutePath = resolvePublicAssetPath(fileUrl);
-      if (!absolutePath || !fs.existsSync(absolutePath)) continue;
-      const compressed = await sharp(fs.readFileSync(absolutePath)).resize(768, 768, { fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 82 }).toBuffer();
+      if (!absolutePath || !await exists(absolutePath)) continue;
+      const compressed = await sharp(await fs.readFile(absolutePath)).resize(768, 768, { fit: 'inside', withoutEnlargement: true }).jpeg({ quality: 82 }).toBuffer();
       imageParts.push({ inlineData: { mimeType: 'image/jpeg', data: compressed.toString('base64') } });
     }
 
@@ -87,3 +87,5 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Internal Server Error' }, { status: 500 });
   }
 }
+
+async function exists(file: string) { try { await fs.access(file); return true; } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false; throw error; } }

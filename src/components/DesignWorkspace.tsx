@@ -1,4 +1,6 @@
 "use client";
+import { browserStorage } from '../lib/browserStorage.ts';
+
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
@@ -86,13 +88,13 @@ export default function DesignWorkspace({ incomingAsset, onOpenAssets, onContinu
 
   useEffect(() => {
     try {
-      const savedModel = localStorage.getItem('workstation_gpt_cutout_model');
+      const savedModel = browserStorage.getItem('workstation_gpt_cutout_model');
       if (OPENROUTER_IMAGE_MODELS.some(option => option.id === savedModel)) {
         const selected = savedModel as OpenRouterImageModel;
         setModel(selected);
-        setQuality(openRouterQualityForModel(selected, localStorage.getItem('workstation_gpt_cutout_quality') || ''));
+        setQuality(openRouterQualityForModel(selected, browserStorage.getItem('workstation_gpt_cutout_quality') || ''));
       }
-      const savedRatio = localStorage.getItem('workstation_gpt_cutout_aspect_ratio');
+      const savedRatio = browserStorage.getItem('workstation_gpt_cutout_aspect_ratio');
       if (OPENROUTER_IMAGE_ASPECT_RATIOS.some(value => value === savedRatio)) setAspectRatio(savedRatio as OpenRouterImageAspectRatio);
     } catch { /* Keep the defaults if browser storage is unavailable. */ }
   }, []);
@@ -100,9 +102,9 @@ export default function DesignWorkspace({ incomingAsset, onOpenAssets, onContinu
   useEffect(() => {
     const timer = setTimeout(() => {
       try {
-        localStorage.setItem('workstation_gpt_cutout_model', model);
-        localStorage.setItem('workstation_gpt_cutout_quality', quality);
-        localStorage.setItem('workstation_gpt_cutout_aspect_ratio', aspectRatio);
+        browserStorage.setItem('workstation_gpt_cutout_model', model);
+        browserStorage.setItem('workstation_gpt_cutout_quality', quality);
+        browserStorage.setItem('workstation_gpt_cutout_aspect_ratio', aspectRatio);
       } catch { /* Settings still work in this session. */ }
     }, 500);
     return () => clearTimeout(timer);

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import axios from 'axios';
 import crypto from 'crypto';
-import fs from 'fs';
+import fs from '../../../../lib/workspaceFs.ts';
 import path from 'path';
 import { isSupabaseStorageConfigured, uploadPublicAssetToSupabase } from '@/lib/supabaseStorage';
 import { resolveGeminiApiKey, callGeminiGenerateContent, DEFAULT_GEMINI_MODEL } from '@/lib/geminiApi';
@@ -1047,7 +1047,7 @@ export async function POST(request: Request) {
       } catch (error) {
         const details = getErrorDetails(error);
         try {
-          fs.writeFileSync(path.join(process.cwd(), 'latest_error.json'), JSON.stringify({
+          await fs.writeFile(path.join(process.cwd(), 'latest_error.json'), JSON.stringify({
             timestamp: new Date().toISOString(),
             requestBody,
             error: details.responseData ?? details.message
@@ -1065,7 +1065,7 @@ export async function POST(request: Request) {
       }
       if (listingStatus.errors.length > 0) {
         try {
-          fs.writeFileSync(path.join(process.cwd(), 'latest_error.json'), JSON.stringify({
+          await fs.writeFile(path.join(process.cwd(), 'latest_error.json'), JSON.stringify({
             timestamp: new Date().toISOString(),
             requestBody,
             errors: listingStatus.errors.map(error => ({ sku: parentSku, error }))
@@ -1151,7 +1151,7 @@ export async function POST(request: Request) {
 
       if (offerErrors.length > 0) {
         try {
-          fs.writeFileSync(path.join(process.cwd(), 'latest_error.json'), JSON.stringify({
+          await fs.writeFile(path.join(process.cwd(), 'latest_error.json'), JSON.stringify({
             timestamp: new Date().toISOString(),
             requestBody,
             errors: offerErrors
@@ -1220,7 +1220,7 @@ export async function POST(request: Request) {
 
       if (updateErrors.length > 0) {
         try {
-          fs.writeFileSync(path.join(process.cwd(), 'latest_error.json'), JSON.stringify({
+          await fs.writeFile(path.join(process.cwd(), 'latest_error.json'), JSON.stringify({
             timestamp: new Date().toISOString(),
             requestBody,
             errors: updateErrors
@@ -1294,7 +1294,7 @@ export async function POST(request: Request) {
 
       if (updateErrors.length > 0) {
         try {
-          fs.writeFileSync(path.join(process.cwd(), 'latest_error.json'), JSON.stringify({
+          await fs.writeFile(path.join(process.cwd(), 'latest_error.json'), JSON.stringify({
             timestamp: new Date().toISOString(),
             requestBody,
             errors: updateErrors
@@ -1507,7 +1507,7 @@ Separate each bullet point by a newline. Do not include bullet characters like '
       
       // Save errors log
       try {
-        fs.writeFileSync(path.join(process.cwd(), 'latest_error.json'), JSON.stringify({
+        await fs.writeFile(path.join(process.cwd(), 'latest_error.json'), JSON.stringify({
           timestamp: new Date().toISOString(),
           requestBody,
           errors: childErrors
@@ -1540,7 +1540,7 @@ Separate each bullet point by a newline. Do not include bullet characters like '
     
     // Save to file for debugging
     try {
-      fs.writeFileSync(path.join(process.cwd(), 'latest_error.json'), JSON.stringify({
+      await fs.writeFile(path.join(process.cwd(), 'latest_error.json'), JSON.stringify({
         timestamp: new Date().toISOString(),
         requestBody,
         error: details.responseData ?? details.message

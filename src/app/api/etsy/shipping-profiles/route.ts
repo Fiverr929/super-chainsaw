@@ -8,8 +8,8 @@ export async function GET() {
   try {
     const apiKey = process.env.ETSY_API_KEY;
     const sharedSecret = process.env.ETSY_SHARED_SECRET;
-    const refreshToken = getEtsyRefreshToken();
-    const shopId = getEtsyShopId() || process.env.ETSY_SHOP_ID;
+    const refreshToken = await getEtsyRefreshToken();
+    const shopId = await getEtsyShopId() || process.env.ETSY_SHOP_ID;
 
     if (!apiKey || !sharedSecret || !refreshToken || !shopId) {
       return NextResponse.json({ error: 'Missing Etsy API credentials in .env.local' }, { status: 400 });
@@ -27,7 +27,7 @@ export async function GET() {
     const accessToken = tokenRes.data.access_token;
     const newRefreshToken = tokenRes.data.refresh_token;
     if (newRefreshToken) {
-      saveEtsyRefreshToken(newRefreshToken);
+      await saveEtsyRefreshToken(newRefreshToken);
     }
 
     // 2. Fetch Shop Shipping Profiles

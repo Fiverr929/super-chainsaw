@@ -88,7 +88,7 @@ export async function GET(request: Request) {
     }
 
     if (newRefreshToken) {
-      saveEtsyRefreshToken(newRefreshToken, shopId);
+      await saveEtsyRefreshToken(newRefreshToken, shopId);
     }
 
     // Redirect the user back to the main app dashboard with a success flag

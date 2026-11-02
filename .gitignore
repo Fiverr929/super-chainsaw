@@ -18,7 +18,8 @@
 /out/
 
 # production
-/build
+/build/*
+!/build/sites-vite-plugin.ts
 
 # misc
 .DS_Store
@@ -57,3 +58,11 @@ tokens.json
 
 # local Node compile cache
 /scratch/node-compile-cache/
+
+# Sites build and checkout state
+/dist/
+/.wrangler/
+/.sites-runtime/
+/.vinext/
+/scratch/sites-live/
+.dev.vars*

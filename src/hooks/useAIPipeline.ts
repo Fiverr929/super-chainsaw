@@ -1,3 +1,4 @@
+import { browserStorage } from '../lib/browserStorage.ts';
 import { useCallback } from 'react';
 import type { RowData } from '@/components/SpreadsheetGrid';
 import toast from 'react-hot-toast';
@@ -111,11 +112,11 @@ export function useAIPipeline(
         setData(newData);
       } else {
         const key = getEtsyGridStorageKey(sheetType);
-        const saved = localStorage.getItem(key);
+        const saved = browserStorage.getItem(key);
         if (saved) {
            const parsed = JSON.parse(saved);
            parsed[row] = { ...parsed[row], ...updatedRow };
-           localStorage.setItem(key, JSON.stringify(parsed));
+           browserStorage.setItem(key, JSON.stringify(parsed));
         }
       }
 
@@ -138,11 +139,11 @@ export function useAIPipeline(
         setData(newData);
       } else {
         const key = getEtsyGridStorageKey(sheetType);
-        const saved = localStorage.getItem(key);
+        const saved = browserStorage.getItem(key);
         if (saved) {
            const parsed = JSON.parse(saved);
            parsed[row] = { ...parsed[row], status: 'Error' };
-           localStorage.setItem(key, JSON.stringify(parsed));
+           browserStorage.setItem(key, JSON.stringify(parsed));
         }
       }
       

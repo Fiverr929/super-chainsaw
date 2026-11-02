@@ -1,5 +1,6 @@
+import { cloudStorageErrorResponse } from '@/lib/workspaceFs';
 import { NextResponse } from 'next/server';
-import fs from 'node:fs/promises';
+import fs from '../../../../lib/workspaceFs.ts';
 import path from 'node:path';
 import { listListingAssets, saveListingAssets } from '@/lib/workspaceAssets';
 
@@ -18,7 +19,7 @@ export async function OPTIONS(request: Request) {
 
 export async function GET() {
   try { return NextResponse.json({ folders: await listListingAssets() }); }
-  catch (error) { await logFailure(error); return NextResponse.json({ error: 'Could not load assets.' }, { status: 500 }); }
+  catch (error) { const storageError = cloudStorageErrorResponse(error); if (storageError) return storageError; await logFailure(error); return NextResponse.json({ error: 'Could not load assets.' }, { status: 500 }); }
 }
 
 export async function POST(request: Request) {
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
       return { file: entry, position: Number(positions[index]), sourceUrl: String(sourceUrls[index]) };
     });
     return NextResponse.json({ folder: await saveListingAssets({ id, sourceUrl, title, images }) }, { headers: cors(request) });
-  } catch (error) {
+  } catch (error) { const storageError = cloudStorageErrorResponse(error); if (storageError) return storageError;
     await logFailure(error);
     return NextResponse.json({ error: error instanceof Error ? error.message : 'Could not import images.' }, { status: 400, headers: cors(request) });
   }

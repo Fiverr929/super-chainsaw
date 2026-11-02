@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { workspaceStorageContext } from '../workspaceFs.ts';
 
 const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
@@ -13,7 +14,7 @@ export function rejectNonLocalAgentRequest(request: Request) {
   } catch {
     return forbidden();
   }
-  if (!LOOPBACK_HOSTS.has(hostname)) return forbidden();
+  if (!LOOPBACK_HOSTS.has(hostname) && !workspaceStorageContext()?.userId) return forbidden();
 
   const origin = request.headers.get('origin');
   if (origin) {

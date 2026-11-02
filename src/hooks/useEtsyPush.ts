@@ -1,3 +1,4 @@
+import { browserStorage } from '../lib/browserStorage.ts';
 import { useCallback } from 'react';
 import type { RowData } from '@/components/SpreadsheetGrid';
 import toast from 'react-hot-toast';
@@ -32,7 +33,7 @@ export function useEtsyPush(
 
     try {
       const key = getEtsyGridStorageKey(targetSheet);
-      const saved = localStorage.getItem(key);
+      const saved = browserStorage.getItem(key);
       if (!saved) return;
       const parsed = JSON.parse(saved);
       if (!Array.isArray(parsed) || !parsed[row]) return;
@@ -42,7 +43,7 @@ export function useEtsyPush(
         ...(listingId !== undefined ? { listing_id: listingId } : {}),
         ...(printifyProductId !== undefined ? { printify_product_id: printifyProductId } : {})
       };
-      localStorage.setItem(key, JSON.stringify(parsed));
+      browserStorage.setItem(key, JSON.stringify(parsed));
     } catch (error) {
       console.error(`Failed to update background Etsy ${targetSheet} row ${row + 1}:`, error);
     }
@@ -137,7 +138,7 @@ export function useEtsyPush(
               body: JSON.stringify({
                 preset,
                 rowData: rowDataToPush,
-                shopId: Number(localStorage.getItem('workstation_printify_shop_id')) || undefined
+                shopId: Number(browserStorage.getItem('workstation_printify_shop_id')) || undefined
               })
            })
            .then(res => res.json())

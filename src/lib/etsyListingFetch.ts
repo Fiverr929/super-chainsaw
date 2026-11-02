@@ -1,4 +1,4 @@
-import fs from 'node:fs/promises';
+import fs from './workspaceFs.ts';
 import path from 'node:path';
 import { isEtsyListingImageUrl } from './etsyListingImage.ts';
 import { listListingAssets, saveListingAssets, type ListingDetails } from './workspaceAssets.ts';

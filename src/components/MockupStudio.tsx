@@ -1,4 +1,6 @@
 "use client";
+import { browserStorage } from '../lib/browserStorage.ts';
+
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
@@ -784,11 +786,11 @@ export default function MockupStudio({ product, onSave, onBack, templateOnly = f
 
       if (storedPresets === undefined) {
         try {
-          const legacyValue = localStorage.getItem(LEGACY_STORAGE_KEY);
+          const legacyValue = browserStorage.getItem(LEGACY_STORAGE_KEY);
           if (legacyValue) {
             storedPresets = JSON.parse(legacyValue);
             await saveMockupPresets(storedPresets);
-            localStorage.removeItem(LEGACY_STORAGE_KEY);
+            browserStorage.removeItem(LEGACY_STORAGE_KEY);
           }
         } catch (error) {
           console.warn("Failed to migrate legacy mockup presets:", error);
@@ -1240,7 +1242,7 @@ export default function MockupStudio({ product, onSave, onBack, templateOnly = f
             <button disabled={!activePreset.frames.some(frame => frame.imageDataUrl && frame.applyDesign)} onClick={async () => {
               try {
                 await saveMockupPresets(presets);
-                localStorage.setItem('workspace_default_template', activePreset.id);
+                browserStorage.setItem('workspace_default_template', activePreset.id);
                 onContinue?.();
               } catch { toast.error('Could not save template. Please retry.'); }
             }} className="h-8 px-3 bg-blue-600 text-white text-xs font-medium hover:bg-blue-500 disabled:opacity-50">

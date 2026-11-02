@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import fs from "fs";
+import fs from '../../../../lib/workspaceFs.ts';
 import path from "path";
 import { 
   uploadImageToPrintify, 
@@ -59,12 +59,12 @@ export async function POST(req: NextRequest) {
     const relativeDesignPath = designPaths[0]; 
     const designFilePath = resolvePublicAssetPath(relativeDesignPath);
 
-    if (!designFilePath || !fs.existsSync(designFilePath)) {
+    if (!designFilePath || !await exists(designFilePath)) {
       return NextResponse.json({ success: false, error: `Design file not found on server: ${relativeDesignPath}` }, { status: 400 });
     }
 
     // 2. Upload image to Printify
-    const imageBuffer = fs.readFileSync(designFilePath);
+    const imageBuffer = await fs.readFile(designFilePath);
     const base64Image = imageBuffer.toString('base64');
     const fileName = path.basename(designFilePath);
     
@@ -74,8 +74,8 @@ export async function POST(req: NextRequest) {
     let backImageId: string | undefined;
     if (typeof rowData.workspace_back_artwork === 'string' && rowData.workspace_back_artwork) {
       const backPath = resolvePublicAssetPath(rowData.workspace_back_artwork);
-      if (!backPath || !fs.existsSync(backPath)) return NextResponse.json({ success: false, error: 'Back print artwork is missing. Reopen the listing draft and save it again.' }, { status: 400 });
-      backImageId = await uploadImageToPrintify(fs.readFileSync(backPath).toString('base64'), path.basename(backPath));
+      if (!backPath || !await exists(backPath)) return NextResponse.json({ success: false, error: 'Back print artwork is missing. Reopen the listing draft and save it again.' }, { status: 400 });
+      backImageId = await uploadImageToPrintify((await fs.readFile(backPath)).toString('base64'), path.basename(backPath));
     }
 
     // 3. Match Variants
@@ -154,3 +154,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: false, error: error instanceof Error ? error.message : String(error) }, { status: 500 });
   }
 }
+
+async function exists(file: string) { try { await fs.access(file); return true; } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false; throw error; } }

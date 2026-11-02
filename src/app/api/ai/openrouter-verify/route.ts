@@ -1,9 +1,10 @@
+import { workspaceStorageContext } from '@/lib/workspaceFs';
 import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
-  const key = request.headers.get('x-openrouter-api-key')?.trim() || process.env.OPENROUTER_API_KEY?.trim();
+  const key = request.headers.get('x-openrouter-api-key')?.trim() || (workspaceStorageContext() ? undefined : process.env.OPENROUTER_API_KEY?.trim());
   if (!key) return NextResponse.json({ error: 'Enter an OpenRouter API key first.' }, { status: 400 });
   try {
     const response = await fetch('https://openrouter.ai/api/v1/key', {

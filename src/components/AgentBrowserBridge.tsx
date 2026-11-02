@@ -1,4 +1,6 @@
 'use client';
+import { browserStorage } from '../lib/browserStorage.ts';
+
 
 import { useEffect } from 'react';
 import { executeBrowserAction } from '@/lib/agent/browserExecutor';
@@ -10,7 +12,7 @@ export const AGENT_UPDATED_EVENT = 'workstation-agent-updated';
 
 async function body<T>(response:Response):Promise<T>{const data=await response.json().catch(()=>({}));if(!response.ok)throw new Error(data.error||`Request failed (${response.status}).`);return data as T;}
 function resumeId(actionId:string){return actionId.replace(/^[0-9a-f]/i,first=>((parseInt(first,16)+1)%16).toString(16));}
-function workflowSettings(){try{const value=JSON.parse(localStorage.getItem('workstation_agent_workflow_settings')||'{}');return value&&typeof value==='object'?value as Record<string,unknown>:{};}catch{return{};}}
+function workflowSettings(){try{const value=JSON.parse(browserStorage.getItem('workstation_agent_workflow_settings')||'{}');return value&&typeof value==='object'?value as Record<string,unknown>:{};}catch{return{};}}
 
 /** One browser executor is mounted above workspace views, so navigation does not lose an in-flight action. */
 export default function AgentBrowserBridge({ enabled }: { enabled:boolean }) {
@@ -25,7 +27,7 @@ export default function AgentBrowserBridge({ enabled }: { enabled:boolean }) {
   const wake=()=>{if(stopped)return;if(active){pendingWake=true;return;}schedule(0);};
   const step=async()=>{
    if(stopped||active)return;
-   const sessionId=localStorage.getItem('workstation_agent_session_id');
+   const sessionId=browserStorage.getItem('workstation_agent_session_id');
    if(!sessionId)return;
    active=true;
    let keepPolling=false;

@@ -1,4 +1,6 @@
 'use client';
+import { browserStorage } from '../lib/browserStorage.ts';
+
 
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
@@ -25,7 +27,7 @@ export default function DesignResearch({ onChoose }: { onChoose: (opportunity: R
 
   useEffect(() => {
     try {
-      const saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+      const saved = JSON.parse(browserStorage.getItem(STORAGE_KEY) || 'null');
       if (saved?.research?.observations?.[0]?.assetId) {
         setResearch(saved.research);
         setListingUrl(saved.research.observations[0].url);
@@ -41,7 +43,7 @@ export default function DesignResearch({ onChoose }: { onChoose: (opportunity: R
   useEffect(() => {
     if (!research) return;
     const timer = setTimeout(() => {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ analysisVersion: ANALYSIS_VERSION, research, images, selectedImageUrl, result })); }
+      try { browserStorage.setItem(STORAGE_KEY, JSON.stringify({ analysisVersion: ANALYSIS_VERSION, research, images, selectedImageUrl, result })); }
       catch { /* This session remains usable without browser storage. */ }
     }, 500);
     return () => clearTimeout(timer);

@@ -1,4 +1,5 @@
-import fs from 'node:fs/promises';
+import { cloudStorageErrorResponse } from '@/lib/workspaceFs';
+import fs from '../../../../../../lib/workspaceFs.ts';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { isListingSheet } from '@/lib/workspaceListingStore';
@@ -19,7 +20,7 @@ export async function POST(request: Request, context: { params: Promise<{ sheet:
     const name = `${sheet}-${new Date().toISOString().replace(/[:.]/g, '-')}-${randomUUID()}.json`;
     await fs.writeFile(path.join(dir, name), raw, { flag: 'wx' });
     return Response.json({ backedUp: true, name });
-  } catch (error) {
+  } catch (error) { const storageError = cloudStorageErrorResponse(error); if (storageError) return storageError;
     console.error('Browser worksheet backup failed:', error);
     return Response.json({ error: 'Could not back up browser worksheet.' }, { status: 500 });
   }

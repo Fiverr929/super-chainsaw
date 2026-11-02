@@ -1,3 +1,4 @@
+import { workspaceStorageContext } from './workspaceFs.ts';
 export const AI_STUDIO_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta';
 export const DEFAULT_GEMINI_MODEL = 'gemini-3.1-flash-lite';
 
@@ -66,7 +67,7 @@ export function resolveGeminiApiKey(request?: Request, fallbackKey?: string): st
     return fallbackKey.trim();
   }
 
-  const envKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+  const envKey = workspaceStorageContext() ? null : process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
   if (envKey && envKey.trim() !== '') {
     return envKey.trim();
   }

@@ -1,3 +1,4 @@
+import { workspaceStorageContext } from '@/lib/workspaceFs';
 import { NextResponse } from 'next/server';
 import sharp from 'sharp';
 import { OPENROUTER_IMAGE_ASPECT_RATIOS, OPENROUTER_IMAGE_MODELS, type OpenRouterImageAspectRatio, type OpenRouterImageModel } from '@/lib/openRouterImage';
@@ -19,7 +20,7 @@ type OpenRouterResponse = {
 
 export async function POST(request: Request) {
   try {
-    const key = request.headers.get('x-openrouter-api-key')?.trim() || process.env.OPENROUTER_API_KEY?.trim();
+    const key = request.headers.get('x-openrouter-api-key')?.trim() || (workspaceStorageContext() ? undefined : process.env.OPENROUTER_API_KEY?.trim());
     if (!key) return NextResponse.json({ error: 'Add an OpenRouter API key in Settings or configure OPENROUTER_API_KEY.' }, { status: 400 });
 
     const form = await request.formData();

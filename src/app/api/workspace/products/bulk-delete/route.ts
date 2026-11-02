@@ -1,3 +1,4 @@
+import { cloudStorageErrorResponse } from '@/lib/workspaceFs';
 import { deleteProduct, ProductStoreError } from '@/lib/workspaceProductStore';
 
 export const dynamic = 'force-dynamic';
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
   const failed: { id: string; error: string }[] = [];
   for (const draft of body.drafts) {
     try { await deleteProduct(draft.id, draft.revision); deleted.push(draft.id); }
-    catch (error) { failed.push({ id: draft.id, error: error instanceof ProductStoreError ? error.message : 'Could not delete draft.' }); }
+    catch (error) { const storageError = cloudStorageErrorResponse(error); if (storageError) return storageError; failed.push({ id: draft.id, error: error instanceof ProductStoreError ? error.message : 'Could not delete draft.' }); }
   }
   return Response.json({ deleted, failed }, { headers: { 'Cache-Control': 'no-store' } });
 }

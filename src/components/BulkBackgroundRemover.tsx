@@ -1,4 +1,6 @@
 'use client';
+import { browserStorage } from '../lib/browserStorage.ts';
+
 
 import { useEffect, useRef, useState } from 'react';
 import Image from 'next/image';
@@ -186,7 +188,7 @@ export default function BulkBackgroundRemover({ onContinue, onOpenPresets, prese
 
   useEffect(() => {
     try {
-      const cleanup = JSON.parse(localStorage.getItem('workstation_mask_cleanup') || 'null');
+      const cleanup = JSON.parse(browserStorage.getItem('workstation_mask_cleanup') || 'null');
       if (cleanup && typeof cleanup.enabled === 'boolean') setMaskCleanupEnabled(cleanup.enabled);
       if (cleanup && [cleanup.componentPercent, cleanup.holePercent].every(value => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 100)) {
         const isPreviousDefault = cleanup.componentPercent === 20 && cleanup.holePercent === 5;
@@ -198,7 +200,7 @@ export default function BulkBackgroundRemover({ onContinue, onOpenPresets, prese
   useEffect(() => {
     if (!settingsLoaded) return;
     const timer = setTimeout(() => {
-      try { localStorage.setItem('workstation_mask_cleanup', JSON.stringify({ enabled: maskCleanupEnabled, ...maskCleanupOptions })); }
+      try { browserStorage.setItem('workstation_mask_cleanup', JSON.stringify({ enabled: maskCleanupEnabled, ...maskCleanupOptions })); }
       catch { /* Cleanup still works when storage is unavailable. */ }
     }, 500);
     return () => clearTimeout(timer);
@@ -206,11 +208,11 @@ export default function BulkBackgroundRemover({ onContinue, onOpenPresets, prese
 
   useEffect(() => {
     try {
-      const savedModel = localStorage.getItem('workstation_extraction_model');
+      const savedModel = browserStorage.getItem('workstation_extraction_model');
       const option = IMAGE_MODEL_OPTIONS.find(item => item.id === savedModel);
       if (option) {
         setImageModel(option.id);
-        const savedQuality = localStorage.getItem('workstation_extraction_quality');
+        const savedQuality = browserStorage.getItem('workstation_extraction_quality');
         setQuality(imageQualityForModel(option.id, savedQuality));
       }
     } catch {
@@ -221,20 +223,20 @@ export default function BulkBackgroundRemover({ onContinue, onOpenPresets, prese
   useEffect(() => {
     if (!settingsLoaded) return;
     try {
-      localStorage.setItem('workstation_extraction_model', imageModel);
-      localStorage.setItem('workstation_extraction_quality', quality);
+      browserStorage.setItem('workstation_extraction_model', imageModel);
+      browserStorage.setItem('workstation_extraction_quality', quality);
     } catch { /* Model selection still works when browser storage is unavailable. */ }
   }, [imageModel, quality, settingsLoaded]);
 
   useEffect(() => {
     try {
-      const model = localStorage.getItem('workstation_gpt_cutout_model');
+      const model = browserStorage.getItem('workstation_gpt_cutout_model');
       if (OPENROUTER_IMAGE_MODELS.some(option => option.id === model)) {
         const selected = model as OpenRouterImageModel;
         setGptModel(selected);
-        setGptQuality(openRouterQualityForModel(selected, localStorage.getItem('workstation_gpt_cutout_quality') || ''));
+        setGptQuality(openRouterQualityForModel(selected, browserStorage.getItem('workstation_gpt_cutout_quality') || ''));
       }
-      const ratio = localStorage.getItem('workstation_gpt_cutout_aspect_ratio');
+      const ratio = browserStorage.getItem('workstation_gpt_cutout_aspect_ratio');
       if (OPENROUTER_IMAGE_ASPECT_RATIOS.some(value => value === ratio)) setGptAspectRatio(ratio as OpenRouterImageAspectRatio);
     } catch { /* Use defaults when browser storage is unavailable. */ }
   }, []);
@@ -243,9 +245,9 @@ export default function BulkBackgroundRemover({ onContinue, onOpenPresets, prese
     if (!settingsLoaded) return;
     const timer = setTimeout(() => {
       try {
-        localStorage.setItem('workstation_gpt_cutout_model', gptModel);
-        localStorage.setItem('workstation_gpt_cutout_quality', gptQuality);
-        localStorage.setItem('workstation_gpt_cutout_aspect_ratio', gptAspectRatio);
+        browserStorage.setItem('workstation_gpt_cutout_model', gptModel);
+        browserStorage.setItem('workstation_gpt_cutout_quality', gptQuality);
+        browserStorage.setItem('workstation_gpt_cutout_aspect_ratio', gptAspectRatio);
       } catch { /* Settings still work for this session. */ }
     }, 500);
     return () => clearTimeout(timer);

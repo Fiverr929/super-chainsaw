@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from './workspaceFs.ts';
 import sharp from 'sharp';
 import { categorySupportsOccasion, categorySupportsCelebration, categorySupportsSubject, categorySupportsGraphic } from './etsyConstants.ts';
 import { buildGeneratedMetadataResponse } from './listingWorkflow.ts';
@@ -24,9 +24,9 @@ export async function generateListingMetadata(request: Request) {
     for (const fileUrl of validImagePaths) {
        if (typeof fileUrl !== 'string') continue;
        const absolutePath = resolvePublicAssetPath(fileUrl);
-       if (absolutePath && fs.existsSync(absolutePath)) {
+       if (absolutePath && await exists(absolutePath)) {
           try {
-            const fileBuffer = fs.readFileSync(absolutePath);
+            const fileBuffer = await fs.readFile(absolutePath);
 
             // Compress the image to speed up AI payload. A single damaged image
             // should not prevent metadata generation for the rest of the folder.
@@ -192,3 +192,5 @@ Format example: { "title": "...", "primary_color": "...", "secondary_color": "..
     );
   }
 }
+
+async function exists(file: string) { try { await fs.access(file); return true; } catch (error) { if ((error as NodeJS.ErrnoException).code === 'ENOENT') return false; throw error; } }

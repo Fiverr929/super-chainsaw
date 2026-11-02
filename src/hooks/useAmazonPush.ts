@@ -1,3 +1,4 @@
+import { browserStorage } from '../lib/browserStorage.ts';
 import { useCallback } from 'react';
 import type { RowData } from '@/components/SpreadsheetGrid';
 import toast from 'react-hot-toast';
@@ -10,11 +11,11 @@ function persistAmazonRow(row: number, rowData: RowData) {
   if (typeof window === 'undefined') return;
 
   try {
-    const saved = localStorage.getItem(AMAZON_GRID_STORAGE_KEY);
+    const saved = browserStorage.getItem(AMAZON_GRID_STORAGE_KEY);
     const parsed = saved ? JSON.parse(saved) : [];
     if (Array.isArray(parsed)) {
       parsed[row] = { ...(parsed[row] || {}), ...rowData };
-      localStorage.setItem(AMAZON_GRID_STORAGE_KEY, JSON.stringify(parsed));
+      browserStorage.setItem(AMAZON_GRID_STORAGE_KEY, JSON.stringify(parsed));
     }
   } catch (error) {
     console.warn('Failed to persist Amazon row status:', error);
@@ -34,7 +35,7 @@ export function useAmazonPush(
       setData(newData);
 
       // Get public tunnel URL if configured
-      const tunnelUrl = typeof window !== "undefined" ? (localStorage.getItem("workstation_v2_amazon_tunnel_url") || "").trim() : "";
+      const tunnelUrl = typeof window !== "undefined" ? (browserStorage.getItem("workstation_v2_amazon_tunnel_url") || "").trim() : "";
 
       const rowDataToPush = { 
         ...dataRef.current[row],

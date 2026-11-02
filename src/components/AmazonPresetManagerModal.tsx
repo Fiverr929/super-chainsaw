@@ -1,4 +1,6 @@
 'use client';
+import { browserStorage } from '../lib/browserStorage.ts';
+
 
 import React, { useState, useEffect } from'react';
 import { X, Plus, Trash2, Save, ChevronDown, Copy } from'lucide-react';
@@ -362,7 +364,7 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
  }, []);
 
  useEffect(() => {
- const saved = localStorage.getItem('workstation_v2_presets_amazon');
+ const saved = browserStorage.getItem('workstation_v2_presets_amazon');
  if (saved) {
  try {
  const parsed = JSON.parse(saved);
@@ -381,7 +383,7 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
  setPresets([DEFAULT_AMAZON_PRESET]);
  setActivePresetId(DEFAULT_AMAZON_PRESET.id);
  setEditForm({ ...DEFAULT_AMAZON_PRESET });
- localStorage.setItem('workstation_v2_presets_amazon', JSON.stringify([DEFAULT_AMAZON_PRESET]));
+ browserStorage.setItem('workstation_v2_presets_amazon', JSON.stringify([DEFAULT_AMAZON_PRESET]));
  }
  }, []);
 
@@ -420,7 +422,7 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
 
  setPresets(newPresets);
  setActivePresetId(editForm.id);
- localStorage.setItem('workstation_v2_presets_amazon', JSON.stringify(newPresets));
+ browserStorage.setItem('workstation_v2_presets_amazon', JSON.stringify(newPresets));
  toast.success("Preset saved successfully!");
  };
 
@@ -435,7 +437,7 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
  setEditForm(duplicate);
  setIsCreatingNew(false);
  setActiveTab('core');
- localStorage.setItem('workstation_v2_presets_amazon', JSON.stringify(newPresets));
+ browserStorage.setItem('workstation_v2_presets_amazon', JSON.stringify(newPresets));
  toast.success('Preset duplicated.');
  };
 
@@ -455,7 +457,7 @@ export default function AmazonPresetManagerModal({ onClose, selectedRowsCount, o
  setEditForm(JSON.parse(JSON.stringify(newPresets[0])));
  }
  
- localStorage.setItem('workstation_v2_presets_amazon', JSON.stringify(newPresets));
+ browserStorage.setItem('workstation_v2_presets_amazon', JSON.stringify(newPresets));
  toast.success("Preset deleted.");
  };
 

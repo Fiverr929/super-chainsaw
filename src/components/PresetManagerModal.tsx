@@ -1,4 +1,6 @@
 "use client";
+import { browserStorage } from '../lib/browserStorage.ts';
+
 
 import React, { useState } from"react";
 import { X, Plus, Trash2, Save, ChevronDown, Copy } from"lucide-react";
@@ -168,7 +170,7 @@ export default function PresetManagerModal({ onClose, sheetType }: PresetManager
  const [presets, setPresets] = useState<Preset[]>(() => {
  if (typeof window !=="undefined") {
  const key = sheetType ==="digital"?"workstation_v2_presets":"workstation_v2_presets_physical";
- const saved = localStorage.getItem(key);
+ const saved = browserStorage.getItem(key);
  if (saved) {
  try {
  return JSON.parse(saved);
@@ -311,7 +313,7 @@ export default function PresetManagerModal({ onClose, sheetType }: PresetManager
  const savePresets = (newPresets: Preset[]) => {
  setPresets(newPresets);
  const key = sheetType ==="digital"?"workstation_v2_presets":"workstation_v2_presets_physical";
- localStorage.setItem(key, JSON.stringify(newPresets));
+ browserStorage.setItem(key, JSON.stringify(newPresets));
  };
 
  React.useEffect(() => {
@@ -481,7 +483,7 @@ const handleDelete = (id: string) => {
 
  const hasUnsavedChanges = () => {
  if (!editingId || !editForm) return false;
- const savedPresets = JSON.parse(localStorage.getItem(sheetType ==="digital"?"workstation_v2_presets":"workstation_v2_presets_physical") ||"[]");
+ const savedPresets = JSON.parse(browserStorage.getItem(sheetType ==="digital"?"workstation_v2_presets":"workstation_v2_presets_physical") ||"[]");
  const original = savedPresets.find((p: Preset) => p.id === editingId);
  if (!original) return true; // New or duplicated preset
  return JSON.stringify(original) !== JSON.stringify(editForm);
@@ -491,7 +493,7 @@ const handleDelete = (id: string) => {
  if (hasUnsavedChanges()) {
  if (!confirm("You have unsaved changes. Discard them?")) return false;
  // Prune ghost preset if it was never saved
- const savedPresets = JSON.parse(localStorage.getItem(sheetType ==="digital"?"workstation_v2_presets":"workstation_v2_presets_physical") ||"[]");
+ const savedPresets = JSON.parse(browserStorage.getItem(sheetType ==="digital"?"workstation_v2_presets":"workstation_v2_presets_physical") ||"[]");
  if (!savedPresets.some((p: Preset) => p.id === editingId)) {
  setPresets(prev => prev.filter(p => p.id !== editingId));
  }
