@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ChevronUp,
+  Bot,
   FileText,
   Image as ImageIcon,
   Images,
@@ -23,7 +24,7 @@ type Store = {
   sellerId?: string;
 };
 
-type View = "assets" | "spreadsheet" | "image" | "pdf" | "products" | "creator";
+type View = "assets" | "spreadsheet" | "image" | "design-tools" | "pdf" | "products" | "creator" | "agent";
 type Workstation = "etsy" | "amazon" | "workspace";
 
 interface SidebarProps {
@@ -44,7 +45,7 @@ export default function Sidebar({
   setWorkstation,
 }: SidebarProps) {
   const [isOpen, setIsOpen] = useState(() => {
-    if (typeof window !== "undefined") return localStorage.getItem("workstation_sidebar_open") === "true";
+    if (typeof window !== "undefined") return window.innerWidth >= 640 && localStorage.getItem("workstation_sidebar_open") === "true";
     return false;
   });
   const [stores, setStores] = useState<Store[]>([]);
@@ -147,23 +148,29 @@ export default function Sidebar({
   const openWorkspaceView = (view: View) => {
     if (workstation !== "workspace") setWorkstation?.("workspace");
     setActiveView?.(view);
+    if (window.innerWidth < 640) setIsOpen(false);
   };
 
   const openChannel = (channel: "etsy" | "amazon") => {
     setWorkstation?.(channel);
     setActiveView?.("spreadsheet");
+    if (window.innerWidth < 640) setIsOpen(false);
   };
 
-  const viewItems = [
-    { view: "assets" as const, label: "Assets", hint: "Source media by listing", icon: Images, step: "01" },
-    { view: "image" as const, label: "Design", hint: "Create or open artwork", icon: ImageIcon, step: "02" },
-    { view: "creator" as const, label: "Mockups", hint: "Place artwork on a product", icon: LayoutGrid, step: "03" },
-    { view: "products" as const, label: "Products", hint: "Review saved product drafts", icon: Package, step: "04" },
+  const navigationGroups = [
+    { label: 'Create', items: [
+      { view: 'image' as const, label: 'Design', icon: ImageIcon },
+      { view: 'creator' as const, label: 'Mockups', icon: LayoutGrid },
+    ] },
+    { label: 'Library', items: [
+      { view: 'assets' as const, label: 'Assets', icon: Images },
+      { view: 'products' as const, label: 'Products', icon: Package },
+    ] },
   ];
 
   const renderStoreCard = () => {
     if (workstation === "workspace") {
-      return <div className="border border-zinc-200 bg-zinc-50 px-3 py-3"><p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">Next step</p><p className="mt-1 text-xs leading-5 text-zinc-600">Choose Etsy or Amazon when a product is ready for a listing.</p></div>;
+      return null;
     }
 
     const isEtsy = workstation === "etsy";
@@ -200,7 +207,8 @@ export default function Sidebar({
   };
 
   return <>
-    <aside aria-label="Main navigation" className={`${isOpen ? "w-64" : "w-[68px]"} relative z-10 flex h-full shrink-0 flex-col border-r border-zinc-200 bg-white transition-[width] duration-200`}>
+    {isOpen && <button type="button" aria-label="Close navigation" onClick={() => setIsOpen(false)} className="fixed inset-0 z-20 bg-black/20 sm:hidden" />}
+    <aside aria-label="Main navigation" className={`${isOpen ? "fixed inset-y-0 left-0 z-30 w-64 sm:relative sm:z-10" : "relative z-10 w-[68px]"} flex h-full shrink-0 flex-col border-r border-zinc-200 bg-white transition-[width] duration-200`}>
       <header className={`flex h-14 shrink-0 items-center border-b border-zinc-200 ${isOpen ? "justify-between px-4" : "justify-center px-2"}`}>
         <div className={`min-w-0 ${!isOpen ? "hidden" : ""}`}>
           <span className="block text-[15px] font-semibold tracking-tight text-zinc-900">Workstation</span>
@@ -211,18 +219,16 @@ export default function Sidebar({
       </header>
 
       <nav className={`${isOpen ? "flex-1 space-y-6 overflow-y-auto px-3 py-5" : "flex-1 space-y-2 overflow-y-auto px-2 py-4"}`}>
-        <section aria-label="Product studio">
-          {isOpen && <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">Product studio</p>}
-          <div className="space-y-1">
-            {viewItems.map(({ view, label, hint, icon: Icon, step }) => {
-              const active = isWorkspace && activeView === view;
-              return <button key={view} type="button" onClick={() => openWorkspaceView(view)} aria-current={active ? "page" : undefined} aria-label={label} title={!isOpen ? label : undefined} className={`${navButton} ${isOpen ? "" : "justify-center px-0"} ${active ? selectedNav : idleNav}`}>
-                <Icon size={17} className="shrink-0" />
-                {isOpen && <><span className="min-w-0 flex-1"><span className="block">{label}</span><span className={`mt-0.5 block text-[10px] font-normal ${active ? "text-blue-600/70" : "text-zinc-400"}`}>{hint}</span></span><span className={`text-[10px] tabular-nums ${active ? "text-blue-500" : "text-zinc-300"}`}>{step}</span></>}
-              </button>;
-            })}
-          </div>
-        </section>
+        {navigationGroups.map(group => <section key={group.label} aria-label={group.label}>
+          {isOpen && <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">{group.label}</p>}
+          <div className="space-y-1">{group.items.map(({ view, label, icon: Icon }) => {
+            const active = isWorkspace && activeView === view;
+            return <button key={view} type="button" onClick={() => openWorkspaceView(view)} aria-current={active ? 'page' : undefined} aria-label={label} title={!isOpen ? label : undefined} className={`${navButton} ${isOpen ? '' : 'justify-center px-0'} ${active ? selectedNav : idleNav}`}>
+              <Icon size={17} className="shrink-0" />{isOpen && <span>{label}</span>}
+            </button>;
+          })}</div>
+        </section>)}
+
 
         <section aria-label="Listing channels">
           {isOpen && <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">Listing channels</p>}
@@ -236,16 +242,19 @@ export default function Sidebar({
           </div>
         </section>
 
-        <section aria-label="Tools">
-          {isOpen && <p className="mb-2 px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400">Tools</p>}
+        <details aria-label="Tools" open={!isOpen || (isWorkspace && (activeView === "agent" || activeView === "pdf" || activeView === "design-tools"))}>
+          <summary className={isOpen ? "mb-2 cursor-pointer px-3 text-[10px] font-semibold uppercase tracking-[0.14em] text-zinc-400" : "hidden"}>Tools</summary>
+          <button type="button" onClick={() => openWorkspaceView("design-tools")} aria-current={isWorkspace && activeView === "design-tools" ? "page" : undefined} aria-label="Design Lab" title={!isOpen ? "Design Lab" : undefined} className={`${navButton} ${isOpen ? "" : "justify-center px-0"} ${isWorkspace && activeView === "design-tools" ? selectedNav : idleNav}`}><ImageIcon size={17} className="shrink-0" />{isOpen && <span>Design Lab</span>}</button>
+          <button type="button" onClick={() => openWorkspaceView("agent")} aria-current={isWorkspace && activeView === "agent" ? "page" : undefined} aria-label="Agent" title={!isOpen ? "Agent" : undefined} className={`${navButton} ${isOpen ? "" : "justify-center px-0"} ${isWorkspace && activeView === "agent" ? selectedNav : idleNav}`}><Bot size={17} className="shrink-0" />{isOpen && <span>Agent</span>}</button>
+
           <button type="button" onClick={() => openWorkspaceView("pdf")} aria-current={isWorkspace && activeView === "pdf" ? "page" : undefined} aria-label="PDF Manager" title={!isOpen ? "PDF Manager" : undefined} className={`${navButton} ${isOpen ? "" : "justify-center px-0"} ${isWorkspace && activeView === "pdf" ? selectedNav : idleNav}`}>
             <FileText size={17} className="shrink-0" />{isOpen && <span className="flex-1">PDF Manager</span>}
           </button>
-        </section>
+        </details>
       </nav>
 
       <footer className="shrink-0 border-t border-zinc-200 p-3">
-        {isOpen && <div className="mb-3">{renderStoreCard()}</div>}
+        {isOpen && !isWorkspace && <div className="mb-3">{renderStoreCard()}</div>}
         <button type="button" onClick={() => setShowSettingsModal(true)} aria-label="Settings" title={!isOpen ? "Settings" : undefined} className={`${navButton} ${isOpen ? "px-2" : "justify-center px-0"} text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900`}>
           <Settings size={16} className="shrink-0" />{isOpen && <span>Settings</span>}
         </button>

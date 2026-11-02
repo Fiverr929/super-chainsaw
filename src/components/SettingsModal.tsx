@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { X, ShoppingBag, ShoppingCart, Printer, ChevronDown, ChevronUp, Check, Loader2, Sparkles, Eye, EyeOff, ExternalLink, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 import { getStoredGeminiApiKey, setStoredGeminiApiKey, removeStoredGeminiApiKey } from "@/lib/clientApiKey";
+import { getStoredOpenRouterApiKey, setStoredOpenRouterApiKey, removeStoredOpenRouterApiKey } from "@/lib/clientOpenRouterKey";
 
 type Store = {
   id: string;
@@ -51,12 +52,19 @@ export default function SettingsModal({
   const [hasSavedKey, setHasSavedKey] = useState(false);
   const [showGeminiKey, setShowGeminiKey] = useState(false);
   const [isTestingGemini, setIsTestingGemini] = useState(false);
+  const [openRouterKey, setOpenRouterKey] = useState('');
+  const [hasOpenRouterKey, setHasOpenRouterKey] = useState(false);
+  const [showOpenRouterKey, setShowOpenRouterKey] = useState(false);
+  const [isTestingOpenRouter, setIsTestingOpenRouter] = useState(false);
 
   useEffect(() => {
     if (isOpen) {
       const stored = getStoredGeminiApiKey();
       setGeminiKey(stored);
       setHasSavedKey(Boolean(stored));
+      const storedOpenRouterKey = getStoredOpenRouterApiKey();
+      setOpenRouterKey(storedOpenRouterKey);
+      setHasOpenRouterKey(Boolean(storedOpenRouterKey));
       setSelectedPrintifyShopId(localStorage.getItem('workstation_printify_shop_id') || '');
       fetch('/api/printify/shops')
         .then(async response => {
@@ -185,6 +193,37 @@ export default function SettingsModal({
     toast.success("Google AI Studio key removed");
   };
 
+  const handleSaveOpenRouterKey = () => {
+    const key = openRouterKey.trim();
+    if (!key) { toast.error('Enter an OpenRouter API key.'); return; }
+    setStoredOpenRouterApiKey(key);
+    setHasOpenRouterKey(true);
+    toast.success('OpenRouter key saved locally');
+  };
+
+  const handleClearOpenRouterKey = () => {
+    removeStoredOpenRouterApiKey();
+    setOpenRouterKey('');
+    setHasOpenRouterKey(false);
+    toast.success('OpenRouter key removed');
+  };
+
+  const handleTestOpenRouterKey = async () => {
+    const key = openRouterKey.trim();
+    if (!key) { toast.error('Enter an OpenRouter API key first.'); return; }
+    setIsTestingOpenRouter(true);
+    try {
+      const response = await fetch('/api/ai/openrouter-verify', { method: 'POST', headers: { 'x-openrouter-api-key': key } });
+      const result = await response.json();
+      if (!response.ok || !result.valid) throw new Error(result.error || 'OpenRouter key verification failed.');
+      setStoredOpenRouterApiKey(key);
+      setHasOpenRouterKey(true);
+      toast.success('OpenRouter key verified');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not verify the OpenRouter key.');
+    } finally { setIsTestingOpenRouter(false); }
+  };
+
   const activeEtsyStore = etsyStores.find((s) => s.id === activeEtsyStoreId);
   const activeAmazonStore = amazonStores.find((s) => s.id === activeAmazonStoreId);
 
@@ -310,7 +349,26 @@ export default function SettingsModal({
                 </div>
               </div>
             </div>
-            
+            <div className="border border-zinc-200 bg-zinc-50/40 p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-zinc-900">OpenRouter</p>
+                  <p className="mt-0.5 text-xs text-zinc-500">{hasOpenRouterKey ? 'Key saved' : 'Key not configured'} · GPT Image background removal</p>
+                </div>
+                <a href="https://openrouter.ai/settings/keys" target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-xs text-blue-600">Get key <ExternalLink size={11} /></a>
+              </div>
+              <p className="mt-3 text-xs text-zinc-500">Stored in this browser and sent to the app server only for OpenRouter image requests.</p>
+              <div className="relative mt-3">
+                <input aria-label="OpenRouter API key" type={showOpenRouterKey ? 'text' : 'password'} value={openRouterKey} onChange={event => setOpenRouterKey(event.target.value)} placeholder="sk-or-v1-..." className="w-full border border-zinc-200 bg-white px-3 py-2 pr-10 text-xs font-mono text-zinc-800" />
+                <button type="button" onClick={() => setShowOpenRouterKey(value => !value)} aria-label={showOpenRouterKey ? 'Hide OpenRouter key' : 'Show OpenRouter key'} className="absolute right-2 top-2 text-zinc-500">{showOpenRouterKey ? <EyeOff size={14} /> : <Eye size={14} />}</button>
+              </div>
+              <div className="mt-3 flex items-center gap-3">
+                <button type="button" onClick={() => void handleTestOpenRouterKey()} disabled={isTestingOpenRouter || !openRouterKey.trim()} className="flex items-center gap-1 border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 disabled:opacity-40">{isTestingOpenRouter && <Loader2 size={12} className="animate-spin" />} Test &amp; Verify</button>
+                <button type="button" onClick={handleSaveOpenRouterKey} className="bg-blue-600 px-3 py-1.5 text-xs font-medium text-white">Save Key</button>
+                {hasOpenRouterKey && <button type="button" onClick={handleClearOpenRouterKey} className="flex items-center gap-1 text-xs text-red-600"><Trash2 size={13} /> Clear</button>}
+              </div>
+            </div>
+
             {/* Etsy Row */}
             <div className="flex flex-col border-t border-zinc-100 pt-6">
               <div className="flex items-start justify-between gap-4">

@@ -70,6 +70,7 @@ export type ListingRecord = {
   channel: 'etsy' | 'amazon';
   productId: string | null;
   productRevision: number | null;
+  images: string[] | null;
   folder: string | null;
   status: string;
   remoteListingId: string | null;
@@ -90,6 +91,7 @@ export async function listListingRecords(cwd = process.cwd()): Promise<ListingRe
         sheet, channel: sheet === 'amazon' ? 'amazon' : 'etsy',
         productId: value('workspace_product_id'),
         productRevision: typeof row.workspace_product_revision === 'number' ? row.workspace_product_revision : null,
+        images: typeof row.images === 'string' ? row.images.split(',').map(value => value.trim()).filter(Boolean) : null,
         folder: value('folder'), status: value('status') || 'Draft',
         remoteListingId: value('listing_id'), sku: value('sku'), asin: value('asin'),
       });

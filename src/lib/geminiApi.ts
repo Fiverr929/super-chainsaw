@@ -19,6 +19,8 @@ export interface GeminiApiOptions {
     };
     [key: string]: unknown;
   };
+  tools?: Array<Record<string, unknown>>;
+  toolConfig?: Record<string, unknown>;
   timeoutMs?: number;
 }
 
@@ -27,6 +29,8 @@ export interface GeminiApiResponse {
     content?: {
       parts?: Array<{
         text?: string;
+        functionCall?: { name: string; args?: Record<string, unknown> };
+        functionResponse?: { name: string; response?: Record<string, unknown>; id?: string };
         inlineData?: {
           mimeType?: string;
           data?: string;
@@ -108,6 +112,8 @@ export async function callGeminiGenerateContent(options: GeminiApiOptions): Prom
   if (generationConfig) {
     bodyPayload.generationConfig = generationConfig;
   }
+  if (options.tools?.length) bodyPayload.tools = options.tools;
+  if (options.toolConfig) bodyPayload.toolConfig = options.toolConfig;
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);

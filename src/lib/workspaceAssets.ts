@@ -6,7 +6,8 @@ import { isEtsyListingImageUrl } from './etsyListingImage.ts';
 import { listProducts } from './workspaceProductStore.ts';
 
 export type ListingAsset = { position: number; url: string; sourceUrl: string };
-export type ListingAssetFolder = { id: string; source: 'etsy'; sourceUrl: string; title: string; importedAt: string; images: ListingAsset[]; imports: { id: string; importedAt: string; images: ListingAsset[] }[] };
+export type ListingDetails = { description: string; tags: string[]; materials: string[]; state?: string; taxonomyId?: number; price?: { amount: number; divisor: number; currency: string }; numFavorers?: number; originalCreationTimestamp?: number; createdTimestamp?: number; lastModifiedTimestamp?: number; fetchedAt?: string };
+export type ListingAssetFolder = { id: string; source: 'etsy'; sourceUrl: string; title: string; details?: ListingDetails; importedAt: string; images: ListingAsset[]; imports: { id: string; importedAt: string; images: ListingAsset[] }[] };
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024;
 
 export class AssetStoreError extends Error {
@@ -50,7 +51,7 @@ export async function listListingAssets(cwd = process.cwd()): Promise<ListingAss
   return folders.sort((a, b) => b.importedAt.localeCompare(a.importedAt));
 }
 
-export async function saveListingAssets(input: { id: string; sourceUrl: string; title: string; images: { position: number; sourceUrl: string; file: File }[] }, cwd = process.cwd()): Promise<ListingAssetFolder> {
+export async function saveListingAssets(input: { id: string; sourceUrl: string; title: string; details?: ListingDetails; images: { position: number; sourceUrl: string; file: File }[] }, cwd = process.cwd()): Promise<ListingAssetFolder> {
   if (!/^\d{8,15}$/.test(input.id)) throw new Error('Invalid Etsy listing ID.');
   const source = new URL(input.sourceUrl);
   const listingPath = new RegExp(`^/(?:[a-z]{2}(?:-[a-z]{2})?/)?listing/${input.id}(?:/|$)`, 'i');
@@ -69,7 +70,16 @@ export async function saveListingAssets(input: { id: string; sourceUrl: string; 
   try { previous = JSON.parse(await fs.readFile(metadataFile, 'utf8')) as ListingAssetFolder; }
   catch (error) { if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error; }
   const selection = input.images.map(item => `${item.position}:${item.sourceUrl}`).sort();
-  if (previous && JSON.stringify(previous.images.map(item => `${item.position}:${item.sourceUrl}`).sort()) === JSON.stringify(selection)) return previous;
+  if (previous && JSON.stringify(previous.images.map(item => `${item.position}:${item.sourceUrl}`).sort()) === JSON.stringify(selection)) {
+    if (input.details) {
+      const updated = { ...previous, title: input.title.trim().slice(0, 200) || previous.title, details: input.details };
+      const temporary = `${metadataFile}.${randomUUID()}.tmp`;
+      try { await fs.writeFile(temporary, JSON.stringify(updated, null, 2)); await fs.rename(temporary, metadataFile); }
+      finally { await fs.rm(temporary, { force: true }); }
+      return updated;
+    }
+    return previous;
+  }
 
   const importId = randomUUID();
   const importedAt = new Date().toISOString();
@@ -90,7 +100,7 @@ export async function saveListingAssets(input: { id: string; sourceUrl: string; 
     }
     images.sort((a, b) => a.position - b.position);
     const imports = [...(previous?.imports || (previous ? [{ id: 'legacy', importedAt: previous.importedAt, images: previous.images }] : [])), { id: importId, importedAt, images }];
-    const folder: ListingAssetFolder = { id: input.id, source: 'etsy', sourceUrl: source.toString(), title: input.title.trim().slice(0, 200) || `Etsy listing ${input.id}`, importedAt, images, imports };
+    const folder: ListingAssetFolder = { id: input.id, source: 'etsy', sourceUrl: source.toString(), title: input.title.trim().slice(0, 200) || `Etsy listing ${input.id}`, ...((input.details || previous?.details) ? { details: input.details || previous?.details } : {}), importedAt, images, imports };
     await fs.writeFile(temporary, JSON.stringify(folder, null, 2));
     await fs.rename(temporary, metadataFile);
     return folder;

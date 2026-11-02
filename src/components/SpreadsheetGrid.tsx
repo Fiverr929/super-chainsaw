@@ -501,6 +501,13 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  const [fontsLoaded, setFontsLoaded] = useState(false);
  const [isImporterOpen, setIsImporterOpen] = useState(false);
  const [showPresets, setShowPresets] = useState(false);
+ React.useEffect(() => {
+   if (workstation !== 'etsy' || sessionStorage.getItem('workstation_open_physical_presets') !== '1') return;
+   sessionStorage.removeItem('workstation_open_physical_presets');
+   localStorage.setItem('workstation_v2_active_sheet', 'physical');
+   setSheet('physical');
+   setShowPresets(true);
+ }, [workstation]);
  const [isDataLoaded, setIsDataLoaded] = useState(false);
  const [loadedGridKey, setLoadedGridKey] = useState<string | null>(null);
  const [worksheetLoadError, setWorksheetLoadError] = useState<string | null>(null);
@@ -638,6 +645,8 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
       });
       if (response.status === 409) {
         conflictRef.current.add(id);
+        const dirtyKey = ws === 'amazon' ? 'workstation_v2_grid_data_amazon_dirty' : `workstation_v2_grid_data_etsy_${sType}_dirty`;
+        localStorage.setItem(dirtyKey, 'true');
         setConflictSheet(id);
         return;
       }
@@ -646,6 +655,10 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
       sheetRevisions.current.set(id, result.revision);
       try {
         const key = ws === 'amazon' ? 'workstation_v2_grid_data_amazon' : `workstation_v2_grid_data_etsy_${sType}`;
+        if (JSON.stringify(JSON.parse(localStorage.getItem(key) || 'null')) === JSON.stringify(rows)) {
+          localStorage.setItem(`${key}_base_revision`, result.revision);
+          localStorage.setItem(`${key}_dirty`, 'false');
+        }
         const draft = JSON.parse(sessionStorage.getItem(`${key}_tab_draft`) || 'null');
         if (draft && Array.isArray(draft.rows)) sessionStorage.setItem(`${key}_tab_draft`, JSON.stringify({ ...draft, baseRevision: result.revision }));
       } catch { /* Disk save succeeded; browser recovery is optional. */ }
@@ -687,6 +700,7 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
   }));
   void (async () => {
     let rows: RowData[] | null = null;
+    let latestDiskRows: RowData[] | null = null;
     let browserRowsSelected = false;
     let browserBaseRevision: string | null = null;
     let diskUpdatedAt = 0;
@@ -697,7 +711,7 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
       const response = await fetch(`/api/workspace/listings/${getSheetId(workstation, sheet)}`, { cache: 'no-store' });
       if (response.ok) {
         const result = await response.json();
-        if (Array.isArray(result.rows)) rows = result.rows;
+        if (Array.isArray(result.rows)) { rows = result.rows; latestDiskRows = result.rows; }
         if (typeof result.updatedAt === 'number') diskUpdatedAt = result.updatedAt;
         if (typeof result.revision === 'string') diskRevision = result.revision;
       } else diskFailed = true;
@@ -721,6 +735,16 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
         browserBaseRevision = draft.baseRevision || null;
       }
     } catch (error) { console.error('Failed to parse this tab’s worksheet draft:', error); }
+    if (browserRowsSelected && latestDiskRows && browserBaseRevision !== diskRevision && localStorage.getItem(`${key}_dirty`) === 'false') {
+      rows = latestDiskRows;
+      browserRowsSelected = false;
+      browserBaseRevision = diskRevision;
+      localStorage.setItem(key, JSON.stringify(latestDiskRows));
+      localStorage.setItem(`${key}_saved_at`, String(Date.now()));
+      localStorage.setItem(`${key}_base_revision`, diskRevision);
+      localStorage.setItem(`${key}_dirty`, 'false');
+      try { sessionStorage.removeItem(`${key}_tab_draft`); } catch { /* The current disk snapshot remains usable. */ }
+    }
     if (browserRowsSelected && !localStorage.getItem(`${key}_disk_backup_created`)) {
       try {
         const response = await fetch(`/api/workspace/listings/${getSheetId(workstation, sheet)}/backup`, {
@@ -764,13 +788,14 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
        localStorage.setItem(key, JSON.stringify(restored));
        localStorage.setItem(`${key}_saved_at`, String(snapshot.updatedAt || Date.now()));
        localStorage.setItem(`${key}_base_revision`, snapshot.revision || '0');
+       localStorage.setItem(`${key}_dirty`, 'false');
        sessionStorage.removeItem(`${key}_tab_draft`);
        dataRef.current = restored;
        setData(restored);
      }
      conflictRef.current.delete(id);
      setConflictSheet(null);
-     if (keepBrowser) persistWorksheet(workstation, sheet, dataRef.current);
+     if (keepBrowser) { localStorage.setItem(`${getStorageKey(workstation,sheet)}_dirty`,'true'); persistWorksheet(workstation, sheet, dataRef.current); }
    } catch (error) { toast.error(error instanceof Error ? error.message : 'Could not resolve worksheet conflict.'); }
  };
 
@@ -779,7 +804,57 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
  dataRef.current = data;
  }, [data]);
 
+ React.useEffect(() => {
+   const revisionMap=sheetRevisions.current;
+   return () => {
+     if (!isDataLoaded || loadedGridKey !== `${workstation}-${sheet}`) return;
+     const key=getStorageKey(workstation,sheet);const rows=dataRef.current;const savedAt=Date.now();const baseRevision=revisionMap.get(getSheetId(workstation,sheet))||'0';
+     try {
+       const previous=JSON.parse(localStorage.getItem(key)||'null');
+       if(JSON.stringify(previous)!==JSON.stringify(rows)) localStorage.setItem(`${key}_dirty`,'true');
+       localStorage.setItem(key,JSON.stringify(rows));localStorage.setItem(`${key}_saved_at`,String(savedAt));localStorage.setItem(`${key}_base_revision`,baseRevision);
+       sessionStorage.setItem(`${key}_tab_draft`,JSON.stringify({rows,savedAt,baseRevision}));
+     }catch{/* Revision checks protect worksheet data when browser recovery is unavailable. */}
+   };
+ },[isDataLoaded,loadedGridKey,sheet,workstation]);
+
+ React.useEffect(() => {
+   if(!isDataLoaded||loadedGridKey!==`${workstation}-${sheet}`)return;
+   const refreshIfClean=()=>{void(async()=>{
+     try{
+       const id=getSheetId(workstation,sheet);const response=await fetch(`/api/workspace/listings/${id}`,{cache:'no-store'});if(!response.ok)return;
+       const snapshot=await response.json();if(typeof snapshot.revision!=='string'||snapshot.revision===sheetRevisions.current.get(id))return;
+       const key=getStorageKey(workstation,sheet);const saved=JSON.parse(localStorage.getItem(key)||'null');const editedInMemory=JSON.stringify(saved)!==JSON.stringify(dataRef.current);const dirty=localStorage.getItem(`${key}_dirty`)==='true'||editedInMemory;
+       if(dirty){conflictRef.current.add(id);setConflictSheet(id);return;}
+       const rows=Array.isArray(snapshot.rows)?snapshot.rows as RowData[]:[];while(rows.length<50)rows.push({...(workstation==='amazon'?emptyRowAmazon:sheet==='digital'?emptyRowDigital:emptyRowPhysical)} as RowData);
+       sheetRevisions.current.set(id,snapshot.revision);localStorage.setItem(key,JSON.stringify(rows));localStorage.setItem(`${key}_saved_at`,String(snapshot.updatedAt||Date.now()));localStorage.setItem(`${key}_base_revision`,snapshot.revision);localStorage.setItem(`${key}_dirty`,'false');sessionStorage.removeItem(`${key}_tab_draft`);dataRef.current=rows;setData(rows);conflictRef.current.delete(id);setConflictSheet(null);
+     }catch{/* Keep the current worksheet usable; regular saves still use revision checks. */}
+   })();};
+   const storageChanged=(event:StorageEvent)=>{if(event.key==='workstation_agent_etsy_physical_revision')refreshIfClean();};
+   window.addEventListener('focus',refreshIfClean);window.addEventListener('workstation-worksheet-changed',refreshIfClean);window.addEventListener('storage',storageChanged);
+   return()=>{window.removeEventListener('focus',refreshIfClean);window.removeEventListener('workstation-worksheet-changed',refreshIfClean);window.removeEventListener('storage',storageChanged);};
+ },[isDataLoaded,loadedGridKey,sheet,workstation]);
+
  const sheetRef = React.useRef(sheet);
+ React.useEffect(() => {
+   if (!fontsLoaded || !isDataLoaded || loadedGridKey !== `${workstation}-${sheet}`) return;
+   let target: { channel: string; sheet: string; productId: string; listingId?: string; createdAt: number };
+   try { target = JSON.parse(sessionStorage.getItem('workspace_listing_target') || 'null'); }
+   catch { sessionStorage.removeItem('workspace_listing_target'); return; }
+   if (!target || target.channel !== workstation || target.sheet !== getSheetId(workstation, sheet)) return;
+   if (!Number.isFinite(target.createdAt) || Date.now() - target.createdAt > 120000) { sessionStorage.removeItem('workspace_listing_target'); return; }
+   const rows = dataRef.current;
+   const exact = target.listingId ? rows.findIndex(row => row.local_listing_id === target.listingId) : -1;
+   const rowIndex = exact >= 0 ? exact : rows.findIndex(row => row.workspace_product_id === target.productId);
+   if (rowIndex < 0) return; // A newly prepared row may still be arriving through the listing inbox.
+   const frame = window.requestAnimationFrame(() => {
+     if (!gridRef.current) return;
+     setGridSelection({ columns: CompactSelection.empty(), rows: CompactSelection.fromSingleSelection(rowIndex) });
+     gridRef.current.scrollTo(0, rowIndex, 'both', 0, 0, { vAlign: 'center' });
+     sessionStorage.removeItem('workspace_listing_target');
+   });
+   return () => window.cancelAnimationFrame(frame);
+ }, [data, fontsLoaded, isDataLoaded, loadedGridKey, sheet, workstation]);
  React.useEffect(() => { sheetRef.current = sheet; }, [sheet]);
  const { triggerAIGeneration, triggerFolderAutomation } = useAIPipeline(dataRef, setData, sheet, sheetRef);
  const { triggerEtsyPush, triggerEtsySync } = useEtsyPush(dataRef, setData, sheet, sheetRef);
@@ -795,7 +870,7 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
        if (!Array.isArray(inbox)) throw new Error('Invalid product inbox.');
        const pending = inbox.filter(item => item.channel === workstation && (item.productId || item.product?.id));
        if (!pending.length) return;
-       const imported: Array<{ channel: ProductChannel; product: WorkspaceProduct; listingPreset?: ListingPresetValues }> = [];
+       const imported: Array<{ channel: ProductChannel; product: WorkspaceProduct; listingPreset?: ListingPresetValues; updateOnly: boolean }> = [];
        const storedPresets = JSON.parse(localStorage.getItem('workstation_v2_presets_physical') || '[]');
        if (!Array.isArray(storedPresets)) throw new Error('Etsy listing presets are invalid.');
        for (const item of pending) {
@@ -804,13 +879,15 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
          const result = await response.json();
          if (!response.ok || !result.product) throw new Error(result.error || `Could not load product ${id}.`);
          const listingPreset = storedPresets.find((preset: ListingPresetValues) => preset.id === item.listingPresetId);
-         if (item.channel === 'etsy' && !listingPreset) throw new Error(`Listing preset for ${result.product.name} was removed. Choose a preset and prepare the listing again.`);
-         imported.push({ channel: item.channel, product: result.product, listingPreset });
+         const existing = dataRef.current.some(row => row.workspace_product_id === id);
+         if (item.updateOnly === true && !existing) throw new Error(`The draft for ${result.product.name} no longer exists. Return to Products and create a new draft.`);
+         if (!existing && item.channel === 'etsy' && !listingPreset) throw new Error(`Listing preset for ${result.product.name} was removed. Choose a preset and prepare the listing again.`);
+         imported.push({ channel: item.channel, product: result.product, listingPreset, updateOnly: item.updateOnly === true });
        }
        if (cancelled) return;
        let rows = dataRef.current;
        const existingProductIds = new Set(rows.map(row => row.workspace_product_id));
-       for (const item of imported) rows = mergeProductIntoListing(rows, item.product, item.listingPreset) as RowData[];
+       for (const item of imported) rows = mergeProductIntoListing(rows, item.product, item.listingPreset, { updateOnly: item.updateOnly }) as RowData[];
        dataRef.current = rows;
        setData(rows);
        const newRows = imported.filter(item => !existingProductIds.has(item.product.id));
@@ -959,6 +1036,7 @@ export default function SpreadsheetGrid({ workstation ="etsy"}: { workstation?:"
   }
   const key = getStorageKey(workstation, sheet);
   localStorage.setItem(key, JSON.stringify(data));
+  localStorage.setItem(`${key}_dirty`, 'true');
   const savedAt = Date.now();
   const baseRevision = sheetRevisions.current.get(getSheetId(workstation, sheet)) || '0';
   localStorage.setItem(`${key}_saved_at`, String(savedAt));

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import sharp from 'sharp';
 import { callGeminiGenerateContent, missingApiKeyResponse, resolveGeminiApiKey } from '@/lib/geminiApi';
 import { DEFAULT_IMAGE_MODEL, IMAGE_MODEL_OPTIONS, finalGeneratedImage, imageQualityForModel } from '@/lib/designExtraction';
+import { conceptDirection, type DesignConcept } from '@/lib/designIdeation';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,6 +21,13 @@ export async function POST(request: Request) {
     if (!model) return NextResponse.json({ error: 'Choose a supported image model.' }, { status: 400 });
     const quality = imageQualityForModel(model.id, String(form.get('resolution') || ''));
     const direction = String(form.get('direction') || '').trim().slice(0, 1000);
+    const conceptJson = String(form.get('concept') || '').trim();
+    let concept: DesignConcept | null = null;
+    if (conceptJson) {
+      try { concept = JSON.parse(conceptJson) as DesignConcept; }
+      catch { return NextResponse.json({ error: 'The selected design concept is invalid.' }, { status: 400 }); }
+    }
+    const creativeDirection = concept ? conceptDirection(concept, direction) : direction;
     const source = Buffer.from(await image.arrayBuffer());
     const metadata = await sharp(source).metadata();
     if (!metadata.width || !metadata.height) return NextResponse.json({ error: 'Could not read the design image.' }, { status: 400 });
@@ -33,7 +41,7 @@ export async function POST(request: Request) {
           'Make a cohesive, polished design with deliberate hierarchy, expressive details, strong silhouettes, and an attractive outer shape suitable for a T-shirt print. Preserve internal figures, lettering, shadows, glows, and intentional backdrops as part of the new composition.',
           'If the reference has text, use it only when confidently readable. Do not invent tiny words or copy seller watermarks. Remove all watermarks and unrelated overlays.',
           'Output only the flat artwork, front-facing and centered, filling most of the canvas with a small margin. No shirt, mockup, room, captions, or checkerboard. Use one uniform opaque background outside the design so it can be removed in the next step.',
-          direction ? `Creative direction from the user: ${direction}` : 'Creative direction: produce a fresh, dramatic interpretation with a visibly different layout.',
+          creativeDirection ? `Creative direction: ${creativeDirection}` : 'Creative direction: produce a fresh, dramatic interpretation with a visibly different layout.',
         ].join(' ') },
         { inlineData: { mimeType: image.type, data: source.toString('base64') } },
       ] }],

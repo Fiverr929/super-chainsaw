@@ -54,3 +54,6 @@ public/workspace-assets/
 # etsy tokens
 tokens.json
 
+
+# local Node compile cache
+/scratch/node-compile-cache/

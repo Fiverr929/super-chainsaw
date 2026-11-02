@@ -515,8 +515,8 @@ const handleDelete = (id: string) => {
  };
 
  return (
- <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-zinc-900/50 p-4"onClick={handleClose}>
- <div className="bg-white border border-zinc-300 w-full max-w-4xl flex flex-col overflow-hidden shadow-2xl"style={{ height:"80vh", minHeight:"600px", maxHeight:"850px"}} onClick={e => e.stopPropagation()}>
+ <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-zinc-900/50 p-2 sm:p-4"onClick={handleClose}>
+ <div className="flex h-[calc(100dvh-1rem)] w-full max-w-4xl flex-col overflow-hidden border border-zinc-300 bg-white shadow-2xl sm:h-[80vh] sm:min-h-[600px] sm:max-h-[850px]" onClick={e => e.stopPropagation()}>
  
  {/* Header */}
  <div className="flex items-center justify-between p-4 border-b border-zinc-300 bg-zinc-50">
@@ -527,9 +527,9 @@ const handleDelete = (id: string) => {
  </div>
 
  {/* Content Area - Split View */}
- <div className="flex flex-1 overflow-hidden min-h-0">
+ <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
  {/* Left Side: Preset List */}
- <div className="w-1/3 border-r border-zinc-300 bg-zinc-50 flex flex-col overflow-hidden">
+ <div className="flex max-h-44 w-full shrink-0 flex-col overflow-hidden border-b border-zinc-300 bg-zinc-50 sm:max-h-none sm:w-1/3 sm:border-b-0 sm:border-r">
  <div className="p-3 border-b border-zinc-300">
  <button 
  onClick={handleAddNew}
@@ -581,11 +581,11 @@ const handleDelete = (id: string) => {
  </div>
 
  {/* Right Side: Editor */}
- <div className="w-2/3 bg-white flex flex-col h-full relative min-h-0">
+ <div className="relative flex min-h-0 w-full flex-1 flex-col bg-white sm:w-2/3">
  {editingId && editForm ? (
  <div className="flex flex-col h-full min-h-0">
  {/* Header/Tabs */}
- <div className="flex border-b border-zinc-300 bg-zinc-50 shrink-0 select-none overflow-x-auto">
+ <div className="flex shrink-0 select-none overflow-x-auto border-b border-zinc-300 bg-zinc-50 [&>button]:shrink-0 [&>button]:whitespace-nowrap">
  <button
  type="button"
  onClick={() => setActiveTab('core')}
@@ -659,7 +659,7 @@ const handleDelete = (id: string) => {
  </div>
  
  {/* Scrollable Content */}
- <div className="flex-1 overflow-y-auto p-6 pt-4 custom-scrollbar space-y-4">
+ <div className="custom-scrollbar flex-1 space-y-4 overflow-y-auto p-4 sm:p-6 sm:pt-4">
  {/* Tab Content */}
  {activeTab ==='core'&& (
  <div className="space-y-4">
@@ -676,7 +676,7 @@ const handleDelete = (id: string) => {
  />
  </div>
 
- <div className="grid grid-cols-2 gap-4">
+ <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
  <div>
  <label className="block text-xs font-medium text-zinc-700 mb-1">
  Default Category <span className="text-red-500">*</span>
@@ -703,7 +703,7 @@ const handleDelete = (id: string) => {
  </div>
  </div>
 
- <div className="grid grid-cols-2 gap-4">
+ <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
  <div>
  <label className="block text-xs font-medium text-zinc-700 mb-1">
  Default Price ($) <span className="text-red-500">*</span>
@@ -737,7 +737,7 @@ const handleDelete = (id: string) => {
  </div>
 
  {sheetType ==="physical"&& (
- <div className="grid grid-cols-2 gap-4">
+ <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
  <div>
  <label className="block text-xs font-medium text-zinc-700 mb-1">
  Default Shipping Profile
@@ -778,7 +778,7 @@ const handleDelete = (id: string) => {
 
  {activeTab ==='options'&& (
  <div className="space-y-4">
- <div className="grid grid-cols-2 gap-4">
+ <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
  <div>
  <label className="block text-xs font-medium text-zinc-700 mb-1">
  Who made it? <span className="text-red-500">*</span>
@@ -818,7 +818,7 @@ const handleDelete = (id: string) => {
  </div>
  </div>
 
- <div className="grid grid-cols-2 gap-4">
+ <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
  <div>
  <label className="block text-xs font-medium text-zinc-700 mb-1">
  What is it? <span className="text-red-500">*</span>
@@ -854,7 +854,7 @@ const handleDelete = (id: string) => {
  {/* General Colors */}
  <div className="border border-zinc-200 p-3 bg-zinc-50 rounded-none space-y-3">
  <h4 className="text-xs font-bold text-zinc-500 uppercase tracking-wider">General Attributes</h4>
- <div className="grid grid-cols-2 gap-4">
+ <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
  <div>
  <label className="block text-xs font-medium text-zinc-700 mb-1">Primary Color</label>
  <select
@@ -883,7 +883,7 @@ const handleDelete = (id: string) => {
  </div>
 
  {/* Occasion & Celebration */}
- <div className="grid grid-cols-2 gap-4">
+ <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
  {categorySupportsOccasion(editForm.category) && (
  <div>
  <label className="block text-xs font-medium text-zinc-700 mb-1">Occasion</label>
@@ -1048,7 +1048,7 @@ const handleDelete = (id: string) => {
 
  {/* Category-specific fields */}
  {(editForm.category ==="T-Shirts"|| editForm.category ==="Sweatshirts & Hoodies") && (
- <div className="grid grid-cols-2 gap-3 pt-2">
+ <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
  <div>
  <label className="block text-xs font-medium text-zinc-700 mb-1">Sleeve Length</label>
  <select
@@ -1089,7 +1089,7 @@ const handleDelete = (id: string) => {
  )}
 
  {editForm.category ==="Mugs & Drinkware"&& (
- <div className="grid grid-cols-3 gap-3 pt-2">
+ <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
  <div>
  <label className="block text-xs font-medium text-zinc-700 mb-1">Capacity</label>
  <select
@@ -1130,7 +1130,7 @@ const handleDelete = (id: string) => {
  )}
 
  {editForm.category ==="Posters & Prints"&& (
- <div className="grid grid-cols-3 gap-3 pt-2">
+ <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
  <div>
  <label className="block text-xs font-medium text-zinc-700 mb-1">Orientation</label>
  <select
@@ -1569,7 +1569,7 @@ const handleDelete = (id: string) => {
 
  {editForm.enable_pod && (
  <div className="space-y-4 animate-in fade-in slide-in-from-top-2">
- <div className="grid grid-cols-2 gap-4">
+ <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
  <div>
  <label className="block text-xs font-medium text-zinc-700 mb-1">
  Printify Blueprint
@@ -1634,7 +1634,7 @@ const handleDelete = (id: string) => {
  )}
  </div>
  {/* Sticky Footer */}
- <div className="shrink-0 p-4 px-6 border-t border-zinc-200 bg-zinc-50 flex justify-between items-center">
+ <div className="flex shrink-0 flex-col gap-2 border-t border-zinc-200 bg-zinc-50 p-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">
  <div>
  <span className="text-xs text-zinc-500 font-semibold select-none">Select rows in the grid to apply this preset</span>
  </div>

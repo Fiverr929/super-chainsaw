@@ -4,10 +4,13 @@ import { useEffect, useState } from 'react';
 import BulkBackgroundRemover from './BulkBackgroundRemover';
 import ImagePresetManagerModal, { DEFAULT_IMAGE_PRESET, type ImagePreset } from './ImagePresetManagerModal';
 import type { PreparedArtwork } from '@/lib/workspaceArtwork';
+import DesignResearch from './DesignResearch';
+import type { ResearchOpportunity } from '@/lib/designResearch';
 
 export default function DesignExtractor({ onCreateProduct, incomingAsset }: { onCreateProduct?: (artworks: PreparedArtwork[]) => void; incomingAsset?: { url: string; name: string; requestId?: string } | null } = {}) {
   const [defaultPreset, setDefaultPreset] = useState<ImagePreset>(DEFAULT_IMAGE_PRESET);
   const [showPresets, setShowPresets] = useState(false);
+  const [researchDirection, setResearchDirection] = useState<{ id: string; prompt: string; imageUrl: string } | null>(null);
 
   useEffect(() => {
     const savedPresets = localStorage.getItem('workstation_image_presets');
@@ -25,14 +28,17 @@ export default function DesignExtractor({ onCreateProduct, incomingAsset }: { on
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col bg-white">
-      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-zinc-200 bg-zinc-50 px-3 py-2.5">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-zinc-200 bg-white px-5 py-4 lg:px-7">
         <div>
           <h2 className="text-base font-semibold tracking-tight text-zinc-900">Design</h2>
-          <p className="text-xs text-zinc-500">Make transparent artwork from photos or design files.</p>
+          <p className="mt-1 text-xs text-zinc-500">Extract artwork, remove backgrounds, and prepare designs for mockups.</p>
         </div>
-      </div>
+      </header>
 
-      <BulkBackgroundRemover incomingAsset={incomingAsset} preset={defaultPreset} onOpenPresets={() => setShowPresets(true)} onContinue={artworks => onCreateProduct?.(artworks)} />
+      <div className="min-h-0 flex-1 overflow-y-auto bg-zinc-50">
+        <div className="mx-auto w-full max-w-6xl px-4 pt-4 lg:px-6 lg:pt-6"><DesignResearch onChoose={(opportunity: ResearchOpportunity, imageUrl: string) => setResearchDirection({ id: crypto.randomUUID(), prompt: opportunity.designDirection, imageUrl })} /></div>
+        <BulkBackgroundRemover incomingAsset={incomingAsset} preset={defaultPreset} researchDirection={researchDirection} onOpenPresets={() => setShowPresets(true)} onContinue={artworks => onCreateProduct?.(artworks)} />
+      </div>
 
       {showPresets && (
         <ImagePresetManagerModal

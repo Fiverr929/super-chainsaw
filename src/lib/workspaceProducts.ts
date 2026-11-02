@@ -52,6 +52,12 @@ export type WorkspaceProduct = {
 export type ProductSnapshot = Pick<WorkspaceProduct, 'designDataUrl' | 'preset' | 'generated'> & Pick<WorkspaceProduct, 'artworks'>;
 export type ProductChannel = 'etsy' | 'amazon';
 
+export function createWorkspaceProduct(input: { name:string; designDataUrl:string|null; preset:MockupPreset; backArtwork?:string|null; sourceImage?:string; designName?:string; designKind?:'design-stage'|'upload'; sourceAssetUrl?:string; id?:string }): WorkspaceProduct {
+  const id=input.id||crypto.randomUUID();
+  const gallerySlots:GallerySlot[]=input.preset.frames.filter(frame=>frame.imageDataUrl).map(frame=>({id:`mockup-${frame.id}`,kind:'mockup',label:`${frame.role} shirt`,frameId:frame.id}));
+  return {id,revision:0,name:input.name,createdAt:'',updatedAt:'',designDataUrl:input.designDataUrl,artworks:{...(input.designDataUrl?{front:input.designDataUrl}:{}),...(input.backArtwork?{back:input.backArtwork}:{})},preset:structuredClone(input.preset),origin:{designName:input.designName||input.name,designKind:input.designKind||'upload',mockupSource:input.preset.id.startsWith('cc1717-')||input.preset.id.startsWith('vintage-front-2k-')?'app':'user',mockupPresetId:input.preset.id,...(input.sourceAssetUrl?{sourceAssetUrl:input.sourceAssetUrl}:{})},generated:[],gallerySlots,renderState:'draft',...(input.sourceImage?{sourceImage:input.sourceImage}:{})};
+}
+
 export function triggerListingCopy(
   channel: ProductChannel,
   row: number,
@@ -107,7 +113,7 @@ export function productInputSignature(snapshot: Pick<ProductSnapshot, 'designDat
 
 /** Re-importing refreshes assets only; listing edits and remote IDs must survive. */
 export function mergeProductIntoListing<T extends Record<string, unknown>>(
-  rows: T[], product: WorkspaceProduct, listingPreset?: ListingPresetValues,
+  rows: T[], product: WorkspaceProduct, listingPreset?: ListingPresetValues, options: { updateOnly?: boolean } = {},
 ): Array<T | Record<string, unknown>> {
   const listingImages = galleryItems(product).filter(item => item.kind !== 'video');
   if (!product.designDataUrl || listingImages.length === 0 || product.renderState !== 'ready') {
@@ -115,6 +121,7 @@ export function mergeProductIntoListing<T extends Record<string, unknown>>(
   }
   if (listingImages.length > 10) throw new Error('Select no more than 10 listing images.');
   const index = rows.findIndex(row => row.workspace_product_id === product.id);
+  if (options.updateOnly && index < 0) throw new Error('The listing draft no longer exists. Create a new draft from Products.');
   const assets = {
     workspace_product_id: product.id,
     workspace_product_revision: product.revision,
@@ -140,4 +147,12 @@ export function mergeProductIntoListing<T extends Record<string, unknown>>(
 
 export function productGridKey(channel: ProductChannel): string {
   return channel === 'etsy' ? 'workstation_v2_grid_data_etsy_physical' : 'workstation_v2_grid_data_amazon';
+}
+
+/** Revisions also change for names and editor settings; compare the exported gallery itself. */
+export function productListingMediaState(product: WorkspaceProduct, images: string[] | null): 'current' | 'changed' | 'unknown' | 'not-ready' {
+  if (product.renderState !== 'ready') return 'not-ready';
+  if (!images) return 'unknown';
+  const current = galleryItems(product).filter(item => item.kind !== 'video').map(item => item.url);
+  return current.length === images.length && current.every((url, index) => url === images[index]) ? 'current' : 'changed';
 }

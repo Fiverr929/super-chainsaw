@@ -7,7 +7,8 @@ import { Copy, Download, ImageIcon, Loader2, Plus, Save, Settings2, Trash2, Uplo
 import toast from "react-hot-toast";
 import { loadMockupPresets, saveMockupPresets } from "@/lib/mockupPresetStorage";
 import { artworkForFrame, productInputSignature, type Placement, type MockupFrame, type MockupPreset, type GeneratedMockup, type WorkspaceProduct, type ProductSnapshot } from "@/lib/workspaceProducts";
-import { ARTWORK_PRESETS, presetArtwork, type ArtworkPresetId, resizeArtwork, type ArtworkResizeHandle, artworkRect, dragArtwork, fitArtwork, normalizeArtwork, visiblePixelBounds, type ArtworkPlacement, type FitPosition, type Rect } from '@/lib/artworkPlacement';
+import { renderMockup, loadCanvasImage, visibleSourceRect, getPlacementTarget, drawRealisticPrint } from "@/lib/mockupRenderer";
+import { ARTWORK_PRESETS, presetArtwork, type ArtworkPresetId, resizeArtwork, type ArtworkResizeHandle, artworkRect, dragArtwork, fitArtwork, normalizeArtwork, type ArtworkPlacement, type FitPosition, type Rect } from '@/lib/artworkPlacement';
 import { CC1717_COLORS, VINTAGE_COLORS, type VintageColor } from '@/lib/vintageMockups';
 
 type RegionDragMode = "move" | "nw" | "ne" | "sw" | "se" | "n" | "s" | "w" | "e";
@@ -107,6 +108,10 @@ function normalizePreset(preset: MockupPreset): MockupPreset {
   };
 }
 
+function constrainPlacement(placement: Placement): Placement {
+  return normalizePlacement(placement);
+}
+
 function readImageFile(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -114,147 +119,6 @@ function readImageFile(file: File): Promise<string> {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
-}
-
-const decodedImages = new Map<string, Promise<HTMLImageElement>>();
-const visibleSourceRects = new WeakMap<HTMLImageElement, Rect>();
-function loadCanvasImage(src: string): Promise<HTMLImageElement> {
-  const cached = decodedImages.get(src);
-  if (cached) return cached;
-  const pending = new Promise<HTMLImageElement>((resolve, reject) => {
-    const image = new window.Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => { decodedImages.delete(src); reject(new Error('Could not load mockup image.')); };
-    image.src = src;
-  });
-  decodedImages.set(src, pending);
-  // A multi-view recipe plus its artwork should stay decoded while editing.
-  if (decodedImages.size > 8) decodedImages.delete(decodedImages.keys().next().value!);
-  return pending;
-}
-
-function visibleSourceRect(image: HTMLImageElement): Rect {
-  const cached = visibleSourceRects.get(image);
-  if (cached) return cached;
-  const canvas = document.createElement('canvas');
-  canvas.width = image.naturalWidth;
-  canvas.height = image.naturalHeight;
-  const context = canvas.getContext('2d', { willReadFrequently: true });
-  if (!context) return { x: 0, y: 0, width: image.naturalWidth, height: image.naturalHeight };
-  context.drawImage(image, 0, 0);
-  const source = visiblePixelBounds(context.getImageData(0, 0, canvas.width, canvas.height).data, canvas.width, canvas.height);
-  visibleSourceRects.set(image, source);
-  return source;
-}
-
-function getPlacementTarget(placement: Placement, canvasWidth: number, canvasHeight: number) {
-  return {
-    x: (placement.x / 100) * canvasWidth,
-    y: (placement.y / 100) * canvasHeight,
-    width: (placement.width / 100) * canvasWidth,
-    height: (placement.height / 100) * canvasHeight,
-  };
-}
-
-function constrainPlacement(placement: Placement): Placement {
-  return normalizePlacement(placement);
-}
-
-function drawRealisticPrint(
-  ctx: CanvasRenderingContext2D,
-  mockupImage: HTMLImageElement,
-  designImage: HTMLImageElement,
-  canvasWidth: number,
-  canvasHeight: number,
-  frame: MockupFrame,
-  reusableCanvases?: { print: HTMLCanvasElement; texture: HTMLCanvasElement }
-) {
-  const margin = clampNumber(frame.placement.margin, 0, 25) / 100;
-  const placement = getPlacementTarget(frame.placement, canvasWidth, canvasHeight);
-  const innerPlacement = {
-    x: placement.x + placement.width * margin,
-    y: placement.y + placement.height * margin,
-    width: placement.width * (1 - margin * 2),
-    height: placement.height * (1 - margin * 2),
-  };
-  const sourceRect = visibleSourceRect(designImage);
-  const designRect = artworkRect(sourceRect.width, sourceRect.height, innerPlacement, frame.placement.artwork);
-  const rotation = normalizeArtwork(frame.placement.artwork).rotation || 0;
-  if (designRect.width <= 0 || designRect.height <= 0) return;
-
-  const printCanvas = reusableCanvases?.print || document.createElement("canvas");
-  if (printCanvas.width !== canvasWidth) printCanvas.width = canvasWidth;
-  if (printCanvas.height !== canvasHeight) printCanvas.height = canvasHeight;
-  const printCtx = printCanvas.getContext("2d");
-  if (!printCtx) return;
-  printCtx.clearRect(0, 0, canvasWidth, canvasHeight);
-  printCtx.save();
-
-  printCtx.beginPath();
-  printCtx.rect(innerPlacement.x, innerPlacement.y, innerPlacement.width, innerPlacement.height);
-  printCtx.clip();
-
-  const softness = clampNumber(frame.placement.softness, 0, 4) * canvasWidth / mockupImage.naturalWidth;
-  if (softness > 0) {
-    printCtx.save();
-    printCtx.globalAlpha = 0.22;
-    printCtx.filter = `blur(${softness}px)`;
-    printCtx.translate(designRect.x + designRect.width / 2, designRect.y + designRect.height / 2);
-    printCtx.rotate(rotation * Math.PI / 180);
-    printCtx.drawImage(designImage, sourceRect.x, sourceRect.y, sourceRect.width, sourceRect.height, -designRect.width / 2, -designRect.height / 2, designRect.width, designRect.height);
-    printCtx.restore();
-  }
-
-  printCtx.save();
-  printCtx.globalAlpha = clampNumber(frame.placement.opacity, 0, 100) / 100;
-  printCtx.translate(designRect.x + designRect.width / 2, designRect.y + designRect.height / 2);
-  printCtx.rotate(rotation * Math.PI / 180);
-  printCtx.drawImage(designImage, sourceRect.x, sourceRect.y, sourceRect.width, sourceRect.height, -designRect.width / 2, -designRect.height / 2, designRect.width, designRect.height);
-  printCtx.restore();
-  printCtx.restore();
-
-  ctx.save();
-  ctx.drawImage(printCanvas, 0, 0);
-  ctx.restore();
-
-  const textureCanvas = reusableCanvases?.texture || document.createElement("canvas");
-  if (textureCanvas.width !== canvasWidth) textureCanvas.width = canvasWidth;
-  if (textureCanvas.height !== canvasHeight) textureCanvas.height = canvasHeight;
-  const textureCtx = textureCanvas.getContext("2d");
-  if (!textureCtx) return;
-  textureCtx.globalCompositeOperation = "source-over";
-  textureCtx.clearRect(0, 0, canvasWidth, canvasHeight);
-  textureCtx.drawImage(mockupImage, 0, 0, canvasWidth, canvasHeight);
-  textureCtx.globalCompositeOperation = "destination-in";
-  textureCtx.drawImage(printCanvas, 0, 0);
-
-  ctx.save();
-  ctx.globalCompositeOperation = "multiply";
-  ctx.globalAlpha = clampNumber(frame.placement.realism, 0, 40) / 100;
-  ctx.drawImage(textureCanvas, 0, 0);
-  ctx.restore();
-}
-
-export async function renderMockup(frame: MockupFrame, designDataUrl: string | null): Promise<string> {
-  if (!frame.imageDataUrl) throw new Error(`${frame.name} needs a blank mockup image.`);
-  const [mockupImage, designImage] = await Promise.all([
-    loadCanvasImage(frame.imageDataUrl),
-    frame.applyDesign && designDataUrl ? loadCanvasImage(designDataUrl) : Promise.resolve(null),
-  ]);
-
-  const canvas = document.createElement("canvas");
-  canvas.width = mockupImage.naturalWidth;
-  canvas.height = mockupImage.naturalHeight;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("Canvas is not available.");
-
-  ctx.drawImage(mockupImage, 0, 0);
-
-  if (designImage) {
-    drawRealisticPrint(ctx, mockupImage, designImage, canvas.width, canvas.height, frame);
-  }
-
-  return canvas.toDataURL("image/png");
 }
 
 function MockupPlacementPreview({
@@ -1357,13 +1221,14 @@ export default function MockupStudio({ product, onSave, onBack, templateOnly = f
             initialTab="mapping"
           />
         )}
-        <div className="shrink-0 border-b border-zinc-200 bg-zinc-50 px-3 py-2.5 flex flex-wrap items-center justify-between gap-2">
+        <header className="shrink-0 border-b border-zinc-200 bg-white px-5 py-4 lg:px-7 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h2 className="text-sm font-semibold text-zinc-800">2. Mockup</h2>
-            <p className="text-xs text-zinc-500">Build a User mockup here, then return to the Mockup library to use it.{initialArtwork ? ' Your extracted design is loaded for preview.' : ''}</p>
+            <h1 className="text-base font-semibold tracking-tight text-zinc-900">Mockup editor</h1>
+            <p className="mt-1 text-xs text-zinc-500">Set up a reusable mockup and choose where the artwork prints.{initialArtwork ? ' Your design is loaded for preview.' : ''}</p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <select
+              aria-label="Current mockup template"
               value={activePreset.id}
               onChange={(event) => { setActivePresetId(event.target.value); setGenerated([]); }}
               className="h-8 border border-zinc-200 bg-white px-2 text-xs text-zinc-700 outline-none"
@@ -1379,17 +1244,18 @@ export default function MockupStudio({ product, onSave, onBack, templateOnly = f
                 onContinue?.();
               } catch { toast.error('Could not save template. Please retry.'); }
             }} className="h-8 px-3 bg-blue-600 text-white text-xs font-medium hover:bg-blue-500 disabled:opacity-50">
-              Use User mockup →
+              Use this mockup →
             </button>
-            <button onClick={() => onContinue?.()} className="h-8 border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 hover:bg-zinc-50">Choose App mockup →</button>
+            <button onClick={() => onContinue?.()} className="h-8 border border-zinc-200 bg-white px-3 text-xs font-medium text-zinc-700 hover:bg-zinc-50">Back to library</button>
             <button onClick={() => setIsPresetManagerOpen(true)} className="h-8 px-3 border border-zinc-200 bg-white text-xs font-medium text-zinc-700 hover:bg-zinc-50">
               Manage templates
             </button>
           </div>
-        </div>
+        </header>
 
-        <div className="flex-1 min-h-0 grid grid-cols-1 overflow-y-auto lg:grid-cols-[220px_minmax(0,1fr)_250px] bg-zinc-100/50">
+        <div className="flex-1 min-h-0 grid grid-cols-1 overflow-y-auto lg:grid-cols-[250px_minmax(0,1fr)_270px] bg-zinc-100/50">
           <aside className="min-h-0 overflow-y-auto border-r border-zinc-200 bg-white p-3 space-y-3">
+            <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Template and views</h2>
             <div className="space-y-3">
               <div className="grid grid-cols-2 gap-2">
                 <label className="text-xs font-semibold text-zinc-700">
@@ -1468,6 +1334,7 @@ export default function MockupStudio({ product, onSave, onBack, templateOnly = f
           <aside className="min-h-0 overflow-y-auto border-l border-zinc-200 bg-white p-3">
             {selectedFrame ? (
               <div className="space-y-4">
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-zinc-500">View settings</h2>
                 <div className="flex items-start gap-2">
                   <input value={selectedFrame.name} onChange={(event) => updateFrame(selectedFrame.id, { name: event.target.value })} className="min-w-0 flex-1 border border-zinc-200 px-2 py-1.5 text-xs font-medium outline-none focus:border-blue-500" />
                   <button onClick={() => updatePreset({ frames: activePreset.frames.filter(item => item.id !== selectedFrame.id) })} className="w-8 h-8 flex items-center justify-center border border-zinc-200 text-zinc-400 hover:text-red-600 hover:bg-red-50">
