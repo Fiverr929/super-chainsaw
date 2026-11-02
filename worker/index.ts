@@ -44,6 +44,7 @@ export default {
     // Browser-provided or Sites identity headers never grant manual-account access.
     const authenticatedHeaders=new Headers(request.headers);
     authenticatedHeaders.set('oai-authenticated-user-id',userId);
+    authenticatedHeaders.set('x-workstation-manual-account','true');
     authenticatedHeaders.delete('oai-authenticated-user-email');
     request=new Request(request,{headers:authenticatedHeaders});
     const storage = createCloudWorkspaceFs(env.DB, env.BUCKET, userId!);

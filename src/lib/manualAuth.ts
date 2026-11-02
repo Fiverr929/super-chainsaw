@@ -4,6 +4,11 @@ import type { CloudDatabase } from './cloudWorkspaceFs.ts';
 const ITERATIONS = 600_000;
 const SESSION_AGE = 7 * 24 * 60 * 60 * 1000;
 export const SESSION_COOKIE = '__Host-workstation_session';
+const LOCAL_SESSION_COOKIE='workstation_local_session';
+export function isLocalHttpRequest(request:Request) {
+  const url=new URL(request.url);
+  return url.protocol==='http:' && ['localhost','127.0.0.1','[::1]'].includes(url.hostname);
+}
 type Account = { username:string; salt:string; password_hash:string; iterations:number; owner_id:string };
 export type AccountIdentity = { username:string; ownerId:string };
 export class AuthError extends Error {
@@ -63,16 +68,17 @@ export async function verifyLogin(db:CloudDatabase,username:string,password:stri
   await query(db,'DELETE FROM workspace_login_attempts WHERE key=? OR window_start<?','ip:'+await tokenHash(ip),now-24*60*60*1000).run();
   return {username:account.username,ownerId:account.owner_id};
 }
-export async function issueSession(db:CloudDatabase,now=Date.now()) {
+export async function issueSession(db:CloudDatabase,now=Date.now(),local=false) {
   const token=randomToken();
   await query(db,'DELETE FROM workspace_sessions WHERE expires_at<=?',now).run();
   await query(db,'INSERT INTO workspace_sessions (token_hash,expires_at,created_at) VALUES (?,?,?)',await tokenHash(token),now+SESSION_AGE,now).run();
-  return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=${SESSION_AGE/1000}`;
+  return `${local?LOCAL_SESSION_COOKIE:SESSION_COOKIE}=${token}; Path=/; HttpOnly; ${local?'':'Secure; '}SameSite=Strict; Max-Age=${SESSION_AGE/1000}`;
 }
 function readToken(request:Request) {
-  const cookies=(request.headers.get('cookie') ?? '').split(';').map(x=>x.trim()).filter(x=>x.startsWith(SESSION_COOKIE+'='));
+  const name=isLocalHttpRequest(request)?LOCAL_SESSION_COOKIE:SESSION_COOKIE;
+  const cookies=(request.headers.get('cookie') ?? '').split(';').map(x=>x.trim()).filter(x=>x.startsWith(name+'='));
   if (cookies.length!==1) return null;
-  const token=cookies[0].slice(SESSION_COOKIE.length+1);
+  const token=cookies[0].slice(name.length+1);
   return /^[a-f0-9]{64}$/.test(token) ? token : null;
 }
 export async function authenticateSession(db:CloudDatabase,request:Request,now=Date.now()):Promise<AccountIdentity|null> {
@@ -84,5 +90,6 @@ export async function authenticateSession(db:CloudDatabase,request:Request,now=D
 export async function revokeSession(db:CloudDatabase,request:Request) {
   const token=readToken(request);
   if(token)await query(db,'DELETE FROM workspace_sessions WHERE token_hash=?',await tokenHash(token)).run();
-  return `${SESSION_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0`;
+  const local=isLocalHttpRequest(request);
+  return `${local?LOCAL_SESSION_COOKIE:SESSION_COOKIE}=; Path=/; HttpOnly; ${local?'':'Secure; '}SameSite=Strict; Max-Age=0`;
 }

@@ -261,7 +261,7 @@ export default function Sidebar({
         <button type="button" onClick={() => setShowSettingsModal(true)} aria-label="Settings" title={!isOpen ? "Settings" : undefined} className={`${navButton} ${isOpen ? "px-2" : "justify-center px-0"} text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900`}>
           <Settings size={16} className="shrink-0" />{isOpen && <span>Settings</span>}
         </button>
-        {typeof window !== 'undefined' && window.__workstationStorageScope && <form action="/auth/logout" method="post" target="_top">
+        {typeof window !== 'undefined' && window.__workstationManualAccount && <form action="/auth/logout" method="post" target="_top">
           <button type="submit" aria-label="Sign out" title={!isOpen ? 'Sign out' : undefined} className={`${navButton} ${isOpen ? 'px-2' : 'justify-center px-0'} text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900`}><LogOut size={16} className="shrink-0"/>{isOpen && <span>Sign out</span>}</button>
         </form>}
       </footer>

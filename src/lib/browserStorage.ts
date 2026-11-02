@@ -1,4 +1,4 @@
-declare global { interface Window { __workstationStorageScope?: string | null } }
+declare global { interface Window { __workstationStorageScope?: string | null; __workstationManualAccount?:boolean } }
 export function browserStorageKey(key: string) {
   const scope = typeof window !== 'undefined' ? window.__workstationStorageScope : null;
   return scope ? `cloud-v1:${scope}:${key}` : key;

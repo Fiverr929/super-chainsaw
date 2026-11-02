@@ -9,6 +9,7 @@ export default defineConfig(async () => {
   const { cloudflare } = await import("@cloudflare/vite-plugin");
 
   return {
+    define: { 'process.env.WORKSTATION_HOSTED': JSON.stringify('true') },
     // Never copy the local user's listing folders or workspace media into a Site.
     publicDir: false as const,
     resolve: {

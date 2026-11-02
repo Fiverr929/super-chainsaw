@@ -78,6 +78,8 @@ The cloud workspace starts fresh: local records, listing folders, media, browser
 
 `npm run build` builds the Sites Worker. Use `npm run build:local` for a local Next.js production build, followed by `npm start`. The existing `npm run dev` command runs the local disk-backed workstation.
 
+Local development runs at `http://localhost:3001`. Its first visit opens `/setup` to create one local account; later visits require username/password sign-in. Local authentication records are stored in the ignored `.workspace-data/auth/` directory. Existing local products, media, and browser recovery data stay in their local scope.
+
 1. **Install Dependencies:**
    ```bash
    npm install

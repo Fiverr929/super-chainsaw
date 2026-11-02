@@ -3,5 +3,5 @@ import WorkspaceEntry from '@/components/WorkspaceEntry';
 export const dynamic = 'force-dynamic';
 export default async function Home() {
   const requestHeaders = await headers();
-  return <WorkspaceEntry userId={requestHeaders.get('oai-authenticated-user-id')} />;
+  return <WorkspaceEntry userId={requestHeaders.get('oai-authenticated-user-id')} manualAccount={requestHeaders.get('x-workstation-manual-account')==='true'} />;
 }

@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { CloudDatabase } from '../src/lib/cloudWorkspaceFs.ts';
 import { authenticateSession, createSingleAccount, hasAccount, issueSession, revokeSession, tokenHash, verifyLogin } from '../src/lib/manualAuth.ts';
-import { manualAuthRoute } from '../src/lib/manualAuthRoutes.ts';
+import { manualAuthRoute, sameAuthOrigin } from '../src/lib/manualAuthRoutes.ts';
 
 function fixture() {
   const sqlite=new DatabaseSync(':memory:');
@@ -62,5 +62,19 @@ test('sign-in attempts are bounded and cross-site forms cannot create accounts o
   assert.equal((f.sqlite.prepare('SELECT COUNT(*) AS total FROM workspace_sessions').get() as {total:number}).total,0);
   const setup=await manualAuthRoute(new Request('https://workspace.example/setup'),f.db,{});
   assert.equal(setup?.status,303); assert.equal(setup?.headers.get('location'),'/login');
+  f.sqlite.close();
+});
+
+test('local HTTP sessions work without weakening production cookie or origin checks',async()=>{
+  const f=fixture();await createSingleAccount(f.db,input,await configuration());
+  const cookie=await issueSession(f.db,Date.now(),true);
+  assert.match(cookie,/^workstation_local_session=/);assert.doesNotMatch(cookie,/; Secure/);
+  const request=new Request('http://localhost:3001/',{headers:{cookie:cookie.split(';')[0]}});
+  assert.ok(await authenticateSession(f.db,request));
+  assert.equal(await authenticateSession(f.db,new Request('https://workspace.example/',{headers:{cookie:cookie.split(';')[0]}})),null);
+  assert.equal(sameAuthOrigin(new Request('http://127.0.0.1:3001/auth/login',{headers:{origin:'http://localhost:3001'}})),true);
+  assert.equal(sameAuthOrigin(new Request('http://127.0.0.1:3001/auth/login',{headers:{origin:'http://localhost:3002'}})),false);
+  assert.equal(sameAuthOrigin(new Request('https://workspace.example/auth/login',{headers:{origin:'https://other.example'}})),false);
+  assert.equal(sameAuthOrigin(new Request('https://workspace.example/auth/login',{headers:{origin:'null'}})),false);
   f.sqlite.close();
 });

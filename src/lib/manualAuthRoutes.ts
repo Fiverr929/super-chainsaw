@@ -1,8 +1,19 @@
 import type { CloudDatabase } from './cloudWorkspaceFs.ts';
-import { AuthError, createSingleAccount, hasAccount, issueSession, revokeSession, verifyLogin } from './manualAuth.ts';
+import { AuthError, createSingleAccount, hasAccount, isLocalHttpRequest, issueSession, revokeSession, verifyLogin } from './manualAuth.ts';
 import { loginResponse } from './loginPage.ts';
 
-export type SetupConfig={setupTokenHash?:string;setupExpiresAt?:string};
+export type SetupConfig={setupTokenHash?:string;setupExpiresAt?:string;localSetupToken?:string};
+export function sameAuthOrigin(request:Request) {
+  const url=new URL(request.url),origin=request.headers.get('origin');
+  if(!origin || origin==='null')return false;
+  const exact=origin===url.origin || origin===`${url.protocol}//${request.headers.get('host')}`;
+  if(exact)return request.headers.get('sec-fetch-site')!=='cross-site';
+  if(isLocalHttpRequest(request)) {
+    try { const source=new URL(origin);return source.protocol==='http:' && ['localhost','127.0.0.1','[::1]'].includes(source.hostname) && source.port===url.port; }
+    catch{return false;}
+  }
+  return false;
+}
 async function readForm(request:Request) {
   if (!request.headers.get('content-type')?.startsWith('application/x-www-form-urlencoded')) throw new AuthError('Submit the sign-in form to continue.',415);
   const reader=request.body?.getReader(); if(!reader)throw new AuthError('Complete the form to continue.');
@@ -22,18 +33,20 @@ export async function manualAuthRoute(request:Request,db:CloudDatabase,config:Se
     if(await hasAccount(db))return redirect(undefined,'/login');
     const expiry=Date.parse(config.setupExpiresAt??'');
     if(!config.setupTokenHash || !Number.isFinite(expiry) || expiry<=Date.now()) return loginResponse({error:'Account setup is unavailable. Open your current setup link.'},403);
-    return loginResponse({setup:true});
+    return loginResponse({setup:true,setupToken:config.localSetupToken});
   }
   if(!['/auth/login','/auth/setup','/auth/logout'].includes(url.pathname))return null;
   if(request.method!=='POST')return new Response(null,{status:405,headers:{Allow:'POST'}});
-  if(request.headers.get('origin')!==url.origin || request.headers.get('sec-fetch-site')==='cross-site')return new Response('Use the form on this site.',{status:403});
+  if(!sameAuthOrigin(request)){
+    return new Response('Use the form on this site.',{status:403});
+  }
   let input:Awaited<ReturnType<typeof readForm>>|undefined;
   try {
     if(url.pathname==='/auth/logout')return redirect(await revokeSession(db,request),'/login');
     input=await readForm(request);
     if(url.pathname==='/auth/setup')await createSingleAccount(db,input,config);
     else await verifyLogin(db,input.username,input.password,request.headers.get('cf-connecting-ip')??'unknown');
-    return redirect(await issueSession(db));
+    return redirect(await issueSession(db,Date.now(),isLocalHttpRequest(request)));
   } catch(error) {
     const message=error instanceof AuthError?error.message:'Could not sign in. Please try again.';
     const status=error instanceof AuthError?error.status:500;
