@@ -235,7 +235,7 @@ export default function SettingsModal({
       onClick={onClose}
     >
       <div 
-        className="bg-white border border-zinc-200 shadow-xl max-w-lg w-full mx-4 flex flex-col max-h-[85vh] rounded-none animate-in fade-in zoom-in-95 duration-150"
+        className="bg-white border border-zinc-200 shadow-xl max-w-lg w-full h-dvh sm:h-auto sm:mx-4 flex flex-col max-h-dvh sm:max-h-[85vh] rounded-none animate-in fade-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -252,7 +252,7 @@ export default function SettingsModal({
         </div>
 
         {/* Modal Body */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-8">
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-[max(16px,env(safe-area-inset-bottom))] sm:p-6 space-y-8">
           <div>
             <h1 className="text-xl font-bold text-zinc-900 tracking-tight mb-1">
               Workstation Settings

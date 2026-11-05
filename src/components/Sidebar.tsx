@@ -13,6 +13,7 @@ import {
   Image as ImageIcon,
   Images,
   LayoutGrid,
+  Menu,
   LogOut,
   Package,
   Settings,
@@ -210,8 +211,12 @@ export default function Sidebar({
   };
 
   return <>
-    {isOpen && <button type="button" aria-label="Close navigation" onClick={() => setIsOpen(false)} className="fixed inset-0 z-20 bg-black/20 sm:hidden" />}
-    <aside aria-label="Main navigation" className={`${isOpen ? "fixed inset-y-0 left-0 z-30 w-64 sm:relative sm:z-10" : "relative z-10 w-[68px]"} flex h-full shrink-0 flex-col border-r border-zinc-200 bg-white transition-[width] duration-200`}>
+    <div className="flex h-14 shrink-0 items-center gap-3 border-b border-zinc-200 bg-white px-3 sm:hidden">
+      <button type="button" aria-label="Open navigation" aria-expanded={isOpen} onClick={() => handleSetIsOpen(true)} className="grid h-11 w-11 shrink-0 place-items-center text-zinc-700"><Menu size={21} /></button>
+      <div className="min-w-0"><span className="block truncate text-sm font-semibold text-zinc-900">Workstation</span><span className="block truncate text-[11px] text-zinc-500">{workstation === 'workspace' ? ({image:'Design',creator:'Mockups',assets:'Assets',products:'Products','design-tools':'Design Lab',agent:'Agent',pdf:'PDF Manager',spreadsheet:'Worksheet'} as Record<View,string>)[activeView] : `${workstation === 'etsy' ? 'Etsy' : 'Amazon'} worksheet`}</span></div>
+    </div>
+    {isOpen && <button type="button" aria-label="Close navigation" onClick={() => handleSetIsOpen(false)} className="fixed inset-0 z-20 bg-black/40 sm:hidden" />}
+    <aside aria-label="Main navigation" className={`${isOpen ? "fixed inset-y-0 left-0 z-30 w-[min(280px,85vw)] sm:relative sm:z-10 sm:w-64" : "hidden sm:relative sm:z-10 sm:flex sm:w-[68px]"} h-full shrink-0 flex-col border-r border-zinc-200 bg-white transition-[width] duration-200`}>
       <header className={`flex h-14 shrink-0 items-center border-b border-zinc-200 ${isOpen ? "justify-between px-4" : "justify-center px-2"}`}>
         <div className={`min-w-0 ${!isOpen ? "hidden" : ""}`}>
           <span className="block text-[15px] font-semibold tracking-tight text-zinc-900">Workstation</span>
@@ -256,7 +261,7 @@ export default function Sidebar({
         </details>
       </nav>
 
-      <footer className="shrink-0 border-t border-zinc-200 p-3">
+      <footer className="shrink-0 border-t border-zinc-200 p-3 pb-[max(12px,env(safe-area-inset-bottom))]">
         {isOpen && !isWorkspace && <div className="mb-3">{renderStoreCard()}</div>}
         <button type="button" onClick={() => setShowSettingsModal(true)} aria-label="Settings" title={!isOpen ? "Settings" : undefined} className={`${navButton} ${isOpen ? "px-2" : "justify-center px-0"} text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900`}>
           <Settings size={16} className="shrink-0" />{isOpen && <span>Settings</span>}

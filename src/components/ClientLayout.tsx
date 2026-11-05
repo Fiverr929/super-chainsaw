@@ -60,14 +60,14 @@ export default function ClientLayout() {
   };
 
   return (
-    <div className={`flex w-full h-screen bg-zinc-50 font-sans overflow-hidden ${workstation === 'workspace' ? 'workspace-mode' : ''}`}>
+    <div className={`flex w-full h-dvh flex-col bg-zinc-50 font-sans overflow-hidden sm:flex-row ${workstation === 'workspace' ? 'workspace-mode' : ''}`}>
       <Sidebar 
         activeView={activeView} 
         setActiveView={handleSetActiveView}
         workstation={workstation}
         setWorkstation={handleSetWorkstation}
       />
-      <main className={`flex min-w-0 flex-1 flex-col h-full overflow-hidden ${workstation === 'workspace' ? 'workspace-shell' : ''}`}>
+      <main className={`flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden sm:h-full ${workstation === 'workspace' ? 'workspace-shell' : ''}`}>
         <AgentBrowserBridge enabled={workstation === 'workspace'} />
         <div className="min-h-0 flex-1 overflow-hidden">
         <div className={workstation === 'workspace' && activeView === 'image' ? 'h-full' : 'hidden'} aria-hidden={workstation !== 'workspace' || activeView !== 'image'}>

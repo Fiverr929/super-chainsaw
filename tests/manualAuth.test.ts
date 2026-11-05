@@ -31,7 +31,7 @@ test('one-time setup requires its valid key, expires, and permits exactly one ac
   await assert.rejects(createSingleAccount(f.db,input,config),/already been created/);
   assert.throws(()=>f.sqlite.exec("INSERT INTO workspace_account SELECT 2,username,salt,password_hash,iterations,owner_id,created_at FROM workspace_account"),/CHECK constraint/);
   const account=f.sqlite.prepare('SELECT * FROM workspace_account').get()!;
-  assert.equal(account.iterations,600_000); assert.notEqual(account.password_hash,input.password);
+  assert.equal(account.iterations,100_000); assert.notEqual(account.password_hash,input.password);
   f.sqlite.close();
 });
 

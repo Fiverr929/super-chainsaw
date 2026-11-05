@@ -1,7 +1,8 @@
 import { timingSafeEqual } from 'node:crypto';
 import type { CloudDatabase } from './cloudWorkspaceFs.ts';
 
-const ITERATIONS = 600_000;
+// Cloudflare Workers rejects PBKDF2 counts above 100,000 in production.
+const ITERATIONS = 100_000;
 const SESSION_AGE = 7 * 24 * 60 * 60 * 1000;
 export const SESSION_COOKIE = '__Host-workstation_session';
 const LOCAL_SESSION_COOKIE='workstation_local_session';
